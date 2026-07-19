@@ -1,0 +1,24 @@
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.view-toggle__btn {
+  background: var(--surface);
+  border: none;
+  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  color: var(--text-faint);
+}
+
+.view-toggle__btn + .view-toggle__btn {
+  border-left: 1px solid var(--border-strong);
+}
+
+.view-toggle__btn--active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}

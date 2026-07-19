@@ -1,0 +1,18 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Flattened single-shape silhouette for macOS template tray icons (black + alpha only). -->
+  <rect x="196" y="48" width="120" height="46" rx="12" fill="#000" />
+  <path
+    d="M 226 94
+       L 286 94
+       L 286 170
+       C 342 170, 402 200, 402 230
+       L 388 460
+       Q 386 478, 368 478
+       L 144 478
+       Q 126 478, 124 460
+       L 110 230
+       C 110 200, 170 170, 226 170
+       Z"
+    fill="#000"
+  />
+</svg>

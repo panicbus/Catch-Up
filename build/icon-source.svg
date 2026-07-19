@@ -1,0 +1,32 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bottle-gradient" x1="110" y1="170" x2="402" y2="478" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e4483a" />
+      <stop offset="1" stop-color="#c23b2e" />
+    </linearGradient>
+  </defs>
+
+  <!-- cap -->
+  <rect x="196" y="48" width="120" height="46" rx="12" fill="#faf6ef" />
+  <!-- red trim ring under cap -->
+  <rect x="196" y="94" width="120" height="18" fill="#c23b2e" />
+
+  <!-- neck + shoulders + body + tapered base, one continuous silhouette -->
+  <path
+    d="M 226 112
+       L 286 112
+       L 286 170
+       C 342 170, 402 200, 402 230
+       L 388 460
+       Q 386 478, 368 478
+       L 144 478
+       Q 126 478, 124 460
+       L 110 230
+       C 110 200, 170 170, 226 170
+       Z"
+    fill="url(#bottle-gradient)"
+  />
+
+  <!-- plain label band (no text/artwork — the bottle shape alone carries the mark) -->
+  <rect x="126" y="292" width="260" height="78" rx="6" fill="#faf6ef" opacity="0.95" />
+</svg>

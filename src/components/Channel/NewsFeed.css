@@ -1,0 +1,25 @@
+.news-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.news-feed__day-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+  padding: 8px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+
+.news-feed__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

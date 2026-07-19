@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-electron
+release
+.DS_Store
+*.log
+
+# Local Claude Code harness settings (machine/session-specific)
+.claude/settings.local.json
+
+# Local data (JSON stores) and secrets
+data/
+.env
+.env.*
+!.env.example

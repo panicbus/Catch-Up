@@ -1,0 +1,56 @@
+.channel-picker__input-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.channel-picker__input {
+  flex: 1;
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.channel-picker__input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.channel-picker__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 40px;
+}
+
+.channel-picker__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 14px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.channel-picker__chip-remove {
+  background: none;
+  border: none;
+  color: var(--accent-strong);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+}
+.channel-picker__chip-remove:hover {
+  background: rgba(196, 59, 46, 0.15);
+}

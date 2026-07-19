@@ -1,0 +1,28 @@
+.provider-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.provider-status__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.provider-status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.provider-status__dot--on {
+  background: #4a9c6d;
+}
+
+.provider-status__note {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}

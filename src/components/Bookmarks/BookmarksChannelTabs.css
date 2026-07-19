@@ -1,0 +1,26 @@
+.bookmarks-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.bookmarks-tabs__tab {
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: -1px;
+}
+
+.bookmarks-tabs__tab:hover {
+  color: var(--text);
+}
+
+.bookmarks-tabs__tab--active {
+  color: var(--accent-strong);
+  border-bottom-color: var(--accent);
+}

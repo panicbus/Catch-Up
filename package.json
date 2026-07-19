@@ -1,0 +1,73 @@
+{
+  "name": "catch-up",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Your topics. Your pace. All caught up.",
+  "author": "Catch Up contributors",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "compile:electron": "tsc -p tsconfig.electron.json",
+    "dev": "npm run compile:electron && concurrently -k \"npm run watch:electron\" \"vite\" \"wait-on tcp:127.0.0.1:5173 file:dist-electron/main.js file:dist-electron/preload.js && ELECTRON_IS_DEV=1 electron .\"",
+    "watch:electron": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
+    "build": "tsc -p tsconfig.json && vite build && npm run compile:electron",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "icons:mac": "bash scripts/build-icon.sh",
+    "pack:mac:dir": "npm run build && CSC_IDENTITY_AUTO_SELECT=false electron-builder --mac --dir --arm64",
+    "start": "npm run build && electron .",
+    "bump:patch": "node scripts/bump-version.mjs patch",
+    "bump:minor": "node scripts/bump-version.mjs minor",
+    "bump:major": "node scripts/bump-version.mjs major"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "sharp": "^0.35.3",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.catchup.app",
+    "productName": "Catch Up",
+    "directories": {
+      "output": "release",
+      "buildResources": "buildResources"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json",
+      "!**/*.map",
+      "!**/*.ts"
+    ],
+    "extraResources": [
+      {
+        "from": "build",
+        "to": "build"
+      }
+    ],
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.news",
+      "identity": null,
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ]
+    }
+  }
+}
