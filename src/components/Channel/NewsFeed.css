@@ -24,23 +24,72 @@
   gap: 8px;
 }
 
-.news-feed__read-section {
+.news-feed__archive {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  padding-top: 8px;
+  gap: 4px;
+  padding-top: 16px;
   border-top: 1px solid var(--border);
 }
 
-.news-feed__read-toggle {
-  align-self: flex-start;
-  background: none;
-  border: none;
-  padding: 4px 0;
+.news-feed__archive-title {
   font-size: 12px;
   font-weight: 600;
+  letter-spacing: 0.04em;
   color: var(--text-faint);
+  margin-bottom: 8px;
 }
-.news-feed__read-toggle:hover {
-  color: var(--accent-strong);
+
+.news-feed__archive-date {
+  border-bottom: 1px solid var(--border);
+}
+.news-feed__archive-date:last-child {
+  border-bottom: none;
+}
+
+.news-feed__archive-date-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 4px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-align: left;
+}
+.news-feed__archive-date-toggle:hover {
+  color: var(--text);
+}
+
+.news-feed__archive-count {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.news-feed__archive-body-inner > .news-feed__list,
+.news-feed__archive-body-inner > .news-feed__grid {
+  padding-bottom: 14px;
+}
+
+/* Same grid-rows accordion trick as .news-card__expand — no JS height measuring needed. */
+.news-feed__archive-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s ease;
+}
+.news-feed__archive-body--open {
+  grid-template-rows: 1fr;
+}
+.news-feed__archive-body-inner {
+  overflow: hidden;
+}
+
+.news-feed__archive-cards .news-card {
+  opacity: 0.6;
+}
+.news-feed__archive-cards .news-card:hover {
+  opacity: 0.85;
 }

@@ -117,12 +117,8 @@
   text-decoration: underline;
 }
 
-/* List view: title single line, snippet 1 line (collapsed only — expanded overrides via --full) */
-.news-feed__list .news-card__title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* List view: headline always shows in full, uncapped — only the snippet clamps (1 line, collapsed
+   only — expanded overrides via --full). */
 .news-feed__list .news-card__snippet:not(.news-card__snippet--full) {
   -webkit-line-clamp: 1;
 }
@@ -137,12 +133,15 @@
   align-items: start;
   gap: 14px;
 }
-.news-feed__grid .news-card__title {
-  -webkit-line-clamp: 3;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
 .news-feed__grid .news-card__snippet:not(.news-card__snippet--full) {
   -webkit-line-clamp: 3;
+}
+
+/* Grid view puts the NEW badge under the action icons instead of inline before the title. The
+   title keeps its existing padding-right (68px, above, sized to the action icons' own footprint,
+   independent of where the badge sits) so every wrapped line stays clear of that column. */
+.news-feed__grid .new-badge {
+  position: absolute;
+  top: 46px;
+  right: 8px;
 }

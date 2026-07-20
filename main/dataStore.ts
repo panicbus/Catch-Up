@@ -44,7 +44,9 @@ const DEFAULT_DATA: DataFile = {
   streak: { current: 0, lastOpenedDate: null },
 };
 
-const READ_STATE_MAX_AGE_DAYS = 60;
+// Must match READ_ARCHIVE_DAYS in src/components/Channel/NewsFeed.tsx — that's what the "Read
+// stories · 30 day archive" label promises, this is what actually stops collecting past it.
+const READ_STATE_MAX_AGE_DAYS = 30;
 
 function genId(prefix: string): string {
   return `${prefix}_${crypto.randomBytes(6).toString('hex')}`;

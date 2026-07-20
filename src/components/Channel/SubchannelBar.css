@@ -23,6 +23,12 @@
   border-color: var(--accent);
   color: #fff;
 }
+.subchannel-bar__chip--active:hover {
+  /* The generic :hover above lightens the background to var(--surface-hover) — in light mode
+     that's a pale surface color, and this pill's white text goes unreadable on it. */
+  background: var(--surface-hover);
+  color: var(--accent-strong);
+}
 
 .subchannel-bar__manage {
   display: inline-flex;

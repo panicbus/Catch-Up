@@ -25,6 +25,10 @@ export interface NewsCardData {
 interface NewsCardProps {
   article: NewsCardData;
   channelId: string;
+  /** Controlled expand/collapse — owned by the parent (NewsFeed, or SurpriseMeModal for its single
+   * card) so that opening one card can close whichever other card was open. */
+  expanded: boolean;
+  onToggleExpand: () => void;
   /** Suppresses the dismiss/mark-read button — used by SurpriseMeModal, where "Shuffle again"/
    * "Close" are already the dismiss-equivalent actions and a mid-modal fly-off-then-blank-card
    * would look broken. Bookmark and expand-to-preview stay available either way. */
@@ -50,17 +54,16 @@ const SWIPE_DISMISS_MS = 220;
 export function NewsCard({
   article,
   channelId,
+  expanded,
+  onToggleExpand,
   hideDismiss,
   staysInPlace,
   removeCardOnUnbookmark,
   onBookmarkToggled,
 }: NewsCardProps) {
-  const [expanded, setExpanded] = useState(false);
   const [exitReason, setExitReason] = useState<ExitReason>(null);
   const [imageFailed, setImageFailed] = useState(false);
   const isMobile = useIsMobile();
-
-  const toggleExpanded = useCallback(() => setExpanded((v) => !v), []);
 
   const commitDismiss = useCallback(
     (delayMs: number) => {
@@ -73,7 +76,7 @@ export function NewsCard({
 
   const { dragX, phase, swipeHandlers } = useSwipeToDismiss({
     enabled: isMobile && !hideDismiss && !staysInPlace,
-    onTap: toggleExpanded,
+    onTap: onToggleExpand,
     onCommit: () => commitDismiss(SWIPE_DISMISS_MS),
   });
 
@@ -107,13 +110,13 @@ export function NewsCard({
     (e: KeyboardEvent<HTMLDivElement>) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        toggleExpanded();
+        onToggleExpand();
       }
     },
-    [toggleExpanded]
+    [onToggleExpand]
   );
 
-  const surfaceProps = swipeHandlers ?? { onClick: toggleExpanded };
+  const surfaceProps = swipeHandlers ?? { onClick: onToggleExpand };
 
   const mobileStyle =
     isMobile && phase !== 'idle'
@@ -151,7 +154,7 @@ export function NewsCard({
       </div>
 
       <div className="news-card__top">
-        <NewBadge publishedAt={article.publishedAt} />
+        {!article.read && <NewBadge publishedAt={article.publishedAt} />}
         <span className="news-card__title">{article.title}</span>
       </div>
 

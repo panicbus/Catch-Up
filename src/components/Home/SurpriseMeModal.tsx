@@ -16,9 +16,11 @@ type ShuffleState = Article | null | undefined;
 export function SurpriseMeModal({ onClose }: SurpriseMeModalProps) {
   const [article, setArticle] = useState<ShuffleState>(undefined);
   const [renderKey, setRenderKey] = useState(0);
+  const [expanded, setExpanded] = useState(false);
 
   const shuffle = useCallback((excludeArticleId?: string) => {
     setArticle(undefined);
+    setExpanded(false);
     void api.getRandomArticle(excludeArticleId).then((next) => {
       setArticle(next);
       setRenderKey((k) => k + 1);
@@ -44,6 +46,8 @@ export function SurpriseMeModal({ onClose }: SurpriseMeModalProps) {
             article={article}
             channelId={article.channelId}
             hideDismiss
+            expanded={expanded}
+            onToggleExpand={() => setExpanded((v) => !v)}
             onBookmarkToggled={(bookmarked) => setArticle((prev) => (prev ? { ...prev, bookmarked } : prev))}
           />
         </div>
