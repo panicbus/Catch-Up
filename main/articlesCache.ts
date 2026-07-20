@@ -141,4 +141,14 @@ export class ArticlesCache {
     delete this.data.byChannel[channelId];
     this.write();
   }
+
+  /** Picks one article at random across every channel's bucket, excluding the given ids
+   * (e.g. already-read articles, or the currently-shown one for "shuffle again"). */
+  getRandomArticle(excludeIds: Set<string>): CachedArticle | undefined {
+    const candidates = Object.values(this.data.byChannel)
+      .flatMap((bucket) => bucket.articles)
+      .filter((a) => !excludeIds.has(a.id));
+    if (candidates.length === 0) return undefined;
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
 }

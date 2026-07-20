@@ -30,6 +30,12 @@ export const api: CatchUpApi = {
   toggleBookmark: (articleId, channelId) => getBridge().toggleBookmark(articleId, channelId),
   getBookmarksByChannel: () => getBridge().getBookmarksByChannel(),
 
+  markArticleRead: (articleId, channelId) => getBridge().markArticleRead(articleId, channelId),
+  markArticleUnread: (articleId, channelId) => getBridge().markArticleUnread(articleId, channelId),
+  getRandomArticle: (excludeArticleId) => getBridge().getRandomArticle(excludeArticleId),
+
+  getStreak: () => getBridge().getStreak(),
+
   getSettings: () => getBridge().getSettings(),
   setSettings: (partial) => getBridge().setSettings(partial),
 

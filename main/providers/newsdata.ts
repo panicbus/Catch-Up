@@ -1,4 +1,5 @@
 import type { NewsProvider, ProviderArticle, ProviderQuery } from './types';
+import { isCoolingDown, isHardFailureStatus, startCooldown, RATE_LIMIT_COOLDOWN_MS } from './cooldown';
 
 interface NewsDataResult {
   link?: string;
@@ -9,22 +10,26 @@ interface NewsDataResult {
   image_url?: string;
 }
 
+const PROVIDER_ID = 'newsdata';
+
 export const newsDataProvider: NewsProvider = {
-  id: 'newsdata',
+  id: PROVIDER_ID,
   label: 'NewsData.io',
   isConfigured: () => !!process.env.NEWSDATA_API_KEY?.trim(),
 
   async fetchArticles(query: ProviderQuery): Promise<ProviderArticle[]> {
     const key = process.env.NEWSDATA_API_KEY?.trim();
-    if (!key) {
-      console.warn('[newsdata] NEWSDATA_API_KEY not set — skipping.');
-      return [];
-    }
+    if (!key) return [];
+    if (isCoolingDown(PROVIDER_ID)) return [];
+
     const url = `https://newsdata.io/api/1/news?apikey=${key}&q=${encodeURIComponent(query.topic)}&language=en`;
     try {
       const res = await fetch(url);
       if (!res.ok) {
-        console.warn(`[newsdata] request failed: ${res.status}`);
+        // Expected/routine on a free tier — quotas and occasional hiccups aren't developer-actionable
+        // noise. Rate-limit state surfaces to the user instead, via the Settings provider panel and
+        // a manual refresh's result, not the console.
+        if (isHardFailureStatus(res.status)) startCooldown(PROVIDER_ID, RATE_LIMIT_COOLDOWN_MS);
         return [];
       }
       const data = (await res.json()) as { results?: NewsDataResult[] };

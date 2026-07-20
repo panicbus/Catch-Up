@@ -16,7 +16,9 @@ export function useBookmarks() {
   useEffect(() => {
     reload();
     return api.onDataChanged((event) => {
-      if (event.type === 'bookmarks') reload();
+      // BookmarkEntry.read is a computed field (joined against read-state at query time, like
+      // Article.read/bookmarked already are) — it goes stale without this.
+      if (event.type === 'bookmarks' || event.type === 'readState') reload();
     });
   }, [reload]);
 

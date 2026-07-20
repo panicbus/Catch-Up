@@ -14,9 +14,23 @@ export function ProviderStatusPanel() {
     <div className="provider-status">
       {providers.map((p) => (
         <div key={p.id} className="provider-status__row">
-          <span className={`provider-status__dot ${p.configured ? 'provider-status__dot--on' : ''}`} />
+          <span
+            className={`provider-status__dot ${
+              p.rateLimited
+                ? 'provider-status__dot--warn'
+                : p.configured
+                  ? 'provider-status__dot--on'
+                  : ''
+            }`}
+          />
           <span>{p.label}</span>
-          <span style={{ color: 'var(--text-faint)' }}>{p.configured ? 'Configured' : 'Not configured'}</span>
+          <span style={{ color: 'var(--text-faint)' }}>
+            {p.rateLimited
+              ? 'Rate limited — pausing for a bit'
+              : p.configured
+                ? 'Configured'
+                : 'Not configured'}
+          </span>
         </div>
       ))}
       <p className="provider-status__note">

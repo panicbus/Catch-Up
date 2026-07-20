@@ -31,12 +31,18 @@ export function ChannelPage() {
     setRefreshNote(null);
     const result = await api.refreshChannel(channel.id);
     setRefreshing(false);
+
+    const rateLimitNote =
+      result.rateLimitedProviders.length > 0
+        ? ` (${result.rateLimitedProviders.join(', ')} ${result.rateLimitedProviders.length === 1 ? 'is' : 'are'} rate-limited right now — showing results from other sources.)`
+        : '';
+
     if (result.errors.length > 0) {
-      setRefreshNote(`Refresh hit an error: ${result.errors[0]}`);
+      setRefreshNote(`Refresh hit an error: ${result.errors[0]}${rateLimitNote}`);
     } else if (result.added === 0) {
-      setRefreshNote('No new stories found.');
+      setRefreshNote(`No new stories found.${rateLimitNote}`);
     } else {
-      setRefreshNote(`Found ${result.added} new stor${result.added === 1 ? 'y' : 'ies'}.`);
+      setRefreshNote(`Found ${result.added} new stor${result.added === 1 ? 'y' : 'ies'}.${rateLimitNote}`);
     }
   };
 
@@ -71,7 +77,12 @@ export function ChannelPage() {
           body="Catch Up checks for new stories every 30 minutes. Hit Refresh to check now."
         />
       ) : (
-        <NewsFeed articles={articles} channelId={channel.id} viewMode={settings.defaultViewMode} />
+        <NewsFeed
+          articles={articles}
+          channelId={channel.id}
+          channelName={channel.name}
+          viewMode={settings.defaultViewMode}
+        />
       )}
     </div>
   );

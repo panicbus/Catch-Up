@@ -1,5 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { CatchUpApi, DataChangeEvent } from './ipc-contract';
+import type { CatchUpApi, DataChangeEvent, Theme } from './ipc-contract';
+
+// Stamp the theme onto <html> synchronously, before the page's own scripts run — an async fetch
+// (even one that resolves in a handful of milliseconds) paints once with the wrong theme first and
+// is exactly the flash this is here to prevent. Never allow this to take down the rest of the
+// bridge below — worst case here is one flashed paint, not a broken app.
+try {
+  const initialTheme = ipcRenderer.sendSync('theme:getInitialSync') as Theme;
+  document.documentElement.setAttribute('data-theme', initialTheme);
+} catch (e) {
+  console.error('[preload] theme bootstrap failed', e);
+}
 
 const api: CatchUpApi = {
   getOnboardingStatus: () => ipcRenderer.invoke('getOnboardingStatus'),
@@ -24,6 +35,12 @@ const api: CatchUpApi = {
 
   toggleBookmark: (articleId, channelId) => ipcRenderer.invoke('toggleBookmark', articleId, channelId),
   getBookmarksByChannel: () => ipcRenderer.invoke('getBookmarksByChannel'),
+
+  markArticleRead: (articleId, channelId) => ipcRenderer.invoke('markArticleRead', articleId, channelId),
+  markArticleUnread: (articleId, channelId) => ipcRenderer.invoke('markArticleUnread', articleId, channelId),
+  getRandomArticle: (excludeArticleId) => ipcRenderer.invoke('getRandomArticle', excludeArticleId),
+
+  getStreak: () => ipcRenderer.invoke('getStreak'),
 
   getSettings: () => ipcRenderer.invoke('getSettings'),
   setSettings: (partial) => ipcRenderer.invoke('setSettings', partial),

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage, nativeTheme, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { DataStore } from './main/dataStore';
@@ -28,10 +28,25 @@ function loadEnv(): void {
 
 loadEnv();
 
+const BG_BY_THEME = { light: '#faf8f5', dark: '#1a1714' } as const;
+
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 const dataStore = new DataStore();
 const articlesCache = new ArticlesCache();
+
+// Drive nativeTheme from the stored preference (not its 'system' default) as early as possible —
+// before any window exists — so the native title-bar area (this window uses titleBarStyle:
+// 'hiddenInset') and the very first CSS paint both already agree with the user's choice instead of
+// briefly showing the OS's theme and snapping over once things sync up.
+nativeTheme.themeSource = dataStore.getSettings().theme;
+
+// Synchronous IPC so preload.ts can stamp <html data-theme> before the page's own scripts run —
+// an async invoke() would resolve after first paint and reintroduce exactly the flash this exists
+// to prevent. Registered before app.whenReady() since preload can run as soon as a window loads.
+ipcMain.on('theme:getInitialSync', (event) => {
+  event.returnValue = dataStore.getSettings().theme;
+});
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -40,7 +55,7 @@ function createWindow(): BrowserWindow {
     minWidth: 900,
     minHeight: 600,
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#faf8f5',
+    backgroundColor: BG_BY_THEME[dataStore.getSettings().theme],
     icon: path.join(buildAssetsDir(), 'icon.png'),
     webPreferences: {
       nodeIntegration: false,
@@ -70,6 +85,7 @@ function createWindow(): BrowserWindow {
 
 void app.whenReady().then(() => {
   registerIpcHandlers({ dataStore, articlesCache });
+  dataStore.recordAppOpen();
 
   if (process.platform === 'darwin') {
     const dockIcon = nativeImage.createFromPath(path.join(buildAssetsDir(), 'icon.png'));

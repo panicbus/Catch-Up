@@ -24,6 +24,7 @@ export function useArticles(channelId: string | null, subchannelId: string | nul
     return api.onDataChanged((event) => {
       if (event.type === 'articles' && event.channelId === channelId) reload();
       if (event.type === 'bookmarks' && (!event.channelId || event.channelId === channelId)) reload();
+      if (event.type === 'readState' && (!event.channelId || event.channelId === channelId)) reload();
     });
   }, [reload, channelId]);
 

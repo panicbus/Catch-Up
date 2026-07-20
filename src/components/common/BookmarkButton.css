@@ -23,38 +23,18 @@
   width: 18px;
   height: 18px;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+  transform-origin: 50% 15%;
 }
 
-.bookmark-burst {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+.bookmark-button__icon--wagging {
+  animation: bookmark-wag 450ms ease;
 }
 
-.bookmark-burst__line {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 2px;
-  height: 6px;
-  margin: -3px 0 0 -1px;
-  border-radius: 1px;
-  background: var(--accent);
-  transform: rotate(var(--angle)) translateY(-7px) scaleY(0.4);
-  opacity: 0;
-  animation: bookmark-burst-line 0.5s ease-out;
-}
-
-@keyframes bookmark-burst-line {
-  0% {
-    transform: rotate(var(--angle)) translateY(-7px) scaleY(0.4);
-    opacity: 1;
-  }
-  60% {
-    opacity: 1;
-  }
-  100% {
-    transform: rotate(var(--angle)) translateY(-17px) scaleY(1);
-    opacity: 0;
-  }
+@keyframes bookmark-wag {
+  0% { transform: rotate(0deg); }
+  20% { transform: rotate(-14deg); }
+  40% { transform: rotate(11deg); }
+  60% { transform: rotate(-8deg); }
+  80% { transform: rotate(4deg); }
+  100% { transform: rotate(0deg); }
 }

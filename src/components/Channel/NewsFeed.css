@@ -23,3 +23,24 @@
   flex-direction: column;
   gap: 8px;
 }
+
+.news-feed__read-section {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.news-feed__read-toggle {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+.news-feed__read-toggle:hover {
+  color: var(--accent-strong);
+}

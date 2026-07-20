@@ -1,0 +1,28 @@
+.all-caught-up {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 56px 24px;
+  gap: 6px;
+}
+
+.all-caught-up__burst-wrap {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 8px;
+}
+
+.all-caught-up__title {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.all-caught-up__body {
+  font-size: 13px;
+  color: var(--text-faint);
+}

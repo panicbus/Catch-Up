@@ -6,9 +6,11 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  text-decoration: none;
   color: var(--text);
   position: relative;
+  cursor: pointer;
+  touch-action: pan-y;
+  user-select: none;
   transition: box-shadow 0.15s, border-color 0.15s;
   box-shadow: var(--shadow-card);
 }
@@ -18,11 +20,28 @@
   border-color: var(--border-strong);
 }
 
+.news-card--exiting {
+  transition: transform 250ms ease, opacity 250ms ease;
+  transform: translateX(28px) scale(0.98);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Unbookmarking on BookmarksPage: fades out after the bookmark button's own wag+unfill sequence
+   has already played, so this runs a little longer than the plain dismiss fade — see
+   BOOKMARK_REMOVE_CARD_FADE_MS in BookmarkButton.tsx, which these two durations must match. */
+.news-card--exiting-slow {
+  transition: transform 380ms ease, opacity 380ms ease;
+  transform: translateY(10px) scale(0.98);
+  opacity: 0;
+  pointer-events: none;
+}
+
 .news-card__top {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-right: 34px;
+  padding-right: 68px;
 }
 
 .news-card__title {
@@ -44,36 +63,79 @@
   -webkit-box-orient: vertical;
 }
 
+.news-card__snippet--full {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
 .news-card__footer {
   font-size: 11px;
   color: var(--text-faint);
   margin-top: 2px;
 }
 
-.news-card__bookmark-slot {
+.news-card__actions {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 0;
 }
 
-/* List view: title single line, snippet 1 line */
+/* Expand/collapse via the CSS grid-rows accordion trick — no JS height measuring needed. */
+.news-card__expand {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s ease;
+}
+.news-card__expand--open {
+  grid-template-rows: 1fr;
+}
+.news-card__expand-inner {
+  overflow: hidden;
+}
+
+.news-card__image {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  margin-top: 8px;
+}
+
+.news-card__read-link {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+.news-card__read-link:hover {
+  text-decoration: underline;
+}
+
+/* List view: title single line, snippet 1 line (collapsed only — expanded overrides via --full) */
 .news-feed__list .news-card__title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.news-feed__list .news-card__snippet {
+.news-feed__list .news-card__snippet:not(.news-card__snippet--full) {
   -webkit-line-clamp: 1;
 }
 
-/* Grid view: cards wrap in a responsive grid, titles/snippets can breathe */
+/* Grid view: cards wrap in a responsive grid, titles/snippets can breathe.
+   align-items: start (rather than the grid default of stretch) keeps each card sized to its own
+   content — otherwise an expanded card with an image stretches every sibling in its row track to
+   match, leaving large dead space in shorter cards next to it. */
 .news-feed__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  align-items: start;
   gap: 14px;
-}
-.news-feed__grid .news-card {
-  height: 100%;
 }
 .news-feed__grid .news-card__title {
   -webkit-line-clamp: 3;
@@ -81,6 +143,6 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.news-feed__grid .news-card__snippet {
+.news-feed__grid .news-card__snippet:not(.news-card__snippet--full) {
   -webkit-line-clamp: 3;
 }

@@ -1,9 +1,10 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow, nativeTheme } from 'electron';
 import type { DataStore } from './dataStore';
 import type { ArticlesCache } from './articlesCache';
 import { runAll, runChannel, type RefreshDeps } from './refreshAgent';
 import { getProviderStatus } from './providers/registry';
 import type { Article, ArticleListParams, DataChangeEvent } from '../ipc-contract';
+import type { CachedArticle } from './articlesCache';
 
 export interface HandlerDeps {
   dataStore: DataStore;
@@ -16,8 +17,12 @@ export function broadcast(event: DataChangeEvent): void {
   }
 }
 
-function toArticle(cached: ReturnType<ArticlesCache['getArticles']>[number], dataStore: DataStore): Article {
-  return { ...cached, bookmarked: dataStore.isBookmarked(cached.id) };
+function toArticle(cached: CachedArticle, dataStore: DataStore): Article {
+  return {
+    ...cached,
+    bookmarked: dataStore.isBookmarked(cached.id),
+    read: dataStore.isRead(cached.id),
+  };
 }
 
 export function registerIpcHandlers({ dataStore, articlesCache }: HandlerDeps): void {
@@ -89,9 +94,29 @@ export function registerIpcHandlers({ dataStore, articlesCache }: HandlerDeps): 
   });
   ipcMain.handle('getBookmarksByChannel', () => dataStore.getBookmarksByChannel());
 
+  ipcMain.handle('markArticleRead', (_e, articleId: string, channelId: string) => {
+    dataStore.markRead(articleId);
+    broadcast({ type: 'readState', channelId });
+  });
+  ipcMain.handle('markArticleUnread', (_e, articleId: string, channelId: string) => {
+    dataStore.markUnread(articleId);
+    broadcast({ type: 'readState', channelId });
+  });
+  ipcMain.handle('getRandomArticle', (_e, excludeArticleId?: string) => {
+    // Copy — getReadArticleIds() returns the store's live internal Set by reference, and adding
+    // excludeArticleId to it directly would incorrectly mark that article "read" in memory.
+    const exclude = new Set(dataStore.getReadArticleIds());
+    if (excludeArticleId) exclude.add(excludeArticleId);
+    const cached = articlesCache.getRandomArticle(exclude);
+    return cached ? toArticle(cached, dataStore) : null;
+  });
+
+  ipcMain.handle('getStreak', () => dataStore.getStreak());
+
   ipcMain.handle('getSettings', () => dataStore.getSettings());
   ipcMain.handle('setSettings', (_e, partial) => {
     dataStore.setSettings(partial);
+    if (partial.theme) nativeTheme.themeSource = partial.theme;
     broadcast({ type: 'settings' });
   });
 }

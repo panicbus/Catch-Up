@@ -35,10 +35,12 @@ export function BookmarksPage() {
     url: bookmark.articleSnapshot.url,
     title: bookmark.articleSnapshot.title,
     snippet: bookmark.articleSnapshot.snippet,
+    imageUrl: bookmark.articleSnapshot.imageUrl,
     source: bookmark.articleSnapshot.source,
     publishedAt: bookmark.articleSnapshot.publishedAt,
     paywalled: bookmark.articleSnapshot.paywalled,
     bookmarked: true,
+    read: bookmark.read,
   }));
 
   return (
@@ -55,7 +57,13 @@ export function BookmarksPage() {
       ) : (
         <>
           <BookmarksChannelTabs tabs={tabs} activeChannelId={currentChannelId} onSelect={setActiveChannelId} />
-          <NewsFeed articles={articles} channelId={currentChannelId!} viewMode={settings.defaultViewMode} />
+          <NewsFeed
+            articles={articles}
+            channelId={currentChannelId!}
+            channelName={channels.find((c) => c.id === currentChannelId)?.name ?? ''}
+            viewMode={settings.defaultViewMode}
+            partitionByRead={false}
+          />
         </>
       )}
     </div>

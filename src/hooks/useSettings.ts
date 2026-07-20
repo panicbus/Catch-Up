@@ -22,6 +22,12 @@ export function useSettings() {
     });
   }, [reload]);
 
+  // preload.ts already stamps <html data-theme> synchronously before first paint (avoiding a
+  // flash) — this just keeps it in sync for the lifetime of the app as the setting changes.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', settings.theme);
+  }, [settings.theme]);
+
   const update = useCallback((partial: Partial<AppSettings>) => {
     setSettings((prev) => ({ ...prev, ...partial }));
     void api.setSettings(partial);

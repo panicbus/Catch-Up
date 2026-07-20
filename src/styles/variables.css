@@ -36,21 +36,21 @@
   --shadow-card-hover: 0 2px 4px rgba(36, 31, 26, 0.06), 0 10px 24px rgba(36, 31, 26, 0.06);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1a1714;
-    --surface: #221e1a;
-    --surface-hover: #2a251f;
-    --border: #332c25;
-    --border-strong: #433a30;
-    --text: #f3ede4;
-    --text-muted: #b3a897;
-    --text-faint: #7c7264;
-    --new-bg: #3a2416;
-    --new-border: #5c3720;
-    --new-text: #f2a06c;
-    --paywall-bg: #2a2620;
-    --paywall-text: #9c9182;
-    --accent-soft: #3a201c;
-  }
+/* Driven by the in-app toggle (ThemeToggle.tsx), not the OS setting — <html data-theme> is stamped
+   synchronously by preload.ts before first paint, and kept in sync at runtime by useSettings. */
+:root[data-theme='dark'] {
+  --bg: #1a1714;
+  --surface: #221e1a;
+  --surface-hover: #2a251f;
+  --border: #332c25;
+  --border-strong: #433a30;
+  --text: #f3ede4;
+  --text-muted: #b3a897;
+  --text-faint: #7c7264;
+  --new-bg: #3a2416;
+  --new-border: #5c3720;
+  --new-text: #f2a06c;
+  --paywall-bg: #2a2620;
+  --paywall-text: #9c9182;
+  --accent-soft: #3a201c;
 }

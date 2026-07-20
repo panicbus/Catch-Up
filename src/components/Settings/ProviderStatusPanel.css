@@ -20,6 +20,9 @@
 .provider-status__dot--on {
   background: #4a9c6d;
 }
+.provider-status__dot--warn {
+  background: var(--new-text);
+}
 
 .provider-status__note {
   font-size: 12px;

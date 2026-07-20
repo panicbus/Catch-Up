@@ -1,0 +1,18 @@
+.surprise-me-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 9px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.surprise-me-button:hover {
+  border-color: var(--accent);
+  border-style: solid;
+  color: var(--accent-strong);
+}

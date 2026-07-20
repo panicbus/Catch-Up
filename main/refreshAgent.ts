@@ -1,6 +1,6 @@
 import type { DataStore } from './dataStore';
 import type { ArticlesCache } from './articlesCache';
-import { runProviders } from './providers/registry';
+import { runProviders, getProviderStatus } from './providers/registry';
 import type { DataChangeEvent } from '../ipc-contract';
 
 const INTERVAL_MS = 30 * 60 * 1000;
@@ -17,6 +17,7 @@ interface RunResult {
   added: number;
   providersRun: string[];
   errors: string[];
+  rateLimitedProviders: string[];
 }
 
 let timer: NodeJS.Timeout | null = null;
@@ -53,7 +54,15 @@ export async function runAll(deps: RefreshDeps): Promise<RunResult[]> {
 
 export async function runChannel(deps: RefreshDeps, channelId: string): Promise<RunResult> {
   const channel = deps.dataStore.getChannels().find((c) => c.id === channelId);
-  if (!channel) return { channelId, added: 0, providersRun: [], errors: [`Channel not found: ${channelId}`] };
+  if (!channel) {
+    return {
+      channelId,
+      added: 0,
+      providersRun: [],
+      errors: [`Channel not found: ${channelId}`],
+      rateLimitedProviders: [],
+    };
+  }
 
   const targets =
     channel.subchannels.length > 0
@@ -73,5 +82,10 @@ export async function runChannel(deps: RefreshDeps, channelId: string): Promise<
   }
 
   if (added > 0) deps.broadcast({ type: 'articles', channelId });
-  return { channelId, added, providersRun: [], errors };
+
+  const rateLimitedProviders = getProviderStatus()
+    .filter((p) => p.configured && p.rateLimited)
+    .map((p) => p.label);
+
+  return { channelId, added, providersRun: [], errors, rateLimitedProviders };
 }

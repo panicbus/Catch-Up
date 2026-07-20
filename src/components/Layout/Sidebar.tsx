@@ -1,7 +1,17 @@
 import { NavLink } from 'react-router-dom';
 import { Logo } from './Logo';
+import { ThemeToggle } from './ThemeToggle';
 import { useChannels } from '../../hooks/useChannels';
+import { useStreak } from '../../hooks/useStreak';
 import './Sidebar.css';
+
+function FlameIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 2c1 4-4 5-4 10a4 4 0 0 0 8 0c1.5 1 2 2.5 2 4a6 6 0 0 1-12 0c0-5 3-6 4-10 0 2 1 3 2 3-1-3 0-5 0-7z" />
+    </svg>
+  );
+}
 
 function HomeIcon() {
   return (
@@ -31,6 +41,7 @@ function SettingsIcon() {
 
 export function Sidebar() {
   const { channels } = useChannels();
+  const streak = useStreak();
   const navClass = ({ isActive }: { isActive: boolean }) =>
     `sidebar__link${isActive ? ' sidebar__link--active' : ''}`;
 
@@ -39,6 +50,12 @@ export function Sidebar() {
       <div className="sidebar__brand">
         <Logo withWordmark size={26} />
         <p className="sidebar__tagline">Your topics. Your pace. All caught up.</p>
+        {streak && streak.current > 0 && (
+          <div className="sidebar__streak" key={streak.current}>
+            <FlameIcon />
+            <span>{streak.current}-day streak</span>
+          </div>
+        )}
       </div>
 
       <nav className="sidebar__nav">
@@ -65,7 +82,10 @@ export function Sidebar() {
         ))}
       </div>
 
-      <div className="sidebar__version">v{__APP_VERSION__}</div>
+      <div className="sidebar__footer">
+        <ThemeToggle />
+        <span className="sidebar__version">v{__APP_VERSION__}</span>
+      </div>
     </aside>
   );
 }
