@@ -64,10 +64,13 @@ export async function runChannel(deps: RefreshDeps, channelId: string): Promise<
     };
   }
 
-  const targets =
-    channel.subchannels.length > 0
-      ? channel.subchannels.map((sc) => ({ topic: `${channel.name} ${sc.name}`, subchannelId: sc.id }))
-      : [{ topic: channel.name, subchannelId: null as string | null }];
+  // The plain channel-name search always runs, even when subchannels exist — subchannels narrow
+  // in addition to the channel's own general coverage, not instead of it. Overlap between this and
+  // a subchannel-specific search is handled by articlesCache.merge()'s existing URL/title dedup.
+  const targets: { topic: string; subchannelId: string | null }[] = [
+    { topic: channel.name, subchannelId: null },
+    ...channel.subchannels.map((sc) => ({ topic: `${channel.name} ${sc.name}`, subchannelId: sc.id })),
+  ];
 
   let added = 0;
   const errors: string[] = [];
