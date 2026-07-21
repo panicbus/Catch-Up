@@ -1,7 +1,7 @@
 import { useChannels } from '../../hooks/useChannels';
 import { ChannelSearchBar } from './ChannelSearchBar';
 import { ChannelTabGrid } from './ChannelTabGrid';
-import { SurpriseMeButton } from './SurpriseMeButton';
+import { RollTheDiceButton } from './RollTheDiceButton';
 import { EmptyState } from '../common/EmptyState';
 import './HomePage.css';
 
@@ -10,10 +10,10 @@ export function HomePage() {
 
   return (
     <div className="home-page">
-      <h1 className="home-page__title">Catch Up</h1>
-      <p className="home-page__subtitle">Your topics. Your pace. All caught up.</p>
-      <ChannelSearchBar />
-      <SurpriseMeButton />
+      <div className="home-page__search-row">
+        <ChannelSearchBar />
+      </div>
+      <RollTheDiceButton />
       {!loading && channels.length === 0 ? (
         <EmptyState
           title="No channels yet"

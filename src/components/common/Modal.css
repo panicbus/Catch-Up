@@ -1,6 +1,11 @@
 .modal-overlay {
   position: fixed;
-  inset: 0;
+  /* Centered within the main panel, not the whole window — excludes the sidebar's own width so
+     the modal doesn't read as shifted right of the content it belongs to. */
+  top: 0;
+  bottom: 0;
+  left: var(--sidebar-width);
+  right: 0;
   background: rgba(36, 31, 26, 0.35);
   display: flex;
   align-items: center;
@@ -18,8 +23,19 @@
 }
 
 .modal__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 17px;
   margin-bottom: 8px;
+}
+.modal__title--center {
+  justify-content: center;
+  text-align: center;
+}
+.modal__title-icon {
+  display: inline-flex;
+  color: var(--accent-strong);
 }
 
 .modal__body {

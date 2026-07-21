@@ -71,6 +71,9 @@ export interface AppSettings {
   defaultViewMode: ViewMode;
   refreshIntervalMinutes: number;
   theme: Theme;
+  /** Channel ids Roll the dice is allowed to pull from. null/undefined means every channel — the
+   * default, and how pre-existing data files without this field behave once loaded. */
+  rollTheDiceChannelIds: string[] | null;
 }
 
 export interface RefreshResult {

@@ -1,5 +1,6 @@
 .channel-search {
   position: relative;
+  width: 100%;
   max-width: 560px;
 }
 
@@ -22,6 +23,7 @@
 
 .channel-search__hint {
   margin-top: 8px;
+  text-align: center;
   font-size: 12px;
   color: var(--text-faint);
   padding: 0 4px;

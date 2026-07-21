@@ -107,7 +107,7 @@ export function registerIpcHandlers({ dataStore, articlesCache }: HandlerDeps): 
     // excludeArticleId to it directly would incorrectly mark that article "read" in memory.
     const exclude = new Set(dataStore.getReadArticleIds());
     if (excludeArticleId) exclude.add(excludeArticleId);
-    const cached = articlesCache.getRandomArticle(exclude);
+    const cached = articlesCache.getRandomArticle(exclude, dataStore.getSettings().rollTheDiceChannelIds);
     return cached ? toArticle(cached, dataStore) : null;
   });
 

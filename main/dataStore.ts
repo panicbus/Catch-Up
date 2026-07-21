@@ -37,6 +37,7 @@ const DEFAULT_DATA: DataFile = {
     defaultViewMode: 'list',
     refreshIntervalMinutes: 30,
     theme: 'light',
+    rollTheDiceChannelIds: null,
   },
   channels: [],
   bookmarks: [],
@@ -50,6 +51,15 @@ const READ_STATE_MAX_AGE_DAYS = 30;
 
 function genId(prefix: string): string {
   return `${prefix}_${crypto.randomBytes(6).toString('hex')}`;
+}
+
+/** Capitalizes the first letter of each word, leaving the rest of each word untouched so acronyms
+ * the user already typed correctly (e.g. "NASA", "F1") survive rather than getting lowercased. */
+function capitalizeWords(name: string): string {
+  return name
+    .split(' ')
+    .map((word) => (word.length > 0 ? word[0].toUpperCase() + word.slice(1) : word))
+    .join(' ');
 }
 
 function slugify(name: string): string {
@@ -93,6 +103,22 @@ export class DataStore {
     this.filePath = dataFilePath();
     this.data = this.read();
     this.readIds = new Set(this.data.readArticleIds.map((r) => r.id));
+    this.migrateChannelCapitalization();
+  }
+
+  /** One-time normalization for channels created before auto-capitalization existed — createChannel/
+   * renameChannel only capitalize names going forward, so anything already on disk needs a pass too. */
+  private migrateChannelCapitalization(): void {
+    let changed = false;
+    for (const channel of this.data.channels) {
+      const capitalized = capitalizeWords(channel.name.trim());
+      if (capitalized !== channel.name) {
+        channel.name = capitalized;
+        channel.slug = slugify(capitalized);
+        changed = true;
+      }
+    }
+    if (changed) this.write();
   }
 
   private read(): DataFile {
@@ -131,14 +157,15 @@ export class DataStore {
   }
 
   createChannel(name: string, opts: { persist?: boolean } = {}): Channel {
+    const capitalized = capitalizeWords(name.trim());
     const existing = this.data.channels.find(
-      (c) => c.slug === slugify(name)
+      (c) => c.slug === slugify(capitalized)
     );
     if (existing) return existing;
     const channel: Channel = {
       id: genId('chn'),
-      name,
-      slug: slugify(name),
+      name: capitalized,
+      slug: slugify(capitalized),
       createdAt: new Date().toISOString(),
       sortOrder: this.data.channels.length,
       subchannels: [],
@@ -150,14 +177,20 @@ export class DataStore {
 
   renameChannel(channelId: string, name: string): void {
     const channel = this.requireChannel(channelId);
-    channel.name = name;
-    channel.slug = slugify(name);
+    const capitalized = capitalizeWords(name.trim());
+    channel.name = capitalized;
+    channel.slug = slugify(capitalized);
     this.write();
   }
 
   deleteChannel(channelId: string): void {
     this.data.channels = this.data.channels.filter((c) => c.id !== channelId);
     this.data.bookmarks = this.data.bookmarks.filter((b) => b.channelId !== channelId);
+    if (this.data.settings.rollTheDiceChannelIds) {
+      this.data.settings.rollTheDiceChannelIds = this.data.settings.rollTheDiceChannelIds.filter(
+        (id) => id !== channelId
+      );
+    }
     this.write();
   }
 

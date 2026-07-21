@@ -19,7 +19,7 @@ interface BookmarkButtonProps {
   /** Fires with the new bookmarked state right as a plain (non-animateRemoval) toggle is dispatched.
    * Most callers don't need this — the `bookmarked` prop already comes from a hook that's subscribed
    * to bookmark-change events and re-renders on its own. It exists for the one place that isn't:
-   * SurpriseMeModal holds a single ad-hoc `Article` fetched once via getRandomArticle, with no
+   * RollTheDiceModal holds a single ad-hoc `Article` fetched once via getRandomArticle, with no
    * subscription, so without this its bookmark icon would silently go stale after a click. */
   onToggled?: (bookmarked: boolean) => void;
 }

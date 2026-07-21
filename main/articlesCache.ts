@@ -143,11 +143,14 @@ export class ArticlesCache {
   }
 
   /** Picks one article at random across every channel's bucket, excluding the given ids
-   * (e.g. already-read articles, or the currently-shown one for "shuffle again"). */
-  getRandomArticle(excludeIds: Set<string>): CachedArticle | undefined {
-    const candidates = Object.values(this.data.byChannel)
-      .flatMap((bucket) => bucket.articles)
-      .filter((a) => !excludeIds.has(a.id));
+   * (e.g. already-read articles, or the currently-shown one for "shuffle again"). `channelIds`
+   * restricts the pool to those channels — null/undefined/empty means no restriction. */
+  getRandomArticle(excludeIds: Set<string>, channelIds?: string[] | null): CachedArticle | undefined {
+    const buckets =
+      channelIds && channelIds.length > 0
+        ? channelIds.map((id) => this.data.byChannel[id]).filter((b): b is ChannelBucket => !!b)
+        : Object.values(this.data.byChannel);
+    const candidates = buckets.flatMap((bucket) => bucket.articles).filter((a) => !excludeIds.has(a.id));
     if (candidates.length === 0) return undefined;
     return candidates[Math.floor(Math.random() * candidates.length)];
   }

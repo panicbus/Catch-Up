@@ -27,6 +27,34 @@
   margin-bottom: 8px;
 }
 
+.channel-page__controls-left {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* Picks up the page's own title once it scrolls out from behind this sticky bar (see
+   ChannelPage.tsx's IntersectionObserver). Animates in by growing max-width rather than display
+   toggling, so it slides into place to the left of the subchannel pills instead of popping in. */
+.channel-page__sticky-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 0;
+  opacity: 0;
+  transform: translateX(-6px);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  transition: max-width 0.35s ease, opacity 0.25s ease, transform 0.3s ease, margin-right 0.35s ease;
+}
+.channel-page__sticky-title--visible {
+  max-width: 260px;
+  opacity: 1;
+  transform: translateX(0);
+  margin-right: 14px;
+}
+
 .channel-page__refresh {
   font-size: 12px;
   color: var(--text-faint);

@@ -48,7 +48,7 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
-        <Logo withWordmark size={26} />
+        <Logo withWordmark size={32} />
         <p className="sidebar__tagline">Your topics. Your pace. All caught up.</p>
         {streak && streak.current > 0 && (
           <div className="sidebar__streak" key={streak.current}>

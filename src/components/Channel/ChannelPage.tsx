@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useChannels } from '../../hooks/useChannels';
 import { useArticles } from '../../hooks/useArticles';
@@ -20,9 +20,33 @@ export function ChannelPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const [managingSubchannels, setManagingSubchannels] = useState(false);
+  const [titleScrolledOut, setTitleScrolledOut] = useState(false);
+  // A callback ref (rather than useRef + a effect keyed on channelId) so the observer attaches
+  // exactly when the <h1> node actually mounts — channels load asynchronously via IPC, so on first
+  // render `channel` is still null and the early `if (!channel) return null` below skips rendering
+  // the title entirely; a plain useRef effect would run once against that null ref and never retry.
+  const [titleNode, setTitleNode] = useState<HTMLHeadingElement | null>(null);
 
   const channel = channels.find((c) => c.id === channelId) ?? null;
   const { articles, loading } = useArticles(channelId ?? null, subchannelId);
+
+  // The sticky controls bar picks up the channel name once the page's own title has scrolled
+  // behind it — same threshold, since the sticky bar sits at top: 0, exactly where the title
+  // disappears.
+  useEffect(() => {
+    setTitleScrolledOut(false);
+    if (!titleNode) return;
+    // Root defaults to the browser viewport, which never scrolls in this layout — AppShell's
+    // .app-shell__main div is the actual scroll container, so it must be passed explicitly or the
+    // observer never fires.
+    const scrollRoot = titleNode.closest<HTMLElement>('.app-shell__main');
+    const observer = new IntersectionObserver(([entry]) => setTitleScrolledOut(!entry.isIntersecting), {
+      root: scrollRoot,
+      threshold: 0,
+    });
+    observer.observe(titleNode);
+    return () => observer.disconnect();
+  }, [titleNode, channelId]);
 
   if (!channel) return null;
 
@@ -49,7 +73,7 @@ export function ChannelPage() {
   return (
     <div className="channel-page">
       <div className="channel-page__header">
-        <h1 className="channel-page__title">{channel.name}</h1>
+        <h1 className="channel-page__title" ref={setTitleNode}>{channel.name}</h1>
         <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing}>
           {refreshing ? 'Refreshing…' : 'Refresh'}
         </Button>
@@ -57,13 +81,20 @@ export function ChannelPage() {
       {refreshNote && <p className="channel-page__refresh">{refreshNote}</p>}
 
       <div className="channel-page__controls">
-        <SubchannelBar
-          subchannels={channel.subchannels}
-          activeId={subchannelId}
-          onSelect={setSubchannelId}
-          managing={managingSubchannels}
-          onManageClick={() => setManagingSubchannels((v) => !v)}
-        />
+        <div className="channel-page__controls-left">
+          <span
+            className={`channel-page__sticky-title ${titleScrolledOut ? 'channel-page__sticky-title--visible' : ''}`}
+          >
+            {channel.name}
+          </span>
+          <SubchannelBar
+            subchannels={channel.subchannels}
+            activeId={subchannelId}
+            onSelect={setSubchannelId}
+            managing={managingSubchannels}
+            onManageClick={() => setManagingSubchannels((v) => !v)}
+          />
+        </div>
         <ViewModeToggle value={settings.defaultViewMode} onChange={(mode) => update({ defaultViewMode: mode })} />
       </div>
 

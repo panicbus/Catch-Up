@@ -1,0 +1,33 @@
+.roll-the-dice-modal {
+  width: 480px;
+  padding: 28px;
+  /* Modal chrome sits a shade darker than its card content (--bg instead of --surface) — a bigger,
+     more reliable jump than adjacent surface tokens, which read as near-identical in dark mode. */
+  background: var(--bg);
+}
+
+.roll-the-dice-modal__loading,
+.roll-the-dice-modal__empty {
+  padding: 32px 8px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.roll-the-dice-modal__card {
+  margin-bottom: 16px;
+}
+
+.roll-the-dice-modal__channel {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.roll-the-dice-modal__card .news-card {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}

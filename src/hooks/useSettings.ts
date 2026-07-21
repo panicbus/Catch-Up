@@ -2,7 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../services/api';
 import type { AppSettings } from '../../ipc-contract';
 
-const FALLBACK: AppSettings = { defaultViewMode: 'list', refreshIntervalMinutes: 30, theme: 'light' };
+const FALLBACK: AppSettings = {
+  defaultViewMode: 'list',
+  refreshIntervalMinutes: 30,
+  theme: 'light',
+  rollTheDiceChannelIds: null,
+};
 
 export function useSettings() {
   const [settings, setSettings] = useState<AppSettings>(FALLBACK);

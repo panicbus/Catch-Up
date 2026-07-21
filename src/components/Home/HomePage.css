@@ -2,13 +2,10 @@
   padding: 40px;
 }
 
-.home-page__title {
-  font-size: 26px;
-}
-
-.home-page__subtitle {
-  color: var(--text-muted);
-  font-size: 14px;
-  margin-top: 6px;
-  margin-bottom: 28px;
+/* Branding now lives only in the sidebar (see Sidebar.css/.tsx) — this pane leads with just the
+   search field, centered. The roll-the-dice button below it stays left-aligned, flush with the
+   channel cards grid beneath it, rather than centering with the search field above. */
+.home-page__search-row {
+  display: flex;
+  justify-content: center;
 }
