@@ -105,7 +105,7 @@ export function ChannelPage() {
           <span
             className={`channel-page__sticky-title ${titleScrolledOut ? 'channel-page__sticky-title--visible' : ''}`}
           >
-            {channel.name}
+            <span className="channel-page__sticky-title-inner">{channel.name}</span>
           </span>
           <SubchannelBar
             subchannels={channel.subchannels}
