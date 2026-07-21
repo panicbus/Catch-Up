@@ -45,6 +45,20 @@ export function ChannelSearchBar() {
 
   return (
     <div className="channel-search">
+      <svg
+        className="channel-search__icon"
+        viewBox="0 0 20 20"
+        width="17"
+        height="17"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        aria-hidden="true"
+      >
+        <circle cx="9" cy="9" r="6" />
+        <path d="M13.5 13.5l4 4" />
+      </svg>
       <input
         className="channel-search__input"
         type="text"
@@ -56,7 +70,6 @@ export function ChannelSearchBar() {
         onBlur={() => setTimeout(() => setFocused(false), 120)}
         aria-label="Search or add a channel"
       />
-      <p className="channel-search__hint">Press Enter to open an existing channel or create a new one.</p>
       {focused && matches.length > 0 && (
         <div className="channel-search__suggestions" role="listbox">
           {matches.map((c) => (

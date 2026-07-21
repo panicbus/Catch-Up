@@ -6,11 +6,14 @@
   --accent-gradient: linear-gradient(160deg, #e4483a, #f2874a);
 
   /* Surface */
-  --bg: #faf8f5;
+  --bg: #f5efe3;
   --surface: #ffffff;
   --surface-hover: #fbf5f0;
   --border: #ece5dc;
   --border-strong: #ddd3c6;
+  /* Slightly warmer than --surface — the sidebar reads as its own tinted panel rather than
+     matching the main content area 1:1. */
+  --sidebar-bg: #efe6d5;
 
   /* Text */
   --text: #241f1a;
@@ -23,6 +26,15 @@
   --new-text: #b5501f;
   --paywall-bg: #f1efe9;
   --paywall-text: #83786a;
+
+  /* Story card rotation (from the Catch Up Home 2a design doc, Turn 3, muted down from the
+     original pastel tones — too vivid/distracting at list scale — and with the 3rd tone swapped
+     from a pink/lilac to a taupe earth tone to fit the palette better). Hashed per article, not
+     tied to position — see getStoryCardColor. */
+  --story-card-1: #f2e3d1;
+  --story-card-2: #ece6d5;
+  --story-card-3: #e8e0d4;
+  --story-card-border: rgba(120, 80, 50, 0.2);
 
   /* Type */
   --font-display: 'Fraunces', Georgia, serif;
@@ -47,6 +59,7 @@
   --surface-hover: #2a251f;
   --border: #332c25;
   --border-strong: #433a30;
+  --sidebar-bg: #241e18;
   --text: #f3ede4;
   --text-muted: #b3a897;
   --text-faint: #7c7264;
@@ -56,4 +69,11 @@
   --paywall-bg: #2a2620;
   --paywall-text: #9c9182;
   --accent-soft: #3a201c;
+
+  /* No dark variant in the design doc (light-only mockup) — same muted hue families as the light
+     tones above, darkened to sit on a dark surface rather than glowing pastel blocks. */
+  --story-card-1: #362c24;
+  --story-card-2: #312e22;
+  --story-card-3: #302c26;
+  --story-card-border: rgba(220, 180, 140, 0.18);
 }

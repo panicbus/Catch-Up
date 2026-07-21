@@ -1,17 +1,10 @@
 import { NavLink } from 'react-router-dom';
 import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
+import { StreakCard } from './StreakCard';
 import { useChannels } from '../../hooks/useChannels';
 import { useStreak } from '../../hooks/useStreak';
 import './Sidebar.css';
-
-function FlameIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 2c1 4-4 5-4 10a4 4 0 0 0 8 0c1.5 1 2 2.5 2 4a6 6 0 0 1-12 0c0-5 3-6 4-10 0 2 1 3 2 3-1-3 0-5 0-7z" />
-    </svg>
-  );
-}
 
 function HomeIcon() {
   return (
@@ -48,14 +41,9 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
-        <Logo withWordmark size={32} />
-        <p className="sidebar__tagline">Your topics. Your pace. All caught up.</p>
-        {streak && streak.current > 0 && (
-          <div className="sidebar__streak" key={streak.current}>
-            <FlameIcon />
-            <span>{streak.current}-day streak</span>
-          </div>
-        )}
+        <Logo withWordmark size={52} />
+        <p className="sidebar__tagline">Your news. Your pace. All caught up.</p>
+        {streak && streak.current > 0 && <StreakCard current={streak.current} />}
       </div>
 
       <nav className="sidebar__nav">

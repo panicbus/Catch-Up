@@ -7,6 +7,7 @@ import { relativeTime } from '../../services/formatters';
 import { api } from '../../services/api';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useSwipeToDismiss } from '../../hooks/useSwipeToDismiss';
+import { getStoryCardColor } from '../../utils/storyCardColor';
 import './NewsCard.css';
 
 export interface NewsCardData {
@@ -48,6 +49,14 @@ interface NewsCardProps {
   /** See BookmarkButton's onToggled — only RollTheDiceModal needs this, to patch its own one-off
    * fetched Article since it has no subscription to bookmark-change events. */
   onBookmarkToggled?: (bookmarked: boolean) => void;
+  /** Grid view only: true when this card itself is the expanded one — same card, no separate
+   * element. Applies grid-column: 1 / -1 so the card spans every column in place (CSS Grid's own
+   * auto-flow then pushes later cards down to a fresh row; earlier same-row siblings are
+   * untouched) plus bigger title/image sizing. The width change itself snaps (CSS can't smoothly
+   * tween a grid-column span change), but the existing .news-card__expand content reveal
+   * (image/read-link) still animates via its usual grid-rows transition, since this is the same
+   * already-mounted element, not a freshly-inserted one. */
+  paneMode?: boolean;
 }
 
 type ExitReason = null | 'read' | 'unbookmark';
@@ -65,6 +74,7 @@ export function NewsCard({
   staysInPlace,
   removeCardOnUnbookmark,
   onBookmarkToggled,
+  paneMode,
 }: NewsCardProps) {
   const [exitReason, setExitReason] = useState<ExitReason>(null);
   const [imageFailed, setImageFailed] = useState(false);
@@ -135,13 +145,15 @@ export function NewsCard({
   const exitClass =
     exitReason === 'read' ? 'news-card--exiting' : exitReason === 'unbookmark' ? 'news-card--exiting-slow' : '';
 
+  const cardStyle = { ...mobileStyle, background: getStoryCardColor(article.id) };
+
   return (
     <div
-      className={`news-card ${exitClass}`}
+      className={`news-card ${paneMode ? 'news-card--pane' : ''} ${exitClass}`}
       role="button"
       tabIndex={0}
       onKeyDown={onKeyDown}
-      style={mobileStyle}
+      style={cardStyle}
       {...surfaceProps}
     >
       <div className="news-card__actions">

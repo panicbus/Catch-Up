@@ -1,49 +1,44 @@
 .channel-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 14px;
   margin-top: 14px;
 }
 
-.channel-card {
+.channel-tile {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 20px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  justify-content: space-between;
+  min-height: 120px;
+  padding: 15px;
+  border-radius: 15px;
   text-decoration: none;
-  color: var(--text);
-  box-shadow: var(--shadow-card);
-  transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
+  color: #fff;
+  box-shadow: 0 4px 14px -8px rgba(60, 30, 20, 0.35);
+  transition: box-shadow 0.15s;
 }
 
-.channel-card:hover {
-  box-shadow: var(--shadow-card-hover);
-  border-color: var(--border-strong);
-  transform: translateY(-1px);
+.channel-tile:hover {
+  box-shadow: 0 8px 20px -8px rgba(60, 30, 20, 0.45);
 }
 
-.channel-card__name {
+.channel-tile__count {
+  align-self: flex-end;
   font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 600;
+  font-weight: 900;
+  font-size: 32px;
+  line-height: 1;
 }
 
-.channel-card__meta {
-  font-size: 12px;
-  color: var(--text-faint);
-}
-
-.channel-card__new-badge {
-  align-self: flex-start;
-  margin-top: 4px;
-  font-size: 11px;
+.channel-tile__name {
+  font-family: var(--font-display);
   font-weight: 700;
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: var(--new-bg);
-  color: var(--new-text);
-  border: 1px solid var(--new-border);
+  font-size: 20px;
+}
+
+.channel-tile__meta {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.8;
+  margin-top: 2px;
 }

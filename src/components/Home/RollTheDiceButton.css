@@ -1,18 +1,18 @@
 .roll-the-dice-button {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin: 24px 0 0;
-  padding: 9px 16px;
-  border-radius: var(--radius-sm);
-  border: 1px dashed var(--border-strong);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 600;
+  flex-shrink: 0;
+  gap: 9px;
+  padding: 13px 19px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: #2b2320;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 6px 16px -6px rgba(43, 35, 32, 0.5);
+  transition: box-shadow 0.1s;
 }
 .roll-the-dice-button:hover {
-  border-color: var(--accent);
-  border-style: solid;
-  color: var(--accent-strong);
+  box-shadow: 0 8px 20px -6px rgba(43, 35, 32, 0.6);
 }

@@ -4,18 +4,29 @@
   gap: 24px;
 }
 
+/* Label + a rule filling the remaining width, via ::after rather than a second DOM element —
+   raw text inside a flex container already becomes its own anonymous flex item, so the
+   pseudo-element lines up next to it with no markup change needed. */
 .news-feed__day-header {
   position: sticky;
   top: 0;
   z-index: 2;
   background: var(--bg);
-  padding: 8px 0 6px;
-  font-size: 12px;
-  font-weight: 600;
+  padding: 8px 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--text-faint);
-  border-bottom: 1px solid var(--border);
   margin-bottom: 12px;
+}
+.news-feed__day-header::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }
 
 .news-feed__list {
@@ -92,4 +103,8 @@
 }
 .news-feed__archive-cards .news-card:hover {
   opacity: 0.85;
+}
+/* The open reading pane should read clearly even inside the otherwise-dimmed archive section. */
+.news-feed__archive-cards .news-card--pane {
+  opacity: 1;
 }

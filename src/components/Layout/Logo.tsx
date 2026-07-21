@@ -1,47 +1,53 @@
 interface LogoProps {
+  /** Icon height in px — the bottle's viewBox is tall/narrow (40x92), so width is derived from
+   * this to keep the silhouette proportional, unlike the old square mark. */
   size?: number;
   withWordmark?: boolean;
 }
 
-/** Ketchup-bottle mark — same silhouette as build/icon-source.svg, just the bottle, no text or artwork. */
+const VIEWBOX_WIDTH = 40;
+const VIEWBOX_HEIGHT = 92;
+
+/** Ketchup-bottle mark — outlined/sticker style (from the Catch Up Home 2a design doc), replacing
+ * the old smooth-gradient silhouette. Packaged app icons (build/icon*.png/.icns) are separate
+ * static assets and intentionally untouched by this. */
 export function Logo({ size = 28, withWordmark = false }: LogoProps) {
+  const width = size * (VIEWBOX_WIDTH / VIEWBOX_HEIGHT);
+
   return (
     <span className="logo" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-      <svg width={size} height={size} viewBox="0 0 512 512" aria-hidden="true">
-        <defs>
-          <linearGradient id="logo-bottle-gradient" x1="110" y1="170" x2="402" y2="478" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor="#e4483a" />
-            <stop offset="1" stopColor="#c23b2e" />
-          </linearGradient>
-        </defs>
-        <rect x="196" y="48" width="120" height="46" rx="12" fill="#faf6ef" />
-        <rect x="196" y="94" width="120" height="18" fill="#c23b2e" />
+      <svg width={width} height={size} viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} aria-hidden="true">
+        <rect x="10.5" y="2" width="19" height="9" rx="2.2" fill="#cfd2d4" stroke="#1a1a1a" strokeWidth="1.6" />
+        <line x1="11.8" y1="7.7" x2="28.2" y2="7.7" stroke="#9aa0a3" strokeWidth="1.4" />
         <path
-          d="M 226 112
-             L 286 112
-             L 286 170
-             C 342 170, 402 200, 402 230
-             L 388 460
-             Q 386 478, 368 478
-             L 144 478
-             Q 126 478, 124 460
-             L 110 230
-             C 110 200, 170 170, 226 170
-             Z"
-          fill="url(#logo-bottle-gradient)"
+          d="M13.5 11 L13.5 21 C13.5 28 5 31 5 41 L5 84 Q5 90.5 12 90.5 L28 90.5 Q35 90.5 35 84 L35 41 C35 31 26.5 28 26.5 21 L26.5 11 Z"
+          fill="#c1272d"
+          stroke="#1a1a1a"
+          strokeWidth="2.1"
+          strokeLinejoin="round"
         />
-        <rect x="126" y="292" width="260" height="78" rx="6" fill="#faf6ef" opacity="0.95" />
+        <path
+          d="M9 51 Q20 46 31 51 L28.5 82 Q20 85.5 11.5 82 Z"
+          fill="#f2f0ec"
+          stroke="#1a1a1a"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
       </svg>
       {withWordmark && (
         <span
           style={{
             fontFamily: 'var(--font-display)',
-            fontWeight: 700,
-            fontSize: size * 0.62,
+            fontWeight: 900,
+            fontSize: size * 0.585,
+            lineHeight: 0.9,
+            letterSpacing: '-0.02em',
             color: 'var(--text)',
           }}
         >
-          Catch Up
+          Catch
+          <br />
+          Up
         </span>
       )}
     </span>

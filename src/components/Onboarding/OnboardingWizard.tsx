@@ -25,7 +25,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
         <div className="onboarding__header">
           <Logo size={44} />
           <h1 className="onboarding__title">Welcome to Catch Up</h1>
-          <p className="onboarding__tagline">Your topics. Your pace. All caught up.</p>
+          <p className="onboarding__tagline">Your news. Your pace. All caught up.</p>
         </div>
 
         <p className="onboarding__prompt">Pick a few topics to follow — anything goes.</p>

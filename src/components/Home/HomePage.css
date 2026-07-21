@@ -2,10 +2,38 @@
   padding: 40px;
 }
 
-/* Branding now lives only in the sidebar (see Sidebar.css/.tsx) — this pane leads with just the
-   search field, centered. The roll-the-dice button below it stays left-aligned, flush with the
-   channel cards grid beneath it, rather than centering with the search field above. */
-.home-page__search-row {
+.home-page__utility-bar {
   display: flex;
-  justify-content: center;
+  align-items: center;
+  margin-bottom: 22px;
+}
+
+.home-page__heading-title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 24px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.home-page__heading-subtitle {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-faint);
+  margin-top: 1px;
+}
+
+/* Grouped with the card grid below rather than the search bar above — margin-top matches the
+   heading's own spacing, margin-bottom is 0 so the grid's own margin-top (matching its inter-row
+   gap) creates the row-to-grid gap too. */
+.home-page__dice-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.home-page__dice-caption {
+  font-size: 12.5px;
+  color: var(--text-faint);
 }

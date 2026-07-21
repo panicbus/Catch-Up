@@ -3,21 +3,47 @@
   flex-direction: column;
   gap: 6px;
   padding: 16px 18px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--story-card-1);
+  border: 1px solid var(--story-card-border);
   border-radius: var(--radius-md);
   color: var(--text);
   position: relative;
   cursor: pointer;
   touch-action: pan-y;
   user-select: none;
-  transition: box-shadow 0.15s, border-color 0.15s;
+  transition: box-shadow 0.15s;
   box-shadow: var(--shadow-card);
 }
 
+/* Background itself is set inline per-card (see getStoryCardColor in NewsCard.tsx) — hashed by
+   article id rather than a positional nth-child cycle, since a fixed cycle lines up into visible
+   color columns once the grid is more than one card wide. --story-card-1 above is just the
+   pre-hydration/fallback value. */
+
 .news-card:hover {
   box-shadow: var(--shadow-card-hover);
-  border-color: var(--border-strong);
+}
+
+/* Grid view: the clicked card itself expands to fill the row (see NewsFeed's GridSection) — no
+   separate element. grid-column change snaps (not smoothly tweenable), but the content reveal
+   below (.news-card__expand) still animates, since this is the same persistent DOM node. */
+.news-card--pane {
+  grid-column: 1 / -1;
+  padding: 22px 26px;
+  cursor: pointer;
+}
+.news-card--pane .news-card__title {
+  font-size: 22px;
+  line-height: 1.28;
+}
+.news-card--pane .news-card__snippet {
+  font-size: 14px;
+}
+.news-card--pane .news-card__image {
+  max-height: 360px;
+}
+.news-card--pane .news-card__top {
+  padding-right: 76px;
 }
 
 .news-card--exiting {
@@ -45,9 +71,10 @@
 }
 
 .news-card__title {
-  font-size: 16px;
-  line-height: 1.45;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 16.5px;
+  line-height: 1.24;
+  font-weight: 700;
   flex: 1;
   min-width: 0;
 }
@@ -71,6 +98,7 @@
 
 .news-card__footer {
   font-size: 11px;
+  font-weight: 500;
   color: var(--text-faint);
   margin-top: 2px;
 }
@@ -129,7 +157,7 @@
    match, leaving large dead space in shorter cards next to it. */
 .news-feed__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   align-items: start;
   gap: 14px;
 }

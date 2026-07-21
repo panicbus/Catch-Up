@@ -1,35 +1,38 @@
 import { Link } from 'react-router-dom';
-import { useArticles } from '../../hooks/useArticles';
-import { isNewArticle } from '../../utils/isNew';
+import { getTileColor } from '../../utils/channelColor';
 import type { Channel } from '../../../ipc-contract';
 import './ChannelTabGrid.css';
 
-function ChannelCard({ channel }: { channel: Channel }) {
-  const { articles } = useArticles(channel.id, null);
-  const newCount = articles.filter((a) => isNewArticle(a.publishedAt)).length;
+function ChannelCard({ channel, newCount }: { channel: Channel; newCount: number }) {
+  const subchannelText =
+    channel.subchannels.length > 0
+      ? `${channel.subchannels.length} subchannel${channel.subchannels.length === 1 ? '' : 's'}`
+      : 'No subchannels';
 
   return (
-    <Link className="channel-card" to={`/channel/${channel.id}`}>
-      <span className="channel-card__name">{channel.name}</span>
-      <span className="channel-card__meta">
-        {channel.subchannels.length > 0
-          ? `${channel.subchannels.length} subchannel${channel.subchannels.length === 1 ? '' : 's'}`
-          : 'No subchannels'}
-      </span>
-      {newCount > 0 && <span className="channel-card__new-badge">{newCount} new</span>}
+    <Link className="channel-tile" style={{ background: getTileColor(channel.id) }} to={`/channel/${channel.id}`}>
+      <div className="channel-tile__count">{newCount > 0 ? newCount : ''}</div>
+      <div>
+        <div className="channel-tile__name">{channel.name}</div>
+        <div className="channel-tile__meta">
+          {subchannelText}
+          {newCount > 0 ? ' · new' : ''}
+        </div>
+      </div>
     </Link>
   );
 }
 
 interface ChannelTabGridProps {
   channels: Channel[];
+  counts: Record<string, number>;
 }
 
-export function ChannelTabGrid({ channels }: ChannelTabGridProps) {
+export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
   return (
     <div className="channel-grid">
       {channels.map((channel) => (
-        <ChannelCard key={channel.id} channel={channel} />
+        <ChannelCard key={channel.id} channel={channel} newCount={counts[channel.id] ?? 0} />
       ))}
     </div>
   );

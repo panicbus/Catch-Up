@@ -41,6 +41,50 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
+/** Grid view: the clicked card itself expands to span every column in place (NewsCard's paneMode
+ * prop, see NewsCard.css) — no separate element. CSS Grid's own auto-flow then pushes later cards
+ * down to a fresh row on its own; earlier same-row siblings are untouched. List view is
+ * untouched — cards there just expand themselves in place, exactly as before. */
+function GridSection({
+  articles,
+  channelId,
+  isGrid,
+  staysInPlace,
+  removeCardOnUnbookmark,
+  expandedArticleId,
+  onToggleExpand,
+}: {
+  articles: NewsCardData[];
+  channelId: string;
+  isGrid: boolean;
+  staysInPlace: boolean;
+  removeCardOnUnbookmark: boolean;
+  expandedArticleId: string | null;
+  onToggleExpand: (articleId: string) => void;
+}) {
+  const containerClass = isGrid ? 'news-feed__grid' : 'news-feed__list';
+
+  return (
+    <div className={containerClass}>
+      {articles.map((article) => {
+        const isExpanded = expandedArticleId === article.id;
+        return (
+          <NewsCard
+            key={article.id}
+            article={article}
+            channelId={channelId}
+            staysInPlace={staysInPlace}
+            removeCardOnUnbookmark={removeCardOnUnbookmark}
+            expanded={isExpanded}
+            paneMode={isGrid && isExpanded}
+            onToggleExpand={() => onToggleExpand(article.id)}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 function DayGroups({
   articles,
   channelId,
@@ -61,26 +105,21 @@ function DayGroups({
   onToggleExpand: (articleId: string) => void;
 }) {
   const byDay = groupByDay(articles, 'publishedAt', maxPerDay);
-  const containerClass = viewMode === 'grid' ? 'news-feed__grid' : 'news-feed__list';
 
   return (
     <>
       {[...byDay.entries()].map(([dateKey, dayArticles]) => (
         <section key={dateKey}>
           <div className="news-feed__day-header">{formatDateHeader(dayArticles[0].publishedAt)}</div>
-          <div className={containerClass}>
-            {dayArticles.map((article) => (
-              <NewsCard
-                key={article.id}
-                article={article}
-                channelId={channelId}
-                staysInPlace={staysInPlace}
-                removeCardOnUnbookmark={removeCardOnUnbookmark}
-                expanded={expandedArticleId === article.id}
-                onToggleExpand={() => onToggleExpand(article.id)}
-              />
-            ))}
-          </div>
+          <GridSection
+            articles={dayArticles}
+            channelId={channelId}
+            isGrid={viewMode === 'grid'}
+            staysInPlace={staysInPlace}
+            removeCardOnUnbookmark={removeCardOnUnbookmark}
+            expandedArticleId={expandedArticleId}
+            onToggleExpand={onToggleExpand}
+          />
         </section>
       ))}
     </>
@@ -104,7 +143,6 @@ function ReadArchive({
 }) {
   const byDay = groupByDay(articles, 'publishedAt');
   const [openDate, setOpenDate] = useState<string | null>(null);
-  const containerClass = viewMode === 'grid' ? 'news-feed__grid' : 'news-feed__list';
 
   const toggleDate = (dateKey: string) => {
     setOpenDate((prev) => (prev === dateKey ? null : dateKey));
@@ -129,18 +167,16 @@ function ReadArchive({
             </button>
             <div className={`news-feed__archive-body ${isOpen ? 'news-feed__archive-body--open' : ''}`}>
               <div className="news-feed__archive-body-inner">
-                <div className={`${containerClass} news-feed__archive-cards`}>
-                  {dayArticles.map((article) => (
-                    <NewsCard
-                      key={article.id}
-                      article={article}
-                      channelId={channelId}
-                      staysInPlace
-                      removeCardOnUnbookmark={removeCardOnUnbookmark}
-                      expanded={expandedArticleId === article.id}
-                      onToggleExpand={() => onToggleExpand(article.id)}
-                    />
-                  ))}
+                <div className="news-feed__archive-cards">
+                  <GridSection
+                    articles={dayArticles}
+                    channelId={channelId}
+                    isGrid={viewMode === 'grid'}
+                    staysInPlace
+                    removeCardOnUnbookmark={removeCardOnUnbookmark}
+                    expandedArticleId={expandedArticleId}
+                    onToggleExpand={onToggleExpand}
+                  />
                 </div>
               </div>
             </div>

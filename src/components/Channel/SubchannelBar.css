@@ -8,14 +8,21 @@
 .subchannel-bar__chip {
   padding: 6px 14px;
   border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
+  border: 1px solid rgba(120, 80, 40, 0.14);
+  background: #f3ecdf;
   color: var(--text-muted);
   font-size: 13px;
   font-weight: 500;
 }
 .subchannel-bar__chip:hover {
   background: var(--surface-hover);
+}
+
+/* No dark-mode cream in the design doc (light-only mockup) — falls back to the app's own
+   elevated-surface token instead of a hardcoded pastel that wouldn't read right on a dark bg. */
+:root[data-theme='dark'] .subchannel-bar__chip {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
 }
 
 .subchannel-bar__chip--active {

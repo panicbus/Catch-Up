@@ -7,12 +7,14 @@
      traffic-light buttons float over the content area right where the brand header would start. */
   padding: 44px 16px 24px;
   border-right: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--sidebar-bg);
   gap: 28px;
 }
 
 .sidebar__brand {
   padding: 0 8px;
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar__tagline {
@@ -21,6 +23,10 @@
   font-size: 13px;
   color: var(--text-muted);
   line-height: 1.4;
+}
+
+.sidebar__brand .streak-card {
+  margin-top: 16px;
 }
 
 .sidebar__nav {
@@ -79,30 +85,4 @@
 .sidebar__version {
   font-size: 11px;
   color: var(--text-faint);
-}
-
-.sidebar__streak {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 10px 0 0;
-  padding: 5px 8px;
-  width: fit-content;
-  border-radius: 999px;
-  background: var(--new-bg);
-  color: var(--new-text);
-  font-size: 12px;
-  font-weight: 600;
-  animation: streak-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes streak-pop {
-  0% {
-    transform: scale(0.6);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
 }
