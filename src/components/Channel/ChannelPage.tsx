@@ -12,6 +12,25 @@ import { Button } from '../common/Button';
 import { api } from '../../services/api';
 import './ChannelPage.css';
 
+function RefreshIcon({ spinning }: { spinning: boolean }) {
+  return (
+    <svg
+      className={`channel-page__refresh-icon ${spinning ? 'channel-page__refresh-icon--spinning' : ''}`}
+      width="14"
+      height="14"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M16 6a6.5 6.5 0 10.8 4.3" />
+      <path d="M16.4 2.6V6H13" />
+    </svg>
+  );
+}
+
 export function ChannelPage() {
   const { channelId } = useParams<{ channelId: string }>();
   const { channels } = useChannels();
@@ -74,7 +93,8 @@ export function ChannelPage() {
     <div className="channel-page">
       <div className="channel-page__header">
         <h1 className="channel-page__title" ref={setTitleNode}>{channel.name}</h1>
-        <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing}>
+        <Button variant="secondary" size="sm" onClick={handleRefresh} disabled={refreshing}>
+          <RefreshIcon spinning={refreshing} />
           {refreshing ? 'Refreshing…' : 'Refresh'}
         </Button>
       </div>

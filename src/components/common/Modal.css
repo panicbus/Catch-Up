@@ -14,7 +14,7 @@
 }
 
 .modal {
-  background: var(--surface);
+  background: var(--bg);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card-hover);
   padding: 24px;

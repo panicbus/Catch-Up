@@ -59,3 +59,12 @@
   font-size: 12px;
   color: var(--text-faint);
 }
+
+.channel-page__refresh-icon--spinning {
+  animation: channel-page-refresh-spin 0.8s linear infinite;
+}
+@keyframes channel-page-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

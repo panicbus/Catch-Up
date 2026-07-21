@@ -66,6 +66,43 @@
   gap: 2px;
 }
 
+.sidebar__channel-row {
+  display: flex;
+  align-items: center;
+}
+.sidebar__channel-row .sidebar__link {
+  flex: 1;
+  min-width: 0;
+}
+.sidebar__channel-row .sidebar__link span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__channel-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-right: 4px;
+  border-radius: var(--radius-sm);
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.sidebar__channel-row:hover .sidebar__channel-remove {
+  opacity: 1;
+}
+.sidebar__channel-remove:hover {
+  background: var(--surface-hover);
+  color: var(--accent-strong);
+}
+
 .sidebar__section-label {
   padding: 0 12px;
   font-size: 11px;

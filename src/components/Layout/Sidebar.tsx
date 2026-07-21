@@ -1,9 +1,13 @@
-import { NavLink } from 'react-router-dom';
+import { useState } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
 import { StreakCard } from './StreakCard';
+import { Button } from '../common/Button';
+import { Modal } from '../common/Modal';
 import { useChannels } from '../../hooks/useChannels';
 import { useStreak } from '../../hooks/useStreak';
+import { api } from '../../services/api';
 import './Sidebar.css';
 
 function HomeIcon() {
@@ -32,11 +36,31 @@ function SettingsIcon() {
   );
 }
 
+function RemoveIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+      <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function Sidebar() {
   const { channels } = useChannels();
   const streak = useStreak();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const navClass = ({ isActive }: { isActive: boolean }) =>
     `sidebar__link${isActive ? ' sidebar__link--active' : ''}`;
+
+  const pendingDeleteChannel = channels.find((c) => c.id === pendingDeleteId);
+
+  const confirmDelete = () => {
+    if (!pendingDeleteChannel) return;
+    void api.deleteChannel(pendingDeleteChannel.id);
+    if (location.pathname === `/channel/${pendingDeleteChannel.id}`) navigate('/');
+    setPendingDeleteId(null);
+  };
 
   return (
     <aside className="sidebar">
@@ -64,9 +88,23 @@ export function Sidebar() {
       <div className="sidebar__channels">
         <div className="sidebar__section-label">Channels</div>
         {channels.map((channel) => (
-          <NavLink key={channel.id} to={`/channel/${channel.id}`} className={navClass}>
-            <span>{channel.name}</span>
-          </NavLink>
+          <div key={channel.id} className="sidebar__channel-row">
+            <NavLink to={`/channel/${channel.id}`} className={navClass}>
+              <span>{channel.name}</span>
+            </NavLink>
+            <button
+              type="button"
+              className="sidebar__channel-remove"
+              aria-label={`Delete ${channel.name}`}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setPendingDeleteId(channel.id);
+              }}
+            >
+              <RemoveIcon />
+            </button>
+          </div>
         ))}
       </div>
 
@@ -74,6 +112,23 @@ export function Sidebar() {
         <ThemeToggle />
         <span className="sidebar__version">v{__APP_VERSION__}</span>
       </div>
+
+      {pendingDeleteChannel && (
+        <Modal title={`Delete "${pendingDeleteChannel.name}"?`} onClose={() => setPendingDeleteId(null)}>
+          <div className="modal__body">
+            This removes the channel, its subchannels, its cached stories, and any bookmarks saved under it.
+            This can't be undone.
+          </div>
+          <div className="modal__actions">
+            <Button variant="secondary" onClick={() => setPendingDeleteId(null)}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={confirmDelete}>
+              Delete channel
+            </Button>
+          </div>
+        </Modal>
+      )}
     </aside>
   );
 }
