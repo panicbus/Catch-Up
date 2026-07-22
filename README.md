@@ -22,7 +22,7 @@ Your news. Your pace. All caught up.
 - [React](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) — UI, via [Vite](https://vitejs.dev/)
 - [React Router](https://reactrouter.com/) (hash routing) for in-app navigation
 - Plain CSS (no framework) — see `src/styles/variables.css` for the design tokens
-- News fetched from [NewsData.io](https://newsdata.io/), [The Guardian Open Platform](https://open-platform.theguardian.com/), and [GNews](https://gnews.io/) — all optional, free-tier friendly, and queried in parallel per channel/subchannel search
+- News fetched from 6 providers in parallel per channel/subchannel search — [NewsData.io](https://newsdata.io/), [The Guardian Open Platform](https://open-platform.theguardian.com/), [GNews](https://gnews.io/), and [NYTimes](https://developer.nytimes.com/) (all optional/free-tier, keyed), plus Google News (RSS) and Hacker News (no key needed, on by default) — deliberately broad so no single outlet's editorial slant dominates the feed
 
 ## Getting started
 
@@ -39,17 +39,20 @@ cd catch-up-app
 npm install
 ```
 
-Copy `.env.example` to `.env` and add API keys for whichever providers you want (all are optional — Catch Up works with zero, one, two, or three configured; each is queried independently and a missing/rate-limited key is simply skipped):
+Copy `.env.example` to `.env` and add API keys for whichever *keyed* providers you want (all are optional — Catch Up works with zero, one, or all four configured; each is queried independently and a missing/rate-limited key is simply skipped). Google News and Hacker News need no key at all and are on by default:
 
 ```bash
 cp .env.example .env
 ```
 
-| Provider | Free tier | Sign up |
-|---|---|---|
-| NewsData.io | 200 credits/day | https://newsdata.io/register |
-| The Guardian | Free, no commercial-use restriction | https://open-platform.theguardian.com/access/ |
-| GNews | 100 requests/day | https://gnews.io/register |
+| Provider | Key required? | Free tier | Sign up |
+|---|---|---|---|
+| NewsData.io | Yes | 200 credits/day | https://newsdata.io/register |
+| The Guardian | Yes | Free, no commercial-use restriction | https://open-platform.theguardian.com/access/ |
+| GNews | Yes | 100 requests/day | https://gnews.io/register |
+| NYTimes | Yes | Free, generous daily quota | https://developer.nytimes.com/ |
+| Google News (RSS) | No | — | — |
+| Hacker News | No | — | — |
 
 ### Run in development
 
@@ -92,7 +95,7 @@ main/
   articlesCache.ts            Fetched-article cache, capped/pruned per channel
   refreshAgent.ts             Background refresh loop + per-channel fetch orchestration
   ipcHandlers.ts               All ipcMain.handle registrations
-  providers/                  NewsData.io / Guardian / GNews integrations + dedupe/cooldown logic
+  providers/                  6 news source integrations (4 keyed APIs, 2 no-key) + dedupe/cooldown logic
   tray.ts                     Menu-bar tray icon
 ipc-contract.ts               Shared types + IPC channel definitions
 src/

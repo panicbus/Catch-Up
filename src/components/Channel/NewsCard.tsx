@@ -64,11 +64,18 @@ interface NewsCardProps {
   /** Grid view only: true when this card itself is the expanded one — same card, no separate
    * element. Applies grid-column: 1 / -1 so the card spans every column in place (CSS Grid's own
    * auto-flow then pushes later cards down to a fresh row; earlier same-row siblings are
-   * untouched) plus bigger title/image sizing. The width change itself snaps (CSS can't smoothly
-   * tween a grid-column span change), but the existing .news-card__expand content reveal
-   * (image/read-link) still animates via its usual grid-rows transition, since this is the same
-   * already-mounted element, not a freshly-inserted one. */
+   * untouched) plus bigger title/image sizing. The existing .news-card__expand content reveal
+   * (image/read-link) animates via its usual grid-rows transition, since this is the same
+   * already-mounted element, not a freshly-inserted one — see animateReflow for the grid-column
+   * change itself, which grid-rows can't cover. */
   paneMode?: boolean;
+  /** True for every card in a grid-view section (regardless of which one, if any, is expanded) —
+   * gives each a stable, unique view-transition-name so NewsFeed's toggleExpand (wrapping the
+   * state update in document.startViewTransition) can smoothly animate the reflow: the clicked
+   * card growing to full width, and every later card sliding down to its new row, instead of the
+   * instant snap a grid-column change can't otherwise be transitioned out of. List view doesn't
+   * set this — there's no reflow there to animate. */
+  animateReflow?: boolean;
 }
 
 type ExitReason = null | 'read' | 'unbookmark';
@@ -86,6 +93,7 @@ export function NewsCard({
   removeCardOnUnbookmark,
   onBookmarkToggled,
   paneMode,
+  animateReflow,
 }: NewsCardProps) {
   const [exitReason, setExitReason] = useState<ExitReason>(null);
   const [imageFailed, setImageFailed] = useState(false);
@@ -156,7 +164,14 @@ export function NewsCard({
   const exitClass =
     exitReason === 'read' ? 'news-card--exiting' : exitReason === 'unbookmark' ? 'news-card--exiting-slow' : '';
 
-  const cardStyle = { ...mobileStyle, background: getStoryCardColor(article.id) };
+  const cardStyle = {
+    ...mobileStyle,
+    background: getStoryCardColor(article.id),
+    // Must be unique per element on screen at transition time — keyed by article id like
+    // everything else here, so it stays stable across re-renders (same conceptual card) without
+    // ever colliding with another card's name.
+    ...(animateReflow ? { viewTransitionName: `news-card-${article.id}` } : {}),
+  };
 
   return (
     <div

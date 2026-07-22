@@ -44,6 +44,24 @@ export class ArticlesCache {
   constructor() {
     this.filePath = articlesCacheFilePath();
     this.data = this.read();
+    this.migrateGoogleNewsRssSnippets();
+  }
+
+  /** One-time cleanup for googlenewsrss articles cached before that provider's snippet field
+   * stopped being populated (it was never a real summary — just Google's own restated-headline
+   * cluster text, redundant with the title) — new fetches already come through clean, but
+   * anything merged earlier is stuck with the old value until it naturally ages out otherwise. */
+  private migrateGoogleNewsRssSnippets(): void {
+    let changed = false;
+    for (const bucket of Object.values(this.data.byChannel)) {
+      for (const article of bucket.articles) {
+        if (article.provider === 'googlenewsrss' && article.snippet !== null) {
+          article.snippet = null;
+          changed = true;
+        }
+      }
+    }
+    if (changed) this.write();
   }
 
   private read(): CacheFile {
@@ -62,7 +80,12 @@ export class ArticlesCache {
     fs.renameSync(tmpPath, this.filePath);
   }
 
-  getArticles(channelId: string, subchannelId?: string | null, limit = 100): CachedArticle[] {
+  // Matches DEFAULT_BUCKET.maxCount below — the default here effectively means "everything
+  // currently cached for this channel." A smaller default (previously 100) meant a channel whose
+  // most recent articles happen to be a content-light source (no snippet/image) could keep older,
+  // richer articles from ever reaching the renderer at all, before NewsFeed's own
+  // interspersing/capping logic ever got a chance to consider them.
+  getArticles(channelId: string, subchannelId?: string | null, limit = 300): CachedArticle[] {
     const bucket = this.data.byChannel[channelId];
     if (!bucket) return [];
     const filtered = subchannelId

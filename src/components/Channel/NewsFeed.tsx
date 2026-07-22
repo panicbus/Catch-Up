@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { groupByDay } from '../../utils/groupByDay';
+import { intersperseByContent } from '../../utils/intersperseByContent';
 import { formatDateHeader } from '../../services/formatters';
 import { api } from '../../services/api';
 import { NewsCard, type NewsCardData } from './NewsCard';
 import { AllCaughtUp } from './AllCaughtUp';
 import type { ViewMode } from '../../../ipc-contract';
 import './NewsFeed.css';
+
+/** "Something to read in the expanded pane" — a real snippet or a thumbnail, either counts.
+ * Shared by DayGroups and ReadArchive so a day's cards don't run long stretches with neither. */
+const hasReadableContent = (a: NewsCardData) => !!(a.snippet && a.snippet.trim()) || !!a.imageUrl;
 
 /** Must match main/dataStore.ts's READ_STATE_MAX_AGE_DAYS — that's what actually stops collecting
  * read stories past this point; this is just the label saying so. Expressed in days (not weeks)
@@ -61,7 +67,15 @@ function ChevronIcon({ open }: { open: boolean }) {
 /** Grid view: the clicked card itself expands to span every column in place (NewsCard's paneMode
  * prop, see NewsCard.css) — no separate element. CSS Grid's own auto-flow then pushes later cards
  * down to a fresh row on its own; earlier same-row siblings are untouched. List view is
- * untouched — cards there just expand themselves in place, exactly as before. */
+ * untouched — cards there just expand themselves in place, exactly as before.
+ *
+ * The reflow itself (a card's grid-column changing, and every later card snapping to the row(s)
+ * below) can't be smoothly CSS-transitioned — grid placement changes are discrete, not tweenable.
+ * Each card gets a stable view-transition-name (only in grid view — list view has no reflow to
+ * animate) so the View Transitions API can animate it instead: it snapshots the page before and
+ * after the DOM update and cross-fades/morphs matching named elements between the two, which
+ * covers both the clicked card's own expand-to-full-width *and* every later card sliding down to
+ * its new row, without hand-rolling per-element position math for a variable-length list. */
 function GridSection({
   articles,
   isGrid,
@@ -91,6 +105,7 @@ function GridSection({
             removeCardOnUnbookmark={removeCardOnUnbookmark}
             expanded={isExpanded}
             paneMode={isGrid && isExpanded}
+            animateReflow={isGrid}
             onToggleExpand={() => onToggleExpand(article.id)}
           />
         );
@@ -122,7 +137,7 @@ function DayGroups({
         <section key={dateKey}>
           <div className="news-feed__day-header">{formatDateHeader(dayArticles[0].publishedAt)}</div>
           <GridSection
-            articles={dayArticles}
+            articles={intersperseByContent(dayArticles, hasReadableContent)}
             isGrid={viewMode === 'grid'}
             staysInPlace={staysInPlace}
             removeCardOnUnbookmark={removeCardOnUnbookmark}
@@ -176,7 +191,7 @@ function ReadArchive({
               <div className="news-feed__archive-body-inner">
                 <div className="news-feed__archive-cards">
                   <GridSection
-                    articles={dayArticles}
+                    articles={intersperseByContent(dayArticles, hasReadableContent)}
                     isGrid={viewMode === 'grid'}
                     staysInPlace
                     removeCardOnUnbookmark={removeCardOnUnbookmark}
@@ -207,17 +222,34 @@ export function NewsFeed({
   const prevUnreadCountRef = useRef<number | null>(null);
 
   // `unread` is the true count, used for the celebration/streak logic below — articles arrive
-  // already sorted newest-first (see articlesCache.getArticles), so slicing it for display still
-  // shows the most recent ones and simply holds back older ones past the cap. Filtered whenever
-  // either partitionByRead or removeOnRead wants read articles gone from the main section — The
-  // Pool sets removeOnRead alone (partitionByRead stays false, so this is still the only
-  // section rendered, never an archive).
+  // already sorted newest-first (see articlesCache.getArticles). Filtered whenever either
+  // partitionByRead or removeOnRead wants read articles gone from the main section — The Pool
+  // sets removeOnRead alone (partitionByRead stays false, so this is still the only section
+  // rendered, never an archive).
   const unread = partitionByRead || removeOnRead ? articles.filter((a) => !a.read) : articles;
-  const visibleUnread = unread.slice(0, maxUnreadStories);
+  // Intersperse *before* slicing to the cap, not after — groupByDay (used below) always re-sorts
+  // each day's own bucket back to pure chronological order, so any interspersing done after
+  // grouping can only rearrange whatever already survived this cut. Doing it here instead means a
+  // content-having article that would otherwise be sliced off entirely (behind a long recent-but-
+  // empty run from a source like Google News RSS) gets pulled into the visible set at all — the
+  // per-day intersperse in DayGroups/ReadArchive then just distributes it well within its day.
+  const visibleUnread = intersperseByContent(unread, hasReadableContent).slice(0, maxUnreadStories);
   const read = partitionByRead ? articles.filter((a) => a.read) : [];
 
-  const toggleExpand = (articleId: string) =>
-    setExpandedArticleId((prev) => (prev === articleId ? null : articleId));
+  const toggleExpand = (articleId: string) => {
+    const apply = () => setExpandedArticleId((prev) => (prev === articleId ? null : articleId));
+    // Only grid view has a reflow worth animating (list view already expands smoothly in place,
+    // no grid-column snap involved) — see GridSection's animateReflow/NewsCard's view-transition-
+    // name. flushSync forces the state update (and its DOM effects) to commit synchronously
+    // inside the callback, which startViewTransition requires to capture an accurate "after"
+    // snapshot — React's normal batching would otherwise let the callback return before the DOM
+    // actually reflects the new state.
+    if (viewMode === 'grid' && document.startViewTransition) {
+      document.startViewTransition(() => flushSync(apply));
+    } else {
+      apply();
+    }
+  };
 
   // `justCleared` genuinely needs a normal effect here (not a render-time computation) — this
   // app renders under React.StrictMode, which double-invokes function components in dev, and any
