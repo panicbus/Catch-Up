@@ -46,8 +46,8 @@ const DEFAULT_DATA: DataFile = {
 };
 
 // Must match READ_ARCHIVE_DAYS in src/components/Channel/NewsFeed.tsx — that's what the "Read
-// stories · 30 day archive" label promises, this is what actually stops collecting past it.
-const READ_STATE_MAX_AGE_DAYS = 30;
+// stories · 2 week archive" label promises, this is what actually stops collecting past it.
+const READ_STATE_MAX_AGE_DAYS = 14;
 
 function genId(prefix: string): string {
   return `${prefix}_${crypto.randomBytes(6).toString('hex')}`;
@@ -317,7 +317,11 @@ export class DataStore {
   }
 
   // Streak
-  recordAppOpen(): StreakInfo {
+  /** Advances the streak when the user reaches "all caught up" on some channel — not merely for
+   * opening the app, which would just reward presence rather than actually staying on top of
+   * anything. Idempotent per calendar day: the first catch-up of the day advances it, later ones
+   * that same day are no-ops, matching how this already behaved when the trigger was app-open. */
+  recordCatchUp(): StreakInfo {
     const today = localDateString(new Date());
     const { lastOpenedDate, current } = this.data.streak;
 

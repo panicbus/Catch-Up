@@ -35,6 +35,7 @@ export const api: CatchUpApi = {
   getRandomArticle: (excludeArticleId) => getBridge().getRandomArticle(excludeArticleId),
 
   getStreak: () => getBridge().getStreak(),
+  recordCatchUp: () => getBridge().recordCatchUp(),
 
   getSettings: () => getBridge().getSettings(),
   setSettings: (partial) => getBridge().setSettings(partial),

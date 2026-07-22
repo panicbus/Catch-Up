@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { BurstEffect } from '../common/BurstEffect';
+import { useEffect, useState } from 'react';
+import { ConfettiEffect } from '../common/ConfettiEffect';
 import './AllCaughtUp.css';
 
 interface AllCaughtUpProps {
@@ -10,14 +10,20 @@ interface AllCaughtUpProps {
 }
 
 export function AllCaughtUp({ channelName, celebrate }: AllCaughtUpProps) {
-  const [showBurst, setShowBurst] = useState(celebrate);
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  // Reacts to `celebrate` via an effect rather than a `useState(celebrate)` initializer — the
+  // latter only applies on this component's very first render, so it would silently miss a
+  // `celebrate` that flips true shortly after mount instead of already being true on arrival
+  // (which is the normal case here — see NewsFeed's own effect for why this lag exists).
+  useEffect(() => {
+    if (celebrate) setShowConfetti(true);
+  }, [celebrate]);
 
   return (
     <div className="all-caught-up">
-      <div className="all-caught-up__burst-wrap">
-        {showBurst && (
-          <BurstEffect angleCount={14} sizeScale={3} durationMs={700} onDone={() => setShowBurst(false)} />
-        )}
+      <div className="all-caught-up__celebration-wrap">
+        {showConfetti && <ConfettiEffect pieceCount={50} durationMs={2100} onDone={() => setShowConfetti(false)} />}
       </div>
       <div className="all-caught-up__title">All caught up on {channelName}!</div>
       <div className="all-caught-up__body">New stories will show up here automatically.</div>

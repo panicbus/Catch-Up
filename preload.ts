@@ -41,6 +41,7 @@ const api: CatchUpApi = {
   getRandomArticle: (excludeArticleId) => ipcRenderer.invoke('getRandomArticle', excludeArticleId),
 
   getStreak: () => ipcRenderer.invoke('getStreak'),
+  recordCatchUp: () => ipcRenderer.invoke('recordCatchUp'),
 
   getSettings: () => ipcRenderer.invoke('getSettings'),
   setSettings: (partial) => ipcRenderer.invoke('setSettings', partial),

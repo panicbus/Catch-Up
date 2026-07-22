@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { groupByDay } from '../../utils/groupByDay';
 import { formatDateHeader } from '../../services/formatters';
+import { api } from '../../services/api';
 import { NewsCard, type NewsCardData } from './NewsCard';
 import { AllCaughtUp } from './AllCaughtUp';
 import type { ViewMode } from '../../../ipc-contract';
 import './NewsFeed.css';
 
 /** Must match main/dataStore.ts's READ_STATE_MAX_AGE_DAYS — that's what actually stops collecting
- * read stories past this point; this is just the label saying so. */
-const READ_ARCHIVE_DAYS = 30;
+ * read stories past this point; this is just the label saying so. Expressed in days (not weeks)
+ * since that's the unit the underlying prune logic actually uses. */
+const READ_ARCHIVE_DAYS = 14;
 
 interface NewsFeedProps {
   articles: NewsCardData[];
@@ -150,7 +152,7 @@ function ReadArchive({
 
   return (
     <div className="news-feed__archive">
-      <div className="news-feed__archive-title">Read stories · {READ_ARCHIVE_DAYS} day archive</div>
+      <div className="news-feed__archive-title">Read stories · {READ_ARCHIVE_DAYS / 7} week archive</div>
       {[...byDay.entries()].map(([dateKey, dayArticles]) => {
         const isOpen = openDate === dateKey;
         return (
@@ -205,11 +207,28 @@ export function NewsFeed({
   const toggleExpand = (articleId: string) =>
     setExpandedArticleId((prev) => (prev === articleId ? null : articleId));
 
+  // `justCleared` genuinely needs a normal effect here (not a render-time computation) — this
+  // app renders under React.StrictMode, which double-invokes function components in dev, and any
+  // render-time approach (mutating a ref, or even calling setState conditionally during render)
+  // ends up flip-flopping across the two passes and committing the wrong value. An effect avoids
+  // that: it only fires once per real commit. The one-render lag this introduces (AllCaughtUp
+  // mounts with celebrate=false, then gets updated to celebrate=true on the next render) is fine
+  // as long as AllCaughtUp actually reacts to that later prop change — see its own effect.
   useEffect(() => {
     if (!partitionByRead) return;
     const prevCount = prevUnreadCountRef.current;
     if (prevCount !== null && prevCount > 0 && unread.length === 0) {
       setJustCleared(true);
+      // This genuine >0 -> 0 transition is what advances the daily streak — not merely opening
+      // the app (see dataStore.recordCatchUp). Idempotent per calendar day on the main side.
+      // Guarded: this app has no error boundary, so an uncaught throw here (e.g. a stale preload
+      // bundle missing this IPC method after a main-process change, before a restart) would
+      // otherwise blank the entire app instead of just silently skipping the streak bump.
+      try {
+        void api.recordCatchUp()?.catch((err) => console.error('[NewsFeed] recordCatchUp failed', err));
+      } catch (err) {
+        console.error('[NewsFeed] recordCatchUp failed synchronously', err);
+      }
     } else if (unread.length > 0) {
       setJustCleared(false);
     }

@@ -99,6 +99,9 @@ export interface OnboardingStatus {
 
 export interface StreakInfo {
   current: number;
+  /** Field name predates the current definition (kept as-is to avoid a data migration for an
+   * internal-only field) — despite the name, this is now the last date the user reached "all
+   * caught up" on some channel, not merely the last date they opened the app. See recordCatchUp. */
   lastOpenedDate: string | null;
 }
 
@@ -108,7 +111,8 @@ export type DataChangeEvent =
   | { type: 'articles'; channelId: string }
   | { type: 'bookmarks'; channelId?: string }
   | { type: 'readState'; channelId?: string }
-  | { type: 'settings' };
+  | { type: 'settings' }
+  | { type: 'streak' };
 
 export interface CatchUpApi {
   // Onboarding
@@ -148,6 +152,10 @@ export interface CatchUpApi {
 
   // Streak
   getStreak: () => Promise<StreakInfo>;
+  /** Call when the user reaches "all caught up" on a channel (unread hits zero via a genuine
+   * >0 -> 0 transition, not a channel that just started empty) — this, not merely opening the
+   * app, is what advances the streak. See NewsFeed's justCleared tracking for the trigger point. */
+  recordCatchUp: () => Promise<StreakInfo>;
 
   // Settings
   getSettings: () => Promise<AppSettings>;

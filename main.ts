@@ -85,7 +85,6 @@ function createWindow(): BrowserWindow {
 
 void app.whenReady().then(() => {
   registerIpcHandlers({ dataStore, articlesCache });
-  dataStore.recordAppOpen();
 
   if (process.platform === 'darwin') {
     const dockIcon = nativeImage.createFromPath(path.join(buildAssetsDir(), 'icon.png'));

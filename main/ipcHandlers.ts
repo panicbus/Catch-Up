@@ -112,6 +112,11 @@ export function registerIpcHandlers({ dataStore, articlesCache }: HandlerDeps): 
   });
 
   ipcMain.handle('getStreak', () => dataStore.getStreak());
+  ipcMain.handle('recordCatchUp', () => {
+    const streak = dataStore.recordCatchUp();
+    broadcast({ type: 'streak' });
+    return streak;
+  });
 
   ipcMain.handle('getSettings', () => dataStore.getSettings());
   ipcMain.handle('setSettings', (_e, partial) => {
