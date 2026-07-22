@@ -167,8 +167,10 @@
 
 /* Grid view puts the NEW badge under the action icons instead of inline before the title. The
    title keeps its existing padding-right (68px, above, sized to the action icons' own footprint,
-   independent of where the badge sits) so every wrapped line stays clear of that column. */
-.news-feed__grid .new-badge {
+   independent of where the badge sits) so every wrapped line stays clear of that column. Targets
+   the wrap (not .new-badge itself) so the wrap - the tooltip's positioning anchor - moves with
+   it, instead of collapsing to 0x0 once its only child is taken out of flow. */
+.news-feed__grid .new-badge-wrap {
   position: absolute;
   top: 46px;
   right: 8px;
