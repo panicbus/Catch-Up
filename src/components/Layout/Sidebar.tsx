@@ -66,6 +66,13 @@ export function Sidebar() {
 
   return (
     <aside className="sidebar">
+      {/* Electron's titleBarStyle: 'hiddenInset' (main.ts) hides the native title bar but doesn't
+          make anything draggable on its own — without an explicit -webkit-app-region: drag
+          region somewhere, there's no way to move the window at all. This sits exactly in the
+          sidebar's existing reserved top clearance (see .sidebar's padding-top, sized for the
+          traffic-light buttons), which is otherwise empty space, so it can't overlap anything
+          interactive. */}
+      <div className="sidebar__drag-region" />
       <div className="sidebar__brand">
         <Logo withWordmark size={52} />
         <p className="sidebar__tagline">Your news. Your pace. All caught up.</p>

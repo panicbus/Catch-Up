@@ -48,6 +48,17 @@ function hashToInt(id: string): number {
   return hash;
 }
 
+/** A multi-word channel/subchannel name searched as loose, unquoted terms lets providers match on
+ * any single word in it — e.g. a "Greek Theater" subchannel pulling in unrelated "Greek" results
+ * that have nothing to do with the venue. Wrapping it in double quotes signals an exact-phrase
+ * match instead, a search-query convention every one of this app's current providers' backends
+ * honors. Single-word names are returned as-is — nothing to disambiguate, and quoting a single
+ * word buys nothing. */
+function asSearchPhrase(name: string): string {
+  const trimmed = name.trim();
+  return trimmed.includes(' ') ? `"${trimmed}"` : trimmed;
+}
+
 export function start(deps: RefreshDeps): void {
   void runAll(deps);
   timer = setInterval(() => void runAll(deps), INTERVAL_MS);
@@ -100,8 +111,11 @@ export async function runChannel(
           (sc) => hashToInt(sc.id) % STAGGER_FACTOR === (options.staggerCycle as number) % STAGGER_FACTOR
         );
   const targets: { topic: string; subchannelId: string | null }[] = [
-    { topic: channel.name, subchannelId: null },
-    ...subchannels.map((sc) => ({ topic: `${channel.name} ${sc.name}`, subchannelId: sc.id })),
+    { topic: asSearchPhrase(channel.name), subchannelId: null },
+    ...subchannels.map((sc) => ({
+      topic: `${asSearchPhrase(channel.name)} ${asSearchPhrase(sc.name)}`,
+      subchannelId: sc.id,
+    })),
   ];
 
   let added = 0;

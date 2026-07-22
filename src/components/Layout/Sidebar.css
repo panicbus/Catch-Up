@@ -1,4 +1,5 @@
 .sidebar {
+  position: relative;
   width: var(--sidebar-width);
   flex-shrink: 0;
   display: flex;
@@ -9,6 +10,19 @@
   border-right: 1px solid var(--border);
   background: var(--sidebar-bg);
   gap: 28px;
+}
+
+/* The window's only draggable region — see the comment in Sidebar.tsx. Matches the sidebar's own
+   reserved top clearance above exactly, so it sits behind the traffic lights without covering any
+   real content. macOS still special-cases the traffic-light buttons themselves regardless of
+   this, so it doesn't interfere with close/minimize/zoom. */
+.sidebar__drag-region {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 44px;
+  -webkit-app-region: drag;
 }
 
 .sidebar__brand {
