@@ -41,7 +41,6 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
   padding: 6px 14px 6px 10px;
   border-radius: 999px;
   border: 1px dashed var(--border-strong);
