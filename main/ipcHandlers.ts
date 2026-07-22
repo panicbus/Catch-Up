@@ -86,7 +86,7 @@ export function registerIpcHandlers({ dataStore, articlesCache }: HandlerDeps): 
     if (isBookmarked) {
       result = dataStore.toggleBookmark(articleId, channelId);
     } else {
-      const [cached] = articlesCache.getArticles(channelId, null, 10000).filter((a) => a.id === articleId);
+      const cached = articlesCache.getArticleById(channelId, articleId);
       result = dataStore.toggleBookmark(articleId, channelId, cached ? { ...cached } : undefined);
     }
     broadcast({ type: 'bookmarks', channelId });

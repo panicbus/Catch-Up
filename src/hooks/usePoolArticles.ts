@@ -6,6 +6,12 @@ export interface PoolArticle extends Article {
   channelName: string;
 }
 
+/** The largest shown-count The Pool's own UI offers (see PoolPage's SHOWN_OPTIONS) — the ceiling
+ * on how many articles from a single channel could ever actually be needed at once, even if the
+ * user filters down to just that one channel. Keeps the per-channel fetch well below getArticles'
+ * own 100 default without risking ever coming up short for a legitimate view. */
+const MAX_PER_CHANNEL = 50;
+
 /** Aggregates every channel's articles (channel-level and subchannel-level alike — The Pool
  * doesn't drill into subchannels, only whole channels) into one chronological list. Same
  * fan-out-then-merge shape as useChannelNewCounts: N parallel per-channel getArticles calls,
@@ -25,7 +31,7 @@ export function usePoolArticles(channels: Channel[]) {
     void Promise.all(
       channels.map((c) =>
         api
-          .getArticles({ channelId: c.id, subchannelId: null })
+          .getArticles({ channelId: c.id, subchannelId: null, limit: MAX_PER_CHANNEL })
           .then((r) => r.articles.map((a): PoolArticle => ({ ...a, channelName: c.name })))
       )
     ).then((lists) => {

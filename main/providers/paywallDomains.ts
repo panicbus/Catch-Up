@@ -14,5 +14,9 @@ const PAYWALLED_DOMAINS = new Set([
 
 export function isPaywalledDomain(hostname: string): boolean {
   const host = hostname.replace(/^www\./, '');
-  return [...PAYWALLED_DOMAINS].some((d) => host === d || host.endsWith(`.${d}`));
+  if (PAYWALLED_DOMAINS.has(host)) return true;
+  for (const d of PAYWALLED_DOMAINS) {
+    if (host.endsWith(`.${d}`)) return true;
+  }
+  return false;
 }

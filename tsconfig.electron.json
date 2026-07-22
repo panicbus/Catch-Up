@@ -11,5 +11,5 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["main.ts", "preload.ts", "ipc-contract.ts", "main/**/*.ts"]
+  "include": ["main.ts", "preload.ts", "ipc-contract.ts", "channelName.ts", "main/**/*.ts"]
 }

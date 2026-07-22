@@ -22,3 +22,10 @@ export interface NewsProvider {
   isConfigured: () => boolean;
   fetchArticles: (query: ProviderQuery) => Promise<ProviderArticle[]>;
 }
+
+/** A ProviderArticle once it's known which provider actually produced it — tagged by
+ * registry.ts's runProviders, since a single fetch cycle queries several providers in parallel
+ * and their results get merged into one list. */
+export interface FetchedArticle extends ProviderArticle {
+  provider: string;
+}

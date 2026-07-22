@@ -161,7 +161,13 @@ export function NewsCard({
   return (
     <div
       className={`news-card ${paneMode ? 'news-card--pane' : ''} ${exitClass}`}
-      role="button"
+      // Not role="button" — this element wraps other real interactive controls (dismiss,
+      // bookmark, "Read full story"), and a button containing more buttons/links is an ARIA
+      // anti-pattern (confuses how assistive tech tabs through it). "article" is the correct
+      // semantic role for a single story in a feed, and still supports tabIndex/onKeyDown for
+      // the click-to-expand affordance without claiming to be an atomic button.
+      role="article"
+      aria-label={article.title}
       tabIndex={0}
       onKeyDown={onKeyDown}
       style={cardStyle}

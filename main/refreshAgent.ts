@@ -38,8 +38,10 @@ function sleep(ms: number): Promise<void> {
 }
 
 /** Stable per-subchannel bucket assignment, so the same subchannel lands in the same rotation
- * slot across runs (rather than reshuffling every cycle) — same hash shape as the renderer's
- * channelColor.ts. */
+ * slot across runs (rather than reshuffling every cycle) — same hash as the renderer's
+ * src/utils/hash.ts. Kept as its own copy rather than a shared import since main/renderer are
+ * separate TypeScript compile targets (tsconfig.electron.json vs tsconfig.json) and this is only
+ * a few lines. */
 function hashToInt(id: string): number {
   let hash = 0;
   for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
@@ -107,7 +109,7 @@ export async function runChannel(
   for (const target of targets) {
     try {
       const fetched = await runProviders({ topic: target.topic, channelId, subchannelId: target.subchannelId });
-      added += deps.articlesCache.merge(channelId, target.subchannelId, 'mixed', fetched);
+      added += deps.articlesCache.merge(channelId, target.subchannelId, fetched);
     } catch (e) {
       errors.push(String(e));
     }

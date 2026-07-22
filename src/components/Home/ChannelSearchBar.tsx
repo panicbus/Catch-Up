@@ -2,11 +2,13 @@ import { useMemo, useState, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useChannels } from '../../hooks/useChannels';
+import { slugifyChannelName } from '../../../channelName';
 import './ChannelSearchBar.css';
 
 export function ChannelSearchBar() {
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { channels } = useChannels();
   const navigate = useNavigate();
 
@@ -19,19 +21,29 @@ export function ChannelSearchBar() {
   const goToChannel = (channelId: string) => {
     setQuery('');
     setFocused(false);
+    setError(null);
     navigate(`/channel/${channelId}`);
   };
 
   const submit = async () => {
     const trimmed = query.trim();
     if (!trimmed) return;
-    const exact = channels.find((c) => c.name.toLowerCase() === trimmed.toLowerCase());
+    // Same normalization dataStore.createChannel uses to decide "does this channel already
+    // exist" — a plain lowercase comparison here could disagree with the backend's own slug-based
+    // check and call createChannel (which always triggers an immediate refresh) for a channel
+    // that already exists under a slightly different spelling/punctuation.
+    const exact = channels.find((c) => c.slug === slugifyChannelName(trimmed));
     if (exact) {
       goToChannel(exact.id);
       return;
     }
-    const channel = await api.createChannel(trimmed);
-    goToChannel(channel.id);
+    try {
+      const channel = await api.createChannel(trimmed);
+      goToChannel(channel.id);
+    } catch (e) {
+      setError('Could not create that channel — try again.');
+      console.error('[ChannelSearchBar] createChannel failed', e);
+    }
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -85,6 +97,7 @@ export function ChannelSearchBar() {
           ))}
         </div>
       )}
+      {error && <div className="channel-search__error">{error}</div>}
     </div>
   );
 }

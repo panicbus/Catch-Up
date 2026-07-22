@@ -2,7 +2,7 @@ import fs from 'fs';
 import { articlesCacheFilePath } from './paths';
 import { articleId, normalizeTitle, normalizeUrl } from './providers/dedupe';
 import { isPaywalledDomain } from './providers/paywallDomains';
-import type { ProviderArticle } from './providers/types';
+import type { FetchedArticle } from './providers/types';
 
 export interface CachedArticle {
   id: string;
@@ -73,15 +73,19 @@ export class ArticlesCache {
       .slice(0, limit);
   }
 
+  /** Direct by-id lookup within a known channel's bucket — a plain `.find()`, unlike getArticles
+   * (which sorts and slices the whole bucket for display purposes the caller doesn't need here). */
+  getArticleById(channelId: string, articleId: string): CachedArticle | undefined {
+    return this.data.byChannel[channelId]?.articles.find((a) => a.id === articleId);
+  }
+
   /** Merges fetched provider articles into a channel's bucket, deduping by URL and by normalized
    * headline (catches wire/syndicated stories republished verbatim under different URLs across
-   * outlets), and pruning by age then count. Returns the number of genuinely new articles added. */
-  merge(
-    channelId: string,
-    subchannelId: string | null,
-    provider: string,
-    incoming: ProviderArticle[]
-  ): number {
+   * outlets), and pruning by age then count. Returns the number of genuinely new articles added.
+   * Each incoming article carries its own real originating provider (tagged by runProviders) — a
+   * single call here can merge results from several providers queried in parallel, so there's no
+   * one blanket provider for the whole batch. */
+  merge(channelId: string, subchannelId: string | null, incoming: FetchedArticle[]): number {
     const bucket = (this.data.byChannel[channelId] ??= { ...DEFAULT_BUCKET, articles: [] });
     const seenIds = new Set(bucket.articles.map((a) => a.id));
     const seenTitles = new Set(bucket.articles.map((a) => normalizeTitle(a.title)));
@@ -108,7 +112,7 @@ export class ArticlesCache {
         imageUrl: article.imageUrl,
         publishedAt: article.publishedAt,
         fetchedAt: new Date().toISOString(),
-        provider,
+        provider: article.provider,
         channelId,
         subchannelId,
         paywalled: isPaywalledDomain(hostname),

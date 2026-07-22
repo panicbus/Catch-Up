@@ -12,11 +12,19 @@ interface OnboardingWizardProps {
 export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   const [names, setNames] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleContinue = async () => {
     setSubmitting(true);
-    await api.completeOnboarding(names);
-    onComplete();
+    setError(null);
+    try {
+      await api.completeOnboarding(names);
+      onComplete();
+    } catch (e) {
+      setSubmitting(false);
+      setError('Something went wrong setting up your channels — try again.');
+      console.error('[OnboardingWizard] completeOnboarding failed', e);
+    }
   };
 
   return (
@@ -35,6 +43,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
           <Button variant="primary" disabled={names.length === 0 || submitting} onClick={handleContinue}>
             {submitting ? 'Setting up…' : 'Continue'}
           </Button>
+          {error && <p className="onboarding__error">{error}</p>}
         </div>
       </div>
     </div>

@@ -1,9 +1,10 @@
 import { useState, type KeyboardEvent } from 'react';
 import { api } from '../../services/api';
 import { useChannels } from '../../hooks/useChannels';
+import { useDeleteChannelFlow } from '../../hooks/useDeleteChannelFlow';
 import { SubchannelManagePanel } from '../common/SubchannelManagePanel';
+import { DeleteChannelModal } from '../common/DeleteChannelModal';
 import { Button } from '../common/Button';
-import { Modal } from '../common/Modal';
 import './ChannelManageList.css';
 
 export function ChannelManageList() {
@@ -12,7 +13,7 @@ export function ChannelManageList() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const { pendingChannel, requestDelete, cancel, confirm } = useDeleteChannelFlow(channels);
 
   const addChannel = () => {
     const trimmed = draft.trim();
@@ -39,8 +40,6 @@ export function ChannelManageList() {
     }
     setEditingId(null);
   };
-
-  const pendingDeleteChannel = channels.find((c) => c.id === pendingDeleteId);
 
   return (
     <div className="channel-manage">
@@ -91,7 +90,7 @@ export function ChannelManageList() {
                 >
                   {expandedId === channel.id ? 'Hide subchannels' : 'Manage subchannels'}
                 </Button>
-                <Button variant="danger" size="sm" onClick={() => setPendingDeleteId(channel.id)}>
+                <Button variant="danger" size="sm" onClick={() => requestDelete(channel.id)}>
                   Delete
                 </Button>
               </div>
@@ -103,28 +102,7 @@ export function ChannelManageList() {
         ))}
       </div>
 
-      {pendingDeleteChannel && (
-        <Modal title={`Delete "${pendingDeleteChannel.name}"?`} onClose={() => setPendingDeleteId(null)}>
-          <div className="modal__body">
-            This removes the channel, its subchannels, its cached stories, and any bookmarks saved under it.
-            This can't be undone.
-          </div>
-          <div className="modal__actions">
-            <Button variant="secondary" onClick={() => setPendingDeleteId(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                void api.deleteChannel(pendingDeleteChannel.id);
-                setPendingDeleteId(null);
-              }}
-            >
-              Delete channel
-            </Button>
-          </div>
-        </Modal>
-      )}
+      <DeleteChannelModal channel={pendingChannel} onCancel={cancel} onConfirm={confirm} />
     </div>
   );
 }

@@ -1,13 +1,11 @@
-import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
 import { StreakCard } from './StreakCard';
-import { Button } from '../common/Button';
-import { Modal } from '../common/Modal';
+import { DeleteChannelModal } from '../common/DeleteChannelModal';
 import { useChannels } from '../../hooks/useChannels';
 import { useStreak } from '../../hooks/useStreak';
-import { api } from '../../services/api';
+import { useDeleteChannelFlow } from '../../hooks/useDeleteChannelFlow';
 import './Sidebar.css';
 
 function HomeIcon() {
@@ -59,18 +57,12 @@ export function Sidebar() {
   const streak = useStreak();
   const navigate = useNavigate();
   const location = useLocation();
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const navClass = ({ isActive }: { isActive: boolean }) =>
     `sidebar__link${isActive ? ' sidebar__link--active' : ''}`;
 
-  const pendingDeleteChannel = channels.find((c) => c.id === pendingDeleteId);
-
-  const confirmDelete = () => {
-    if (!pendingDeleteChannel) return;
-    void api.deleteChannel(pendingDeleteChannel.id);
-    if (location.pathname === `/channel/${pendingDeleteChannel.id}`) navigate('/');
-    setPendingDeleteId(null);
-  };
+  const { pendingChannel, requestDelete, cancel, confirm } = useDeleteChannelFlow(channels, (channelId) => {
+    if (location.pathname === `/channel/${channelId}`) navigate('/');
+  });
 
   return (
     <aside className="sidebar">
@@ -113,7 +105,7 @@ export function Sidebar() {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                setPendingDeleteId(channel.id);
+                requestDelete(channel.id);
               }}
             >
               <RemoveIcon />
@@ -127,22 +119,7 @@ export function Sidebar() {
         <span className="sidebar__version">v{__APP_VERSION__}</span>
       </div>
 
-      {pendingDeleteChannel && (
-        <Modal title={`Delete "${pendingDeleteChannel.name}"?`} onClose={() => setPendingDeleteId(null)}>
-          <div className="modal__body">
-            This removes the channel, its subchannels, its cached stories, and any bookmarks saved under it.
-            This can't be undone.
-          </div>
-          <div className="modal__actions">
-            <Button variant="secondary" onClick={() => setPendingDeleteId(null)}>
-              Cancel
-            </Button>
-            <Button variant="danger" onClick={confirmDelete}>
-              Delete channel
-            </Button>
-          </div>
-        </Modal>
-      )}
+      <DeleteChannelModal channel={pendingChannel} onCancel={cancel} onConfirm={confirm} />
     </aside>
   );
 }

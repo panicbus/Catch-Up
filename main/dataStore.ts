@@ -1,6 +1,7 @@
 import fs from 'fs';
 import crypto from 'crypto';
 import { dataFilePath } from './paths';
+import { capitalizeWords, slugifyChannelName } from '../channelName';
 import type {
   AppSettings,
   BookmarkEntry,
@@ -54,23 +55,6 @@ function genId(prefix: string): string {
   return `${prefix}_${crypto.randomBytes(6).toString('hex')}`;
 }
 
-/** Capitalizes the first letter of each word, leaving the rest of each word untouched so acronyms
- * the user already typed correctly (e.g. "NASA", "F1") survive rather than getting lowercased. */
-function capitalizeWords(name: string): string {
-  return name
-    .split(' ')
-    .map((word) => (word.length > 0 ? word[0].toUpperCase() + word.slice(1) : word))
-    .join(' ');
-}
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-}
-
 /** Local (not UTC) calendar-date string, e.g. "2026-07-19" — daily streak math must use
  * calendar days in the user's own timezone, not elapsed milliseconds or UTC dates. */
 function localDateString(d: Date): string {
@@ -92,6 +76,8 @@ function daysBetweenLocalDates(a: string, b: string): number {
 /** JSON-file-backed store for durable, instantly-mutable user content: channels, bookmarks, settings.
  * Writes via temp-file-then-rename for atomicity. Owned by the main process so the background
  * refresh agent can read/write it regardless of whether any renderer window is open. */
+const WRITE_DEBOUNCE_MS = 250;
+
 export class DataStore {
   private data: DataFile;
   private readonly filePath: string;
@@ -99,27 +85,36 @@ export class DataStore {
    * article on every `getArticles` response and can realistically reach thousands of entries,
    * unlike bookmarks, which stay small because they're deliberate, infrequent user actions. */
   private readIds: Set<string>;
+  private writeTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     this.filePath = dataFilePath();
     this.data = this.read();
     this.readIds = new Set(this.data.readArticleIds.map((r) => r.id));
-    this.migrateChannelCapitalization();
+    this.migrateCapitalization();
   }
 
-  /** One-time normalization for channels created before auto-capitalization existed — createChannel/
-   * renameChannel only capitalize names going forward, so anything already on disk needs a pass too. */
-  private migrateChannelCapitalization(): void {
+  /** One-time normalization for channels/subchannels created before auto-capitalization existed —
+   * createChannel/renameChannel/addSubchannel/renameSubchannel only capitalize names going
+   * forward, so anything already on disk needs a pass too. */
+  private migrateCapitalization(): void {
     let changed = false;
     for (const channel of this.data.channels) {
       const capitalized = capitalizeWords(channel.name.trim());
       if (capitalized !== channel.name) {
         channel.name = capitalized;
-        channel.slug = slugify(capitalized);
+        channel.slug = slugifyChannelName(capitalized);
         changed = true;
       }
+      for (const sub of channel.subchannels) {
+        const subCapitalized = capitalizeWords(sub.name.trim());
+        if (subCapitalized !== sub.name) {
+          sub.name = subCapitalized;
+          changed = true;
+        }
+      }
     }
-    if (changed) this.write();
+    if (changed) this.persistNow();
   }
 
   private read(): DataFile {
@@ -135,10 +130,34 @@ export class DataStore {
     }
   }
 
-  private write(): void {
+  private persistNow(): void {
     const tmpPath = `${this.filePath}.tmp`;
     fs.writeFileSync(tmpPath, JSON.stringify(this.data, null, 2), 'utf-8');
     fs.renameSync(tmpPath, this.filePath);
+  }
+
+  /** Debounced instead of writing synchronously on every single mutation — a plain
+   * fs.writeFileSync on every call (including markRead, which fires on nearly every card
+   * interaction) blocks the main process's event loop, and therefore IPC/UI responsiveness
+   * across every window, for the duration of each write. Coalescing rapid-fire mutations into
+   * one write after a short quiet window keeps the same on-disk behavior (still a full-file,
+   * atomic temp-then-rename write) without doing it on every click. flush() (wired to app quit)
+   * guarantees nothing pending is lost on a clean exit. */
+  private write(): void {
+    if (this.writeTimer) clearTimeout(this.writeTimer);
+    this.writeTimer = setTimeout(() => {
+      this.writeTimer = null;
+      this.persistNow();
+    }, WRITE_DEBOUNCE_MS);
+  }
+
+  /** Immediately writes any pending debounced mutation — call before the process exits so a
+   * mutation that landed right before quit isn't silently lost. */
+  flush(): void {
+    if (!this.writeTimer) return;
+    clearTimeout(this.writeTimer);
+    this.writeTimer = null;
+    this.persistNow();
   }
 
   // Onboarding
@@ -163,13 +182,13 @@ export class DataStore {
   createChannel(name: string, opts: { persist?: boolean } = {}): Channel {
     const capitalized = capitalizeWords(name.trim());
     const existing = this.data.channels.find(
-      (c) => c.slug === slugify(capitalized)
+      (c) => c.slug === slugifyChannelName(capitalized)
     );
     if (existing) return existing;
     const channel: Channel = {
       id: genId('chn'),
       name: capitalized,
-      slug: slugify(capitalized),
+      slug: slugifyChannelName(capitalized),
       createdAt: new Date().toISOString(),
       sortOrder: this.data.channels.length,
       subchannels: [],
@@ -183,7 +202,7 @@ export class DataStore {
     const channel = this.requireChannel(channelId);
     const capitalized = capitalizeWords(name.trim());
     channel.name = capitalized;
-    channel.slug = slugify(capitalized);
+    channel.slug = slugifyChannelName(capitalized);
     this.write();
   }
 
@@ -214,7 +233,7 @@ export class DataStore {
     const channel = this.requireChannel(channelId);
     const sub: Subchannel = {
       id: genId('sub'),
-      name,
+      name: capitalizeWords(name.trim()),
       createdAt: new Date().toISOString(),
     };
     channel.subchannels.push(sub);
@@ -226,7 +245,7 @@ export class DataStore {
     const channel = this.requireChannel(channelId);
     const sub = channel.subchannels.find((s) => s.id === subchannelId);
     if (!sub) throw new Error(`Subchannel not found: ${subchannelId}`);
-    sub.name = name;
+    sub.name = capitalizeWords(name.trim());
     this.write();
   }
 

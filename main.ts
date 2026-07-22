@@ -115,4 +115,7 @@ app.on('activate', () => {
 app.on('before-quit', () => {
   refreshAgent.stop();
   tray?.destroy();
+  // dataStore writes are debounced — flush any pending mutation now so a click right before quit
+  // isn't silently lost.
+  dataStore.flush();
 });
