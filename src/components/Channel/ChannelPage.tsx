@@ -133,6 +133,7 @@ export function ChannelPage() {
           channelId={channel.id}
           channelName={channel.name}
           viewMode={settings.defaultViewMode}
+          maxUnreadStories={settings.maxStoriesShown}
         />
       )}
     </div>

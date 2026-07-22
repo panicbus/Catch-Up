@@ -1,0 +1,31 @@
+.max-stories-setting__hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.max-stories-setting__options {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.max-stories-setting__btn {
+  background: var(--surface);
+  border: none;
+  padding: 7px 16px;
+  color: var(--text-faint);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.max-stories-setting__btn + .max-stories-setting__btn {
+  border-left: 1px solid var(--border-strong);
+}
+
+.max-stories-setting__btn--active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}

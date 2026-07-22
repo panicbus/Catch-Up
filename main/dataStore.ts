@@ -38,6 +38,7 @@ const DEFAULT_DATA: DataFile = {
     refreshIntervalMinutes: 30,
     theme: 'light',
     rollTheDiceChannelIds: null,
+    maxStoriesShown: 25,
   },
   channels: [],
   bookmarks: [],
@@ -125,7 +126,10 @@ export class DataStore {
     try {
       const raw = fs.readFileSync(this.filePath, 'utf-8');
       const parsed = JSON.parse(raw) as DataFile;
-      return { ...DEFAULT_DATA, ...parsed };
+      // `settings` is merged one level deeper than the rest of the file — a plain top-level spread
+      // would let an existing settings object (saved before a new AppSettings field existed, e.g.
+      // maxStoriesShown) wholesale shadow DEFAULT_DATA.settings and leave that field undefined.
+      return { ...DEFAULT_DATA, ...parsed, settings: { ...DEFAULT_DATA.settings, ...parsed.settings } };
     } catch {
       return structuredClone(DEFAULT_DATA);
     }

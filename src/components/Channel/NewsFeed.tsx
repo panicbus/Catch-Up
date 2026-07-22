@@ -17,7 +17,12 @@ interface NewsFeedProps {
   channelId: string;
   channelName: string;
   viewMode: ViewMode;
-  maxPerDay?: number;
+  /** Caps how many unread stories are actually rendered (oldest beyond this are simply held back,
+   * not shown anywhere) — the "all caught up" celebration and streak logic still use the true
+   * unread count underneath, so this is purely a display limit. Uncapped by default; ChannelPage
+   * is the only caller that passes a real value (from settings.maxStoriesShown), since Bookmarks
+   * is a deliberate saved list that shouldn't silently hide older entries. */
+  maxUnreadStories?: number;
   /** Partition into unread/read with a per-date "read stories" archive and an "all caught up"
    * celebration when unread hits zero — the inbox-style behavior that fits a channel's news feed.
    * Bookmarks are a saved-for-later list, not an inbox to clear, so BookmarksPage opts out and
@@ -91,7 +96,6 @@ function DayGroups({
   articles,
   channelId,
   viewMode,
-  maxPerDay,
   staysInPlace,
   removeCardOnUnbookmark,
   expandedArticleId,
@@ -100,13 +104,12 @@ function DayGroups({
   articles: NewsCardData[];
   channelId: string;
   viewMode: ViewMode;
-  maxPerDay: number;
   staysInPlace: boolean;
   removeCardOnUnbookmark: boolean;
   expandedArticleId: string | null;
   onToggleExpand: (articleId: string) => void;
 }) {
-  const byDay = groupByDay(articles, 'publishedAt', maxPerDay);
+  const byDay = groupByDay(articles, 'publishedAt');
 
   return (
     <>
@@ -194,14 +197,18 @@ export function NewsFeed({
   channelId,
   channelName,
   viewMode,
-  maxPerDay = 20,
+  maxUnreadStories = Infinity,
   partitionByRead = true,
 }: NewsFeedProps) {
   const [justCleared, setJustCleared] = useState(false);
   const [expandedArticleId, setExpandedArticleId] = useState<string | null>(null);
   const prevUnreadCountRef = useRef<number | null>(null);
 
+  // `unread` is the true count, used for the celebration/streak logic below — articles arrive
+  // already sorted newest-first (see articlesCache.getArticles), so slicing it for display still
+  // shows the most recent ones and simply holds back older ones past the cap.
   const unread = partitionByRead ? articles.filter((a) => !a.read) : articles;
+  const visibleUnread = unread.slice(0, maxUnreadStories);
   const read = partitionByRead ? articles.filter((a) => a.read) : [];
 
   const toggleExpand = (articleId: string) =>
@@ -243,10 +250,9 @@ export function NewsFeed({
         <AllCaughtUp channelName={channelName} celebrate={justCleared} />
       ) : (
         <DayGroups
-          articles={unread}
+          articles={visibleUnread}
           channelId={channelId}
           viewMode={viewMode}
-          maxPerDay={maxPerDay}
           staysInPlace={!partitionByRead}
           removeCardOnUnbookmark={!partitionByRead}
           expandedArticleId={expandedArticleId}

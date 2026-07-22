@@ -1,6 +1,7 @@
 import { ChannelManageList } from './ChannelManageList';
 import { ProviderStatusPanel } from './ProviderStatusPanel';
 import { RollTheDiceSettings } from './RollTheDiceSettings';
+import { MaxStoriesSetting } from './MaxStoriesSetting';
 import './SettingsPage.css';
 
 export function SettingsPage() {
@@ -11,6 +12,11 @@ export function SettingsPage() {
       <section className="settings-section">
         <h2 className="settings-section__title">Channels &amp; subchannels</h2>
         <ChannelManageList />
+      </section>
+
+      <section className="settings-section">
+        <h2 className="settings-section__title">Stories shown</h2>
+        <MaxStoriesSetting />
       </section>
 
       <section className="settings-section">

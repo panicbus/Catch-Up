@@ -33,7 +33,7 @@
   cursor: pointer;
 }
 .news-card--pane .news-card__title {
-  font-size: 22px;
+  font-size: 24px;
   line-height: 1.28;
 }
 .news-card--pane .news-card__snippet {
@@ -71,8 +71,8 @@
 }
 
 .news-card__title {
-  font-family: var(--font-display);
-  font-size: 16.5px;
+  font-family: 'Public Sans', var(--font-body);
+  font-size: 18.5px;
   line-height: 1.24;
   font-weight: 700;
   flex: 1;

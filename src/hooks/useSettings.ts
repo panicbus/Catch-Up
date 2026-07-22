@@ -7,6 +7,7 @@ const FALLBACK: AppSettings = {
   refreshIntervalMinutes: 30,
   theme: 'light',
   rollTheDiceChannelIds: null,
+  maxStoriesShown: 25,
 };
 
 export function useSettings() {

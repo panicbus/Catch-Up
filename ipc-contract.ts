@@ -74,6 +74,11 @@ export interface AppSettings {
   /** Channel ids Roll the dice is allowed to pull from. null/undefined means every channel — the
    * default, and how pre-existing data files without this field behave once loaded. */
   rollTheDiceChannelIds: string[] | null;
+  /** How many unread stories show at once in a channel's main feed before older ones are held
+   * back (the read-stories archive is unaffected — this only caps the active unread list).
+   * Defaults to 25, one of the three choices Settings offers (10/25/50), so the picker always
+   * shows a real selection rather than landing on an unlabeled in-between value. */
+  maxStoriesShown: 10 | 25 | 50;
 }
 
 export interface RefreshResult {
