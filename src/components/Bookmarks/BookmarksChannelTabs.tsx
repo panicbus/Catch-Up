@@ -1,9 +1,10 @@
 import './BookmarksChannelTabs.css';
 
 interface BookmarksChannelTabsProps {
-  tabs: { channelId: string; name: string; count: number }[];
+  /** channelId: null is the "All" tab. */
+  tabs: { channelId: string | null; name: string; count: number }[];
   activeChannelId: string | null;
-  onSelect: (channelId: string) => void;
+  onSelect: (channelId: string | null) => void;
 }
 
 export function BookmarksChannelTabs({ tabs, activeChannelId, onSelect }: BookmarksChannelTabsProps) {
@@ -11,7 +12,7 @@ export function BookmarksChannelTabs({ tabs, activeChannelId, onSelect }: Bookma
     <div className="bookmarks-tabs" role="tablist">
       {tabs.map((tab) => (
         <button
-          key={tab.channelId}
+          key={tab.channelId ?? 'all'}
           type="button"
           role="tab"
           aria-selected={activeChannelId === tab.channelId}

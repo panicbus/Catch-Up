@@ -8,6 +8,9 @@ release
 # Local Claude Code harness settings (machine/session-specific)
 .claude/settings.local.json
 
+# Local-only Claude Code skills (not shared via the repo)
+.claude/skills/
+
 # Local data (JSON stores) and secrets
 data/
 .env
