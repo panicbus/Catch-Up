@@ -14,7 +14,6 @@ const READ_ARCHIVE_DAYS = 14;
 
 interface NewsFeedProps {
   articles: NewsCardData[];
-  channelId: string;
   channelName: string;
   viewMode: ViewMode;
   /** Caps how many unread stories are actually rendered (oldest beyond this are simply held back,
@@ -28,6 +27,17 @@ interface NewsFeedProps {
    * Bookmarks are a saved-for-later list, not an inbox to clear, so BookmarksPage opts out and
    * just shows everything flat regardless of read state. */
   partitionByRead?: boolean;
+  /** Whether marking a card read removes it from view (with the fly-off animation) instead of
+   * leaving it in place with just the dismiss icon flipped to its undo state. Defaults to
+   * matching partitionByRead — channel view's inbox behavior removes, Bookmarks' flat list
+   * doesn't — but The Pool wants both at once: no archive/celebration/streak (partitionByRead
+   * stays false) yet still remove a story once you've read it, so it passes this explicitly. */
+  removeOnRead?: boolean;
+  /** Whether unbookmarking a card removes it from view. Defaults to matching partitionByRead too
+   * (Bookmarks removes since its whole list IS the bookmarked set; channel view doesn't). The
+   * Pool overrides this to false — unlike Bookmarks, unbookmarking there shouldn't empty a
+   * general feed just because a save-for-later flag got cleared. */
+  removeCardOnUnbookmark?: boolean;
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -54,7 +64,6 @@ function ChevronIcon({ open }: { open: boolean }) {
  * untouched — cards there just expand themselves in place, exactly as before. */
 function GridSection({
   articles,
-  channelId,
   isGrid,
   staysInPlace,
   removeCardOnUnbookmark,
@@ -62,7 +71,6 @@ function GridSection({
   onToggleExpand,
 }: {
   articles: NewsCardData[];
-  channelId: string;
   isGrid: boolean;
   staysInPlace: boolean;
   removeCardOnUnbookmark: boolean;
@@ -79,7 +87,6 @@ function GridSection({
           <NewsCard
             key={article.id}
             article={article}
-            channelId={channelId}
             staysInPlace={staysInPlace}
             removeCardOnUnbookmark={removeCardOnUnbookmark}
             expanded={isExpanded}
@@ -94,7 +101,6 @@ function GridSection({
 
 function DayGroups({
   articles,
-  channelId,
   viewMode,
   staysInPlace,
   removeCardOnUnbookmark,
@@ -102,7 +108,6 @@ function DayGroups({
   onToggleExpand,
 }: {
   articles: NewsCardData[];
-  channelId: string;
   viewMode: ViewMode;
   staysInPlace: boolean;
   removeCardOnUnbookmark: boolean;
@@ -118,7 +123,6 @@ function DayGroups({
           <div className="news-feed__day-header">{formatDateHeader(dayArticles[0].publishedAt)}</div>
           <GridSection
             articles={dayArticles}
-            channelId={channelId}
             isGrid={viewMode === 'grid'}
             staysInPlace={staysInPlace}
             removeCardOnUnbookmark={removeCardOnUnbookmark}
@@ -133,14 +137,12 @@ function DayGroups({
 
 function ReadArchive({
   articles,
-  channelId,
   viewMode,
   removeCardOnUnbookmark,
   expandedArticleId,
   onToggleExpand,
 }: {
   articles: NewsCardData[];
-  channelId: string;
   viewMode: ViewMode;
   removeCardOnUnbookmark: boolean;
   expandedArticleId: string | null;
@@ -175,7 +177,6 @@ function ReadArchive({
                 <div className="news-feed__archive-cards">
                   <GridSection
                     articles={dayArticles}
-                    channelId={channelId}
                     isGrid={viewMode === 'grid'}
                     staysInPlace
                     removeCardOnUnbookmark={removeCardOnUnbookmark}
@@ -194,11 +195,12 @@ function ReadArchive({
 
 export function NewsFeed({
   articles,
-  channelId,
   channelName,
   viewMode,
   maxUnreadStories = Infinity,
   partitionByRead = true,
+  removeOnRead = partitionByRead,
+  removeCardOnUnbookmark = !partitionByRead,
 }: NewsFeedProps) {
   const [justCleared, setJustCleared] = useState(false);
   const [expandedArticleId, setExpandedArticleId] = useState<string | null>(null);
@@ -206,8 +208,11 @@ export function NewsFeed({
 
   // `unread` is the true count, used for the celebration/streak logic below — articles arrive
   // already sorted newest-first (see articlesCache.getArticles), so slicing it for display still
-  // shows the most recent ones and simply holds back older ones past the cap.
-  const unread = partitionByRead ? articles.filter((a) => !a.read) : articles;
+  // shows the most recent ones and simply holds back older ones past the cap. Filtered whenever
+  // either partitionByRead or removeOnRead wants read articles gone from the main section — The
+  // Pool sets removeOnRead alone (partitionByRead stays false, so this is still the only
+  // section rendered, never an archive).
+  const unread = partitionByRead || removeOnRead ? articles.filter((a) => !a.read) : articles;
   const visibleUnread = unread.slice(0, maxUnreadStories);
   const read = partitionByRead ? articles.filter((a) => a.read) : [];
 
@@ -251,10 +256,9 @@ export function NewsFeed({
       ) : (
         <DayGroups
           articles={visibleUnread}
-          channelId={channelId}
           viewMode={viewMode}
-          staysInPlace={!partitionByRead}
-          removeCardOnUnbookmark={!partitionByRead}
+          staysInPlace={!removeOnRead}
+          removeCardOnUnbookmark={removeCardOnUnbookmark}
           expandedArticleId={expandedArticleId}
           onToggleExpand={toggleExpand}
         />
@@ -263,9 +267,8 @@ export function NewsFeed({
       {read.length > 0 && (
         <ReadArchive
           articles={read}
-          channelId={channelId}
           viewMode={viewMode}
-          removeCardOnUnbookmark={!partitionByRead}
+          removeCardOnUnbookmark={removeCardOnUnbookmark}
           expandedArticleId={expandedArticleId}
           onToggleExpand={toggleExpand}
         />

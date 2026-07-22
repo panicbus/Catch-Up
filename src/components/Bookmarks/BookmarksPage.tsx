@@ -41,6 +41,8 @@ export function BookmarksPage() {
     paywalled: bookmark.articleSnapshot.paywalled,
     bookmarked: true,
     read: bookmark.read,
+    channelId: bookmark.channelId,
+    channelName: channels.find((c) => c.id === bookmark.channelId)?.name ?? 'Unknown channel',
   }));
 
   return (
@@ -59,7 +61,6 @@ export function BookmarksPage() {
           <BookmarksChannelTabs tabs={tabs} activeChannelId={currentChannelId} onSelect={setActiveChannelId} />
           <NewsFeed
             articles={articles}
-            channelId={currentChannelId!}
             channelName={channels.find((c) => c.id === currentChannelId)?.name ?? ''}
             viewMode={settings.defaultViewMode}
             partitionByRead={false}

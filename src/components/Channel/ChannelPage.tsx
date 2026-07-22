@@ -129,8 +129,7 @@ export function ChannelPage() {
         />
       ) : (
         <NewsFeed
-          articles={articles}
-          channelId={channel.id}
+          articles={articles.map((a) => ({ ...a, channelName: channel.name }))}
           channelName={channel.name}
           viewMode={settings.defaultViewMode}
           maxUnreadStories={settings.maxStoriesShown}

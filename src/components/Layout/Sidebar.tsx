@@ -19,6 +19,16 @@ function HomeIcon() {
   );
 }
 
+function PoolIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M2 7c2-2 4-2 6 0s4 2 6 0 4-2 6 0" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 13c2-2 4-2 6 0s4 2 6 0 4-2 6 0" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 19c2-2 4-2 6 0s4 2 6 0 4-2 6 0" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function BookmarkIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -74,6 +84,10 @@ export function Sidebar() {
         <NavLink to="/" end className={navClass}>
           <HomeIcon />
           <span>Home</span>
+        </NavLink>
+        <NavLink to="/pool" className={navClass}>
+          <PoolIcon />
+          <span>The Pool</span>
         </NavLink>
         <NavLink to="/bookmarks" className={navClass}>
           <BookmarkIcon />

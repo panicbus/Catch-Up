@@ -63,6 +63,19 @@
   pointer-events: none;
 }
 
+/* The Pool only (see NewsCardData.channelName) — an eyebrow label above the title identifying
+   which channel a card came from, since cards there are mixed across every channel. Sits in
+   normal flow (not absolutely positioned like the actions/NEW badge), so the top-right action
+   icons just need it to stay clear of their own column via the same padding-right convention
+   .news-card__top already uses. */
+.news-card__channel-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding-right: 68px;
+}
+
 .news-card__top {
   display: flex;
   align-items: center;

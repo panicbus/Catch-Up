@@ -56,7 +56,6 @@ export function RollTheDiceModal({ onClose }: RollTheDiceModalProps) {
           {channelName && <div className="roll-the-dice-modal__channel">{channelName}</div>}
           <NewsCard
             article={article}
-            channelId={article.channelId}
             hideDismiss
             hideNewBadge
             expanded={expanded}

@@ -1,0 +1,69 @@
+.pool-page {
+  padding: 32px 40px 60px;
+}
+
+.pool-page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.pool-page__title {
+  font-size: 24px;
+}
+
+.pool-page__pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+/* Same rounded-full shape as the individual channel chips beside it, just with three segments
+   inside one pill instead of one chip per option — matches how the user described it ("one pill
+   having sections"), and sits at the end of the row via the same margin-left:auto trick
+   SubchannelBar uses for its own trailing "Manage subchannels" button. */
+.pool-page__count-pill {
+  display: inline-flex;
+  margin-left: auto;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 80, 40, 0.14);
+  overflow: hidden;
+}
+
+.pool-page__count-btn {
+  padding: 6px 14px;
+  background: #f3ecdf;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+}
+.pool-page__count-btn:hover {
+  background: var(--surface-hover);
+}
+.pool-page__count-btn + .pool-page__count-btn {
+  border-left: 1px solid rgba(120, 80, 40, 0.14);
+}
+
+:root[data-theme='dark'] .pool-page__count-pill {
+  border-color: var(--border-strong);
+}
+:root[data-theme='dark'] .pool-page__count-btn {
+  background: var(--surface-hover);
+}
+:root[data-theme='dark'] .pool-page__count-btn + .pool-page__count-btn {
+  border-left-color: var(--border-strong);
+}
+
+.pool-page__count-btn--active {
+  background: var(--accent);
+  color: #fff;
+}
+.pool-page__count-btn--active:hover {
+  background: var(--surface-hover);
+  color: var(--accent-strong);
+}

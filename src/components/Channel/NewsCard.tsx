@@ -8,6 +8,7 @@ import { api } from '../../services/api';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useSwipeToDismiss } from '../../hooks/useSwipeToDismiss';
 import { getStoryCardColor } from '../../utils/storyCardColor';
+import { getTileColor } from '../../utils/channelColor';
 import './NewsCard.css';
 
 export interface NewsCardData {
@@ -21,11 +22,22 @@ export interface NewsCardData {
   paywalled: boolean;
   bookmarked: boolean;
   read: boolean;
+  /** Owning channel — every mark-read/bookmark call and the resulting readState/bookmarks
+   * broadcast go out under this id, so it must be the article's REAL channel, not a container
+   * page's id. Lives on the article itself (rather than a single channelId prop on the feed)
+   * specifically so a cross-channel list like The Pool can mix cards from different channels in
+   * one feed without misattributing any of their actions. */
+  channelId: string;
+  /** Shown as a small label in the card's top-left, colored via the same per-channel hash used
+   * for Home's tiles. Set by every page (Channel, Bookmarks, The Pool) so a card always names its
+   * own channel — most useful where a list mixes channels (Pool always; Bookmarks whenever
+   * there's more than one channel's worth of saved stories), but kept consistent everywhere
+   * rather than only appearing situationally. */
+  channelName?: string;
 }
 
 interface NewsCardProps {
   article: NewsCardData;
-  channelId: string;
   /** Controlled expand/collapse — owned by the parent (NewsFeed, or RollTheDiceModal for its single
    * card) so that opening one card can close whichever other card was open. */
   expanded: boolean;
@@ -66,7 +78,6 @@ const SWIPE_DISMISS_MS = 220;
 
 export function NewsCard({
   article,
-  channelId,
   expanded,
   onToggleExpand,
   hideDismiss,
@@ -83,10 +94,10 @@ export function NewsCard({
   const commitDismiss = useCallback(
     (delayMs: number) => {
       window.setTimeout(() => {
-        void api.markArticleRead(article.id, channelId);
+        void api.markArticleRead(article.id, article.channelId);
       }, delayMs);
     },
-    [article.id, channelId]
+    [article.id, article.channelId]
   );
 
   const { dragX, phase, swipeHandlers } = useSwipeToDismiss({
@@ -101,24 +112,24 @@ export function NewsCard({
       // Already read — undo, don't re-mark. Never animates: undoing never removes a card from
       // its current list (it either stays in place, or moves out of the "read" section, which is
       // handled below by the same staysInPlace check).
-      void api.markArticleUnread(article.id, channelId);
+      void api.markArticleUnread(article.id, article.channelId);
       return;
     }
     if (staysInPlace) {
       // Stays visible in this list either way — just flip the icon, no fly-off.
-      void api.markArticleRead(article.id, channelId);
+      void api.markArticleRead(article.id, article.channelId);
       return;
     }
     setExitReason('read');
     commitDismiss(BUTTON_DISMISS_MS);
-  }, [exitReason, article.read, article.id, channelId, staysInPlace, commitDismiss]);
+  }, [exitReason, article.read, article.id, article.channelId, staysInPlace, commitDismiss]);
 
   const handleReadFullStory = useCallback(
     (e: MouseEvent<HTMLAnchorElement>) => {
       e.stopPropagation();
-      void api.markArticleRead(article.id, channelId);
+      void api.markArticleRead(article.id, article.channelId);
     },
-    [article.id, channelId]
+    [article.id, article.channelId]
   );
 
   const onKeyDown = useCallback(
@@ -162,13 +173,19 @@ export function NewsCard({
         )}
         <BookmarkButton
           articleId={article.id}
-          channelId={channelId}
+          channelId={article.channelId}
           bookmarked={article.bookmarked}
           animateRemoval={removeCardOnUnbookmark}
           onRemoving={() => setExitReason('unbookmark')}
           onToggled={onBookmarkToggled}
         />
       </div>
+
+      {article.channelName && (
+        <div className="news-card__channel-label" style={{ color: getTileColor(article.channelId) }}>
+          {article.channelName}
+        </div>
+      )}
 
       <div className="news-card__top">
         {!hideNewBadge && !article.read && <NewBadge publishedAt={article.publishedAt} />}
