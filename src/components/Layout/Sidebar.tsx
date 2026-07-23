@@ -44,6 +44,16 @@ function SettingsIcon() {
   );
 }
 
+function AboutIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v6" strokeLinecap="round" />
+      <circle cx="12" cy="7.5" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 function RemoveIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
@@ -74,7 +84,9 @@ export function Sidebar() {
           interactive. */}
       <div className="sidebar__drag-region" />
       <div className="sidebar__brand">
-        <Logo withWordmark size={52} />
+        <NavLink to="/" className="sidebar__brand-link" aria-label="Go to home">
+          <Logo withWordmark size={52} />
+        </NavLink>
         <p className="sidebar__tagline">Your news. Your pace. All caught up.</p>
         {streak && streak.current > 0 && <StreakCard current={streak.current} />}
       </div>
@@ -96,29 +108,35 @@ export function Sidebar() {
           <SettingsIcon />
           <span>Settings</span>
         </NavLink>
+        <NavLink to="/about" className={navClass}>
+          <AboutIcon />
+          <span>About</span>
+        </NavLink>
       </nav>
 
-      <div className="sidebar__channels">
+      <div className="sidebar__channels-section">
         <div className="sidebar__section-label">Channels</div>
-        {channels.map((channel) => (
-          <div key={channel.id} className="sidebar__channel-row">
-            <NavLink to={`/channel/${channel.id}`} className={navClass}>
-              <span>{channel.name}</span>
-            </NavLink>
-            <button
-              type="button"
-              className="sidebar__channel-remove"
-              aria-label={`Delete ${channel.name}`}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                requestDelete(channel.id);
-              }}
-            >
-              <RemoveIcon />
-            </button>
-          </div>
-        ))}
+        <div className="sidebar__channels">
+          {channels.map((channel) => (
+            <div key={channel.id} className="sidebar__channel-row">
+              <NavLink to={`/channel/${channel.id}`} className={navClass}>
+                <span>{channel.name}</span>
+              </NavLink>
+              <button
+                type="button"
+                className="sidebar__channel-remove"
+                aria-label={`Delete ${channel.name}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  requestDelete(channel.id);
+                }}
+              >
+                <RemoveIcon />
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="sidebar__footer">

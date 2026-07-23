@@ -31,6 +31,12 @@
   flex-direction: column;
 }
 
+.sidebar__brand-link {
+  display: inline-flex;
+  width: fit-content;
+  text-decoration: none;
+}
+
 .sidebar__tagline {
   margin: 6px 0 0;
   padding: 0 8px;
@@ -72,8 +78,16 @@
   color: var(--accent-strong);
 }
 
+.sidebar__channels-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .sidebar__channels {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;

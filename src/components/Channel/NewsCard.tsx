@@ -11,6 +11,17 @@ import { getStoryCardColor } from '../../utils/storyCardColor';
 import { getTileColor } from '../../utils/channelColor';
 import './NewsCard.css';
 
+// Points down at collapsed cards to invite a tap; points up once expanded, echoing every other
+// expand/collapse control in the app (see NewsFeed's read-archive toggle). Distinct from the
+// "Read full story ↗" link's arrow on purpose — ↗ means "leaves the app", this means "opens here".
+function PreviewChevron() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
 export interface NewsCardData {
   id: string;
   url: string;
@@ -108,9 +119,14 @@ export function NewsCard({
     [article.id, article.channelId]
   );
 
+  // Nothing to reveal by expanding a card with neither a snippet nor a thumbnail — the "Read full
+  // story" link renders directly on the card instead (below), so there's no click-to-find-out
+  // step. Whether a card CAN expand only depends on its own content, not on staysInPlace/hideDismiss.
+  const canExpand = !!(article.snippet || article.imageUrl);
+
   const { dragX, phase, swipeHandlers } = useSwipeToDismiss({
     enabled: isMobile && !hideDismiss && !staysInPlace,
-    onTap: onToggleExpand,
+    onTap: canExpand ? onToggleExpand : () => {},
     onCommit: () => commitDismiss(SWIPE_DISMISS_MS),
   });
 
@@ -150,7 +166,7 @@ export function NewsCard({
     [onToggleExpand]
   );
 
-  const surfaceProps = swipeHandlers ?? { onClick: onToggleExpand };
+  const surfaceProps = swipeHandlers ?? (canExpand ? { onClick: onToggleExpand } : {});
 
   const mobileStyle =
     isMobile && phase !== 'idle'
@@ -175,7 +191,7 @@ export function NewsCard({
 
   return (
     <div
-      className={`news-card ${paneMode ? 'news-card--pane' : ''} ${exitClass}`}
+      className={`news-card ${paneMode ? 'news-card--pane' : ''} ${canExpand ? '' : 'news-card--static'} ${exitClass}`}
       // Not role="button" — this element wraps other real interactive controls (dismiss,
       // bookmark, "Read full story"), and a button containing more buttons/links is an ARIA
       // anti-pattern (confuses how assistive tech tabs through it). "article" is the correct
@@ -183,8 +199,11 @@ export function NewsCard({
       // the click-to-expand affordance without claiming to be an atomic button.
       role="article"
       aria-label={article.title}
-      tabIndex={0}
-      onKeyDown={onKeyDown}
+      // Not part of the tab order at all when it can't expand — there's nothing for Enter/Space
+      // on the card body to do (the read-link and action buttons are already independently
+      // reachable via Tab as their own real elements).
+      tabIndex={canExpand ? 0 : undefined}
+      onKeyDown={canExpand ? onKeyDown : undefined}
       style={cardStyle}
       {...surfaceProps}
     >
@@ -219,28 +238,50 @@ export function NewsCard({
         </div>
       )}
 
-      <div className={`news-card__expand ${expanded ? 'news-card__expand--open' : ''}`}>
-        <div className="news-card__expand-inner">
-          {article.imageUrl && !imageFailed && (
-            <img
-              className="news-card__image"
-              src={article.imageUrl}
-              alt=""
-              referrerPolicy="no-referrer"
-              onError={() => setImageFailed(true)}
-            />
-          )}
-          <a
-            className="news-card__read-link"
-            href={article.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={handleReadFullStory}
-          >
-            Read full story ↗
-          </a>
+      {canExpand && !expanded && (
+        <div className="news-card__preview-hint">
+          <PreviewChevron />
+          Preview
         </div>
-      </div>
+      )}
+
+      {canExpand ? (
+        <div className={`news-card__expand ${expanded ? 'news-card__expand--open' : ''}`}>
+          <div className="news-card__expand-inner">
+            {article.imageUrl && !imageFailed && (
+              <img
+                className="news-card__image"
+                src={article.imageUrl}
+                alt=""
+                referrerPolicy="no-referrer"
+                onError={() => setImageFailed(true)}
+              />
+            )}
+            <a
+              className="news-card__read-link"
+              href={article.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={handleReadFullStory}
+            >
+              Read full story ↗
+            </a>
+          </div>
+        </div>
+      ) : (
+        // No snippet, no image — nothing an expand step would reveal, so the link that would
+        // otherwise be hidden behind one is just always visible instead. This is the entire point:
+        // a card that can't preview its story shouldn't cost a click to find that out.
+        <a
+          className="news-card__read-link news-card__read-link--standalone"
+          href={article.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleReadFullStory}
+        >
+          Read full story ↗
+        </a>
+      )}
 
       <div className="news-card__footer">
         <PaywallBadge paywalled={article.paywalled} />

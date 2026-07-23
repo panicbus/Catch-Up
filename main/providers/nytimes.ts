@@ -1,5 +1,14 @@
 import type { NewsProvider, ProviderArticle, ProviderQuery } from './types';
 import { isCoolingDown, isHardFailureStatus, startCooldown, RATE_LIMIT_COOLDOWN_MS } from './cooldown';
+import { throttle } from './pacing';
+
+// NYT's free tier allows 5 requests/minute — far stricter than every other provider here, and
+// stricter than refreshAgent's default 300ms cross-provider pacing was ever tuned for. A refresh
+// cycle fans out one query per channel plus staggered subchannels, all only 300ms apart, which
+// would burst well past 5/min in the first few seconds of every single cycle. 25s between actual
+// NYT calls caps this provider at under 3/min on its own, a comfortable margin below the limit
+// even accounting for jitter, rather than pacing right up against it.
+const NYT_MIN_INTERVAL_MS = 25 * 1000;
 
 interface NytDoc {
   web_url?: string;
@@ -20,6 +29,8 @@ export const nytimesProvider: NewsProvider = {
     const key = process.env.NYTIMES_API_KEY?.trim();
     if (!key) return [];
     if (isCoolingDown(PROVIDER_ID)) return [];
+
+    await throttle(PROVIDER_ID, NYT_MIN_INTERVAL_MS);
 
     const url = `https://api.nytimes.com/svc/search/v2/articlesearch.json?q=${encodeURIComponent(query.topic)}&api-key=${key}`;
     try {

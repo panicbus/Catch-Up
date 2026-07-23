@@ -31,6 +31,11 @@ export const googleNewsRssProvider: NewsProvider = {
       const feed = await parser.parseString(xml);
       return (feed.items ?? [])
         .filter((item) => item.link && item.title)
+        // This feed can return up to ~100 items per query with no way to ask for fewer server-side,
+        // and every one of them is guaranteed snippet-less and image-less (see below) — uncapped,
+        // a single fallback firing can flood a channel with far more empty cards than every richer
+        // source combined. Capped to match the same modest-supplement role as Hacker News.
+        .slice(0, 10)
         .map((item) => {
           // Google News RSS titles come as "Headline - Source Name" — split on the *last*
           // " - " so a headline that itself contains " - " doesn't get chopped mid-sentence.

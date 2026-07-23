@@ -22,7 +22,10 @@ export const hackerNewsProvider: NewsProvider = {
   async fetchArticles(query: ProviderQuery): Promise<ProviderArticle[]> {
     if (isCoolingDown(PROVIDER_ID)) return [];
 
-    const url = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query.topic)}&tags=story`;
+    // Capped well below Algolia's default of 20/page — almost none of these have a snippet (see
+    // the map below), so an uncapped query can dump a wall of snippet-less cards into a single
+    // channel/subchannel's results at once. This keeps Hacker News a supplement, not a flood.
+    const url = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query.topic)}&tags=story&hitsPerPage=6`;
     try {
       const res = await fetch(url);
       if (!res.ok) {

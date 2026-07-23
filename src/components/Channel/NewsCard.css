@@ -15,6 +15,13 @@
   box-shadow: var(--shadow-card);
 }
 
+/* No snippet, no image — the card body has nothing to expand into (see NewsCard.tsx's canExpand),
+   so it isn't clickable there at all; only the always-visible read-link and the action buttons
+   are. A pointer cursor over the rest of the card would falsely promise an interaction. */
+.news-card--static {
+  cursor: default;
+}
+
 /* Background itself is set inline per-card (see getStoryCardColor in NewsCard.tsx) — hashed by
    article id rather than a positional nth-child cycle, since a fixed cycle lines up into visible
    color columns once the grid is more than one card wide. --story-card-1 above is just the
@@ -145,6 +152,27 @@
   object-fit: cover;
   border-radius: var(--radius-sm);
   margin-top: 8px;
+}
+
+/* Only on cards that expand in place (canExpand, collapsed) — the one visual tell that this card
+   behaves differently from a static card's always-visible "Read full story ↗" link right below
+   it. Without this, a run of static cards trains you to stop trying the card body at all, and you
+   miss that some cards DO expand. The chevron intentionally echoes the read-archive toggle's
+   expand/collapse affordance rather than the read-link's ↗, since this opens in place, not offsite. */
+.news-card__preview-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  margin-top: 4px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .news-card__read-link {

@@ -34,6 +34,16 @@ interface CacheFile {
 
 const DEFAULT_BUCKET: Omit<ChannelBucket, 'articles'> = { maxAgeDays: 14, maxCount: 300 };
 
+// Google News RSS is a last-resort fallback (see registry.ts) precisely because every one of its
+// articles is snippet-less and image-less — a channel whose primary providers come up thin can
+// otherwise end up mostly or entirely filled with it. This caps its share of any one channel
+// regardless of how often the fallback fires, so it stays a minority supplement rather than
+// crowding out richer sources even during a stretch where a primary provider is down or rate
+// limited. Enforced on every merge (see prune), not just once — a one-time trim alone would let it
+// silently creep back up over following cycles.
+const MAX_GOOGLE_NEWS_RSS_PER_CHANNEL = 15;
+const GOOGLE_NEWS_RSS_PROVIDER_ID = 'googlenewsrss';
+
 /** JSON-file-backed cache of fetched articles, capped/pruned per channel by age then count.
  * Kept separate from dataStore's small user-content file so frequent background-refresh writes
  * never risk the durable channels/bookmarks/settings file. */
@@ -45,6 +55,31 @@ export class ArticlesCache {
     this.filePath = articlesCacheFilePath();
     this.data = this.read();
     this.migrateGoogleNewsRssSnippets();
+    this.trimExcessGoogleNewsRss();
+  }
+
+  /** One-time catch-up for channels that already accumulated more than the cap before it existed —
+   * ongoing enforcement happens in prune() on every merge from here on. */
+  private trimExcessGoogleNewsRss(): void {
+    let changed = false;
+    for (const bucket of Object.values(this.data.byChannel)) {
+      const before = bucket.articles.length;
+      this.capGoogleNewsRss(bucket);
+      if (bucket.articles.length !== before) changed = true;
+    }
+    if (changed) this.write();
+  }
+
+  private capGoogleNewsRss(bucket: ChannelBucket): void {
+    const rss = bucket.articles.filter((a) => a.provider === GOOGLE_NEWS_RSS_PROVIDER_ID);
+    if (rss.length <= MAX_GOOGLE_NEWS_RSS_PER_CHANNEL) return;
+    const keep = new Set(
+      [...rss]
+        .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+        .slice(0, MAX_GOOGLE_NEWS_RSS_PER_CHANNEL)
+        .map((a) => a.id)
+    );
+    bucket.articles = bucket.articles.filter((a) => a.provider !== GOOGLE_NEWS_RSS_PROVIDER_ID || keep.has(a.id));
   }
 
   /** One-time cleanup for googlenewsrss articles cached before that provider's snippet field
@@ -162,6 +197,7 @@ export class ArticlesCache {
         return true;
       })
       .slice(0, bucket.maxCount);
+    this.capGoogleNewsRss(bucket);
   }
 
   deleteChannel(channelId: string): void {

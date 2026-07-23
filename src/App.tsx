@@ -5,6 +5,7 @@ import { ChannelPage } from './components/Channel/ChannelPage';
 import { PoolPage } from './components/Pool/PoolPage';
 import { BookmarksPage } from './components/Bookmarks/BookmarksPage';
 import { SettingsPage } from './components/Settings/SettingsPage';
+import { AboutPage } from './components/About/AboutPage';
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
             <Route path="/channel/:channelId" element={<ChannelPage />} />
             <Route path="/bookmarks" element={<BookmarksPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/about" element={<AboutPage />} />
           </Route>
         </Routes>
       </HashRouter>
