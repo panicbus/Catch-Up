@@ -9,7 +9,13 @@ import { buildAssetsDir } from './main/paths';
 import * as refreshAgent from './main/refreshAgent';
 import type { Tray } from 'electron';
 
-const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged || !!process.env.ELECTRON_IS_DEV;
+// The Vite dev server only exists under `npm run dev`, which is the one launch path that sets
+// ELECTRON_IS_DEV — so that env var is the sole signal for loading from http://localhost:5173.
+// Every other way of starting the app (a packaged build, or `electron .` / `npm start` after a
+// `npm run build`) has no dev server and loads the built files from dist/ instead, so the app runs
+// completely standalone. Deliberately NOT keyed on `!app.isPackaged`: an unpackaged run is not the
+// same as "a dev server is running," and conflating the two is what forced the server to be up.
+const useDevServer = process.env.ELECTRON_IS_DEV === '1';
 
 /** Minimal .env loader (KEY=VALUE per line) — avoids adding a dependency for a handful of API keys. */
 function loadEnv(): void {
@@ -64,7 +70,7 @@ function createWindow(): BrowserWindow {
     },
   });
 
-  if (isDev) {
+  if (useDevServer) {
     void win.loadURL('http://localhost:5173');
   } else {
     void win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));

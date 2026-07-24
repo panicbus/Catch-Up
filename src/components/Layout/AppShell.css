@@ -3,6 +3,23 @@
   height: 100vh;
 }
 
+/* Right pane = a fixed drag strip on top of the scrolling content column. */
+.app-shell__content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Empty, draggable title-bar strip for the main pane — matches the sidebar's own reserved top area
+   so the whole top edge of the window can move it. Sits above the scroller, so it never covers a
+   button or a sticky toolbar. */
+.app-shell__drag-bar {
+  height: 34px;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
 .app-shell__main {
   flex: 1;
   overflow-y: auto;

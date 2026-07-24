@@ -1,6 +1,6 @@
 {
   "name": "catch-up",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "description": "Your topics. Your pace. All caught up.",
   "author": "Catch Up contributors",
@@ -14,6 +14,7 @@
     "icons:mac": "bash scripts/build-icon.sh",
     "pack:mac:dir": "npm run build && CSC_IDENTITY_AUTO_SELECT=false electron-builder --mac --dir --arm64",
     "start": "npm run build && electron .",
+    "app": "electron .",
     "bump:patch": "node scripts/bump-version.mjs patch",
     "bump:minor": "node scripts/bump-version.mjs minor",
     "bump:major": "node scripts/bump-version.mjs major"
