@@ -90,17 +90,14 @@ export function ChannelPage() {
     // whether that broadcast fires, arrives, or is still in flight by the time this resolves.
     reload();
 
-    const rateLimitNote =
-      result.rateLimitedProviders.length > 0
-        ? ` (${result.rateLimitedProviders.join(', ')} ${result.rateLimitedProviders.length === 1 ? 'is' : 'are'} rate-limited right now — showing results from other sources.)`
-        : '';
-
+    // Provider rate-limit state is deliberately NOT surfaced here — it's noise in this message, and
+    // the same status already shows in Settings › News providers (the colored dots).
     if (result.errors.length > 0) {
-      setRefreshNote(`Refresh hit an error: ${result.errors[0]}${rateLimitNote}`);
+      setRefreshNote(`Refresh hit an error: ${result.errors[0]}`);
     } else if (result.added === 0) {
-      setRefreshNote(`No new stories about ${channel.name} from your news sources. Try again later.${rateLimitNote}`);
+      setRefreshNote(`No new stories about ${channel.name} from your news sources. Catch Up pulls automatically every 30 min.`);
     } else {
-      setRefreshNote(`Found ${result.added} new stor${result.added === 1 ? 'y' : 'ies'}.${rateLimitNote}`);
+      setRefreshNote(`Found ${result.added} new stor${result.added === 1 ? 'y' : 'ies'}.`);
     }
   };
 

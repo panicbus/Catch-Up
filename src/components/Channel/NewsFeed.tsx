@@ -108,6 +108,7 @@ function GridSection({
   onToggleExpand,
   readInPlaceIds,
   dimReadCards,
+  animateReflow = isGrid,
   onArchiveReadInPlace,
 }: {
   articles: NewsCardData[];
@@ -122,6 +123,10 @@ function GridSection({
   /** The Pool: dim EVERY read card (not just this session's), visual-only — its check button just
    * un-reads rather than archiving. */
   dimReadCards?: boolean;
+  /** Whether to give cards a view-transition-name for the grid open/close reflow. Defaults to
+   * isGrid; the collapsed "Read stories" archive turns it OFF so its (often dozens of) cards don't
+   * bloat every transition's snapshot — you don't reflow the main grid against the archive. */
+  animateReflow?: boolean;
   onArchiveReadInPlace?: (articleId: string) => void;
 }) {
   const containerClass = isGrid ? 'news-feed__grid' : 'news-feed__list';
@@ -141,7 +146,7 @@ function GridSection({
             removeCardOnUnbookmark={removeCardOnUnbookmark}
             expanded={isExpanded}
             paneMode={isGrid && isExpanded}
-            animateReflow={isGrid}
+            animateReflow={animateReflow}
             readInPlace={readInPlace}
             dimmed={dimmed}
             onArchiveReadInPlace={onArchiveReadInPlace}
@@ -245,6 +250,7 @@ function ReadArchive({
                     removeCardOnUnbookmark={removeCardOnUnbookmark}
                     expandedArticleId={expandedArticleId}
                     onToggleExpand={onToggleExpand}
+                    animateReflow={false}
                   />
                 </div>
               </div>
@@ -381,21 +387,25 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
 
   const toggleExpand = (articleId: string) => {
     const willOpen = expandedArticleId !== articleId;
-    // Opening a card counts as reading it — mark it read in place (it stays put, dimmed once
-    // collapsed again). Collapsing does nothing to read state.
-    if (willOpen && catchUpMode) {
+    // Opening a card counts as reading it — but marking read fires a data reload, and doing that up
+    // front re-renders the feed *during* the open animation, making it stutter. So defer it until
+    // after the transition settles (grid) or just run it (list, where there's no reflow to disturb).
+    const markReadOnOpen = () => {
+      if (!willOpen || !catchUpMode) return;
       const a = byId.get(articleId);
       if (a && !a.read) markReadInPlace(a.id, a.channelId);
-    }
+    };
     const apply = () => setExpandedArticleId((prev) => (prev === articleId ? null : articleId));
     // Only grid view has a reflow worth animating (list view already expands smoothly in place, no
     // grid-column snap involved) — see GridSection's animateReflow/NewsCard's view-transition-name.
     // flushSync forces the state update to commit synchronously inside the callback, which
     // startViewTransition requires to capture an accurate "after" snapshot.
     if (viewMode === 'grid' && document.startViewTransition) {
-      document.startViewTransition(() => flushSync(apply));
+      const transition = document.startViewTransition(() => flushSync(apply));
+      transition.finished.finally(markReadOnOpen);
     } else {
       apply();
+      markReadOnOpen();
     }
   };
 

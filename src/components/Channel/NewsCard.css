@@ -177,6 +177,14 @@
   overflow: hidden;
 }
 
+/* Grid view: the whole open/close is driven by one View Transition (see NewsFeed's toggleExpand),
+   so the card morphs to its final expanded size in a single motion. Running the grid-rows accordion
+   at the same time made the content reveal a second, out-of-sync phase — "fits and starts." Let the
+   content just be there in the after-state and let the transition morph it. */
+.news-feed__grid .news-card__expand {
+  transition: none;
+}
+
 .news-card__image {
   display: block;
   width: 100%;

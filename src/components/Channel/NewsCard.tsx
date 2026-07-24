@@ -1,4 +1,4 @@
-import { useCallback, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { memo, useCallback, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { NewBadge } from './NewBadge';
 import { PaywallBadge } from './PaywallBadge';
 import { DismissButton, type DismissVariant } from './DismissButton';
@@ -107,7 +107,7 @@ type ExitReason = null | 'read' | 'unbookmark';
 const BUTTON_DISMISS_MS = 250;
 const SWIPE_DISMISS_MS = 220;
 
-export function NewsCard({
+function NewsCardComponent({
   article,
   expanded,
   onToggleExpand,
@@ -342,3 +342,23 @@ export function NewsCard({
     </div>
   );
 }
+
+/** Memoized so expanding one card in a grid re-renders only the cards whose props actually changed
+ * (the opened one and the previously-open one) instead of every card in the feed — that synchronous
+ * all-cards re-render inside flushSync was what made the grid open/close transition stutter. The
+ * callback props are compared by intent, not identity: they only ever close over this card's own
+ * stable id, so a new closure each render doesn't change behavior and shouldn't force a re-render. */
+export const NewsCard = memo(NewsCardComponent, (prev, next) => {
+  return (
+    prev.article === next.article &&
+    prev.expanded === next.expanded &&
+    prev.paneMode === next.paneMode &&
+    prev.animateReflow === next.animateReflow &&
+    prev.readInPlace === next.readInPlace &&
+    prev.dimmed === next.dimmed &&
+    prev.staysInPlace === next.staysInPlace &&
+    prev.removeCardOnUnbookmark === next.removeCardOnUnbookmark &&
+    prev.hideDismiss === next.hideDismiss &&
+    prev.hideNewBadge === next.hideNewBadge
+  );
+});
