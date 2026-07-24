@@ -17,7 +17,7 @@
   align-items: center;
   justify-content: center;
   gap: 14px;
-  padding: 20px 48px;
+  padding: 20px 52px 20px 48px;
   min-height: 168px;
   border-radius: 3px;
   background: var(--bg);
@@ -30,6 +30,31 @@
   color: var(--text);
   white-space: nowrap;
   animation: caught-up-overlay-in 0.3s ease;
+  /* The row wrapper is pointer-events:none so it doesn't block the cards; the badge itself opts
+     back in so its close button is clickable. */
+  pointer-events: auto;
+}
+
+/* Close button, tucked into the top-right corner of the card. */
+.caught-up-overlay__close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-faint);
+  transition: background 0.12s, color 0.12s;
+}
+.caught-up-overlay__close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 /* The confetti originates from the centre of the badge. Zero-size anchor with overflow visible so

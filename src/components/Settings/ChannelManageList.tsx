@@ -7,9 +7,28 @@ import { DeleteChannelModal } from '../common/DeleteChannelModal';
 import { Button } from '../common/Button';
 import './ChannelManageList.css';
 
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}
+    >
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  );
+}
+
 export function ChannelManageList() {
   const { channels } = useChannels();
   const [draft, setDraft] = useState('');
+  const [listOpen, setListOpen] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -47,7 +66,7 @@ export function ChannelManageList() {
         <input
           className="channel-manage__input"
           type="text"
-          placeholder="Add a new channel — any topic…"
+          placeholder="Add a new channel, any topic…"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
@@ -58,10 +77,26 @@ export function ChannelManageList() {
         </Button>
       </div>
 
-      <div className="channel-manage__list">
-        {channels.map((channel) => (
-          <div key={channel.id}>
-            <div className="channel-manage__row">
+      <div className="channel-manage__box">
+        <button
+          type="button"
+          className="channel-manage__toggle"
+          onClick={() => setListOpen((v) => !v)}
+          aria-expanded={listOpen}
+        >
+          <ChevronIcon open={listOpen} />
+          <span className="channel-manage__toggle-label">Channels</span>
+          <span className="channel-manage__toggle-count">
+            {channels.length === 0 ? 'none yet' : channels.length}
+          </span>
+        </button>
+
+        <div className={`channel-manage__body ${listOpen ? 'channel-manage__body--open' : ''}`}>
+          <div className="channel-manage__body-inner">
+            <div className="channel-manage__list">
+              {channels.map((channel) => (
+                <div key={channel.id}>
+                  <div className="channel-manage__row">
               {editingId === channel.id ? (
                 <input
                   className="channel-manage__row-name-input"
@@ -95,11 +130,14 @@ export function ChannelManageList() {
                 </Button>
               </div>
             </div>
-            {expandedId === channel.id && (
-              <SubchannelManagePanel channel={channel} onClose={() => setExpandedId(null)} />
-            )}
+                  {expandedId === channel.id && (
+                    <SubchannelManagePanel channel={channel} onClose={() => setExpandedId(null)} />
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-        ))}
+        </div>
       </div>
 
       <DeleteChannelModal channel={pendingChannel} onCancel={cancel} onConfirm={confirm} />

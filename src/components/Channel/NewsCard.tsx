@@ -93,6 +93,10 @@ interface NewsCardProps {
    * time badge, which is left alone. Only ever set on already-read cards in the main (unread)
    * section, never in the archive. */
   readInPlace?: boolean;
+  /** Purely-visual "already read" treatment (dim + "Read" marker), WITHOUT the readInPlace archive
+   * semantics — used by The Pool, which shows read stories dimmed in place and whose check button
+   * just un-reads them (variant stays 'archived') rather than filing them to an archive it lacks. */
+  dimmed?: boolean;
   /** Files a read-in-place card away: plays the fly-off then removes it from the feed (into the
    * archive on a channel, or simply out of view in The Pool). Only meaningful when readInPlace. */
   onArchiveReadInPlace?: (articleId: string) => void;
@@ -115,8 +119,12 @@ export function NewsCard({
   paneMode,
   animateReflow,
   readInPlace,
+  dimmed,
   onArchiveReadInPlace,
 }: NewsCardProps) {
+  // "Reads as done" visually — either a channel's in-place read (readInPlace, which also makes the
+  // check button archive it) or The Pool's plain dimmed-read (dimmed, check button just un-reads).
+  const showAsRead = readInPlace || dimmed;
   const [exitReason, setExitReason] = useState<ExitReason>(null);
   const [imageFailed, setImageFailed] = useState(false);
   const isMobile = useIsMobile();
@@ -212,7 +220,7 @@ export function NewsCard({
 
   return (
     <div
-      className={`news-card ${paneMode ? 'news-card--pane' : ''} ${canExpand ? '' : 'news-card--static'} ${readInPlace ? 'news-card--read-in-place' : ''} ${exitClass}`}
+      className={`news-card ${paneMode ? 'news-card--pane' : ''} ${canExpand ? '' : 'news-card--static'} ${showAsRead ? 'news-card--read-in-place' : ''} ${exitClass}`}
       // Read by useScrollCatchUp's IntersectionObserver: data-article-id identifies which story
       // scrolled past, and data-unread marks which cards it should watch (only ones still unread).
       data-article-id={article.id}
@@ -248,7 +256,7 @@ export function NewsCard({
 
       {/* Read marker sits top-right, tucked under the action icons — a distinct "you've read this"
           cue, separate from the dimming and from the (unrelated) "Recent" recency badge. */}
-      {readInPlace && (
+      {showAsRead && (
         <span className="news-card__read-badge">
           <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 6L9 17l-5-5" />

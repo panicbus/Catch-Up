@@ -63,7 +63,9 @@
   background: var(--accent);
   color: #fff;
 }
+/* Keep the active option clearly the orange one on hover — just a shade darker — instead of turning
+   pale, which made it hard to tell which was selected. */
 .pool-page__count-btn--active:hover {
-  background: var(--surface-hover);
-  color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: #fff;
 }

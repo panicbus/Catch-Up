@@ -74,7 +74,7 @@ export function ChannelSearchBar() {
       <input
         className="channel-search__input"
         type="text"
-        placeholder="Search or add a topic — any subject on earth…"
+        placeholder="Add a topic, any subject on earth…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={onKeyDown}

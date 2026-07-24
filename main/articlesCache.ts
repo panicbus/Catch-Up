@@ -139,15 +139,26 @@ export class ArticlesCache {
 
   /** Merges fetched provider articles into a channel's bucket, deduping by URL and by normalized
    * headline (catches wire/syndicated stories republished verbatim under different URLs across
-   * outlets), and pruning by age then count. Returns the number of genuinely new articles added.
-   * Each incoming article carries its own real originating provider (tagged by runProviders) — a
-   * single call here can merge results from several providers queried in parallel, so there's no
-   * one blanket provider for the whole batch. */
-  merge(channelId: string, subchannelId: string | null, incoming: FetchedArticle[]): number {
+   * outlets), and pruning by age then count. Each incoming article carries its own real originating
+   * provider (tagged by runProviders) — a single call here can merge results from several providers
+   * queried in parallel, so there's no one blanket provider for the whole batch.
+   *
+   * Returns the count of stories that are genuinely NEW TO READ — added this merge, still present
+   * after the prune, and not already read. This is deliberately narrower than "rows inserted": a
+   * story can be re-fetched after it aged out of the cache while its read state lingers (read ids
+   * are kept longer than the cache cap for busy channels), and stale results can be pruned right
+   * back out — neither is something new to show the user, so neither should be counted as "found."
+   * `isRead` is supplied by the caller (only the data store knows read state). */
+  merge(
+    channelId: string,
+    subchannelId: string | null,
+    incoming: FetchedArticle[],
+    isRead?: (id: string) => boolean
+  ): number {
     const bucket = (this.data.byChannel[channelId] ??= { ...DEFAULT_BUCKET, articles: [] });
     const seenIds = new Set(bucket.articles.map((a) => a.id));
     const seenTitles = new Set(bucket.articles.map((a) => normalizeTitle(a.title)));
-    let added = 0;
+    const addedIds: string[] = [];
     for (const article of incoming) {
       const id = articleId(article.url);
       const normalizedTitle = normalizeTitle(article.title);
@@ -175,11 +186,12 @@ export class ArticlesCache {
         subchannelId,
         paywalled: isPaywalledDomain(hostname),
       });
-      added++;
+      addedIds.push(id);
     }
     this.prune(bucket);
     this.write();
-    return added;
+    const surviving = new Set(bucket.articles.map((a) => a.id));
+    return addedIds.filter((id) => surviving.has(id) && !isRead?.(id)).length;
   }
 
   private prune(bucket: ChannelBucket): void {

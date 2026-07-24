@@ -53,6 +53,10 @@ interface NewsFeedProps {
    * the celebration + advances the streak. Defaults to matching partitionByRead (on for channel
    * view, off for Bookmarks); The Pool turns it on explicitly even though it isn't partitioned. */
   catchUpMode?: boolean;
+  /** The Pool: keep read stories in the feed (dimmed) instead of dropping them, so the display cap
+   * (maxUnreadStories) becomes a cap on the TOTAL number of recent stories shown, read or unread —
+   * and the count pill visibly controls it. "Caught up" then means the shown set is all read. */
+  showReadDimmed?: boolean;
   /** Reports how many stories are currently read-in-place (dimmed, kept in the feed) so a parent
    * can drive a "move all to archive" control's enabled state. */
   onReadInPlaceCountChange?: (count: number) => void;
@@ -103,6 +107,7 @@ function GridSection({
   expandedArticleId,
   onToggleExpand,
   readInPlaceIds,
+  dimReadCards,
   onArchiveReadInPlace,
 }: {
   articles: NewsCardData[];
@@ -114,6 +119,9 @@ function GridSection({
   /** Ids passively read this session (NewsFeed's keepVisible) — a card in this set that's read and
    * not currently expanded renders dimmed with the "Read" marker. Undefined outside catch-up mode. */
   readInPlaceIds?: Set<string>;
+  /** The Pool: dim EVERY read card (not just this session's), visual-only — its check button just
+   * un-reads rather than archiving. */
+  dimReadCards?: boolean;
   onArchiveReadInPlace?: (articleId: string) => void;
 }) {
   const containerClass = isGrid ? 'news-feed__grid' : 'news-feed__list';
@@ -122,8 +130,9 @@ function GridSection({
     <div className={containerClass}>
       {articles.map((article) => {
         const isExpanded = expandedArticleId === article.id;
-        // Don't dim the card you're actively reading — only collapsed, read, kept-in-place cards.
+        // Don't dim the card you're actively reading — only collapsed, read cards.
         const readInPlace = !!readInPlaceIds?.has(article.id) && article.read && !isExpanded;
+        const dimmed = !!dimReadCards && article.read && !isExpanded;
         return (
           <NewsCard
             key={article.id}
@@ -134,6 +143,7 @@ function GridSection({
             paneMode={isGrid && isExpanded}
             animateReflow={isGrid}
             readInPlace={readInPlace}
+            dimmed={dimmed}
             onArchiveReadInPlace={onArchiveReadInPlace}
             onToggleExpand={() => onToggleExpand(article.id)}
           />
@@ -151,6 +161,7 @@ function DayGroups({
   expandedArticleId,
   onToggleExpand,
   readInPlaceIds,
+  dimReadCards,
   onArchiveReadInPlace,
 }: {
   articles: NewsCardData[];
@@ -160,6 +171,7 @@ function DayGroups({
   expandedArticleId: string | null;
   onToggleExpand: (articleId: string) => void;
   readInPlaceIds?: Set<string>;
+  dimReadCards?: boolean;
   onArchiveReadInPlace?: (articleId: string) => void;
 }) {
   const byDay = groupByDay(articles, 'publishedAt');
@@ -177,6 +189,7 @@ function DayGroups({
             expandedArticleId={expandedArticleId}
             onToggleExpand={onToggleExpand}
             readInPlaceIds={readInPlaceIds}
+            dimReadCards={dimReadCards}
             onArchiveReadInPlace={onArchiveReadInPlace}
           />
         </section>
@@ -253,11 +266,15 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     removeOnRead = partitionByRead,
     removeCardOnUnbookmark = !partitionByRead,
     catchUpMode = partitionByRead,
+    showReadDimmed = false,
     onReadInPlaceCountChange,
   }: NewsFeedProps,
   ref
 ) {
   const [justCleared, setJustCleared] = useState(false);
+  // Lets the "All caught up" overlay be dismissed with its close button; re-armed whenever unread
+  // returns, so the next fresh catch-up celebrates again.
+  const [celebrationDismissed, setCelebrationDismissed] = useState(false);
   const [expandedArticleId, setExpandedArticleId] = useState<string | null>(null);
   // Ids cleared *in place* this session by a passive trigger (scroll-past or open). They stay in the
   // main section (dimmed) instead of jumping to the archive, so the list never reflows out from
@@ -269,8 +286,10 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
 
   const byId = useMemo(() => new Map(articles.map((a) => [a.id, a])), [articles]);
 
-  // articles arrive already sorted newest-first (see articlesCache.getArticles).
-  const baseUnread = partitionByRead || removeOnRead ? articles.filter((a) => !a.read) : articles;
+  // articles arrive already sorted newest-first (see articlesCache.getArticles). In showReadDimmed
+  // mode (The Pool) the cap covers ALL recent stories (read stay, dimmed); otherwise only unread.
+  const baseUnread =
+    !showReadDimmed && (partitionByRead || removeOnRead) ? articles.filter((a) => !a.read) : articles;
   // Intersperse *before* slicing to the cap, not after — groupByDay (used below) always re-sorts
   // each day's own bucket back to pure chronological order, so any interspersing done after grouping
   // can only rearrange whatever already survived this cut. Doing it here means a content-having
@@ -288,9 +307,12 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // or read in a previous session).
   const archive = partitionByRead ? articles.filter((a) => a.read && !keepVisible.has(a.id)) : [];
 
-  // The true, uncapped unread count — the source of truth for the celebration + streak, independent
-  // of the display cap and of what's being kept visible in place.
-  const trueUnreadCount = articles.reduce((n, a) => (a.read ? n : n + 1), 0);
+  // Source of truth for the celebration + streak. Normally the uncapped unread count (you must clear
+  // everything — more slide in under the cap as you go). In showReadDimmed mode (The Pool) the shown
+  // set IS capped, so "caught up" means the shown stories are all read — count unread among those.
+  const trueUnreadCount = showReadDimmed
+    ? cappedBase.reduce((n, a) => (a.read ? n : n + 1), 0)
+    : articles.reduce((n, a) => (a.read ? n : n + 1), 0);
 
   const markReadInPlace = useCallback((articleId: string, channelId: string) => {
     setKeepVisible((prev) => {
@@ -395,6 +417,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
       }
     } else if (trueUnreadCount > 0) {
       setJustCleared(false);
+      setCelebrationDismissed(false);
     }
     prevUnreadCountRef.current = trueUnreadCount;
     // Only the unread count should re-run this — article identity churns constantly on refresh.
@@ -414,7 +437,9 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
         <>
           {/* Just reached zero this session, with the cleared cards still shown dimmed in place —
               float the reward over them instead of replacing the feed. */}
-          {caughtUp && mainArticles.length > 0 && <CaughtUpOverlay channelName={channelName} />}
+          {caughtUp && mainArticles.length > 0 && !celebrationDismissed && (
+            <CaughtUpOverlay channelName={channelName} onClose={() => setCelebrationDismissed(true)} />
+          )}
           <DayGroups
             articles={mainArticles}
             viewMode={viewMode}
@@ -422,8 +447,11 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
             removeCardOnUnbookmark={removeCardOnUnbookmark}
             expandedArticleId={expandedArticleId}
             onToggleExpand={toggleExpand}
-            readInPlaceIds={catchUpMode ? keepVisible : undefined}
-            onArchiveReadInPlace={catchUpMode ? archiveReadInPlace : undefined}
+            // The Pool dims all read cards (dimReadCards) and its check button un-reads them, so it
+            // doesn't use the readInPlace/archive path; channels do the reverse.
+            readInPlaceIds={catchUpMode && !showReadDimmed ? keepVisible : undefined}
+            dimReadCards={showReadDimmed}
+            onArchiveReadInPlace={catchUpMode && !showReadDimmed ? archiveReadInPlace : undefined}
           />
         </>
       )}

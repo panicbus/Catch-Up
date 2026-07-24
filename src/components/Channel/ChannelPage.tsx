@@ -98,7 +98,7 @@ export function ChannelPage() {
     if (result.errors.length > 0) {
       setRefreshNote(`Refresh hit an error: ${result.errors[0]}${rateLimitNote}`);
     } else if (result.added === 0) {
-      setRefreshNote(`No new stories found.${rateLimitNote}`);
+      setRefreshNote(`No new stories about ${channel.name} from your news sources. Try again later.${rateLimitNote}`);
     } else {
       setRefreshNote(`Found ${result.added} new stor${result.added === 1 ? 'y' : 'ies'}.${rateLimitNote}`);
     }
