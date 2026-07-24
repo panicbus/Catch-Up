@@ -3,10 +3,28 @@ import './StreakCard.css';
 
 const PROGRESS_SEGMENTS = 5;
 
-function FlameIcon() {
+/** The flame grows with the streak: a small single flame at 1 day, incrementally bigger each day,
+ * biggest at 5 (and capped there — see FLAME_MAX_LEVEL). Scaled from its base so it grows upward,
+ * with a brighter inner core for depth. */
+const FLAME_MAX_LEVEL = 5;
+
+function FlameIcon({ level }: { level: number }) {
+  const lvl = Math.min(Math.max(level, 1), FLAME_MAX_LEVEL);
+  const scale = 0.66 + (lvl - 1) * 0.105; // ~0.66 at day 1 → ~1.08 at day 5+
+  // Once the flame is maxed out (5+ days), it's "on fire" — a gentle pulsing ember glow marks it.
+  const glowing = level >= FLAME_MAX_LEVEL;
   return (
-    <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
-      <path d="M10 3c4 4 4 8 0 14-4-6-4-10 0-14z" fill="#ffe08a" />
+    <svg
+      viewBox="0 0 20 20"
+      width="20"
+      height="20"
+      aria-hidden="true"
+      className={`streak-card__flame ${glowing ? 'streak-card__flame--glow' : ''}`}
+    >
+      <g style={{ transformOrigin: '10px 17px', transform: `scale(${scale})` }}>
+        <path d="M10 3c4 4 4 8 0 14-4-6-4-10 0-14z" fill="#ff9d2e" />
+        <path d="M10 8c2 2 2 4 0 7-2-3-2-5 0-7z" fill="#ffe08a" />
+      </g>
     </svg>
   );
 }
@@ -70,7 +88,7 @@ export function StreakCard({ current }: StreakCardProps) {
         )}
       </div>
       <div className="streak-card__row">
-        <FlameIcon />
+        <FlameIcon level={current} />
         <span className="streak-card__count">{current}</span>
         <span className="streak-card__label">day streak</span>
       </div>

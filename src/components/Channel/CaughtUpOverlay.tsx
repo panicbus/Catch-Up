@@ -15,7 +15,7 @@ export function CaughtUpOverlay({ channelName }: { channelName: string }) {
       <div className="caught-up-overlay__badge">
         <span className="caught-up-overlay__confetti">
           {!confettiDone && (
-            <ConfettiEffect pieceCount={60} durationMs={2200} onDone={() => setConfettiDone(true)} />
+            <ConfettiEffect pieceCount={90} durationMs={2500} onDone={() => setConfettiDone(true)} />
           )}
         </span>
         <span>🎉 All caught up on {channelName}!</span>

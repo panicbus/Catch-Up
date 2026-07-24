@@ -2,13 +2,32 @@
   padding: 32px 40px 60px;
 }
 
+/* Header + channel tabs stick to the top as one full-bleed toolbar while the bookmark list scrolls
+   beneath — mirrors ChannelPage's sticky controls. The negative margin/padding makes the background
+   span the panel's full width so scrolled content doesn't peek past its edges. */
+.bookmarks-page__sticky {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg);
+  margin: 0 -40px 20px;
+  padding: 0 40px;
+}
+
 .bookmarks-page__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  padding-top: 14px;
+  margin-bottom: 16px;
 }
 
 .bookmarks-page__title {
   font-size: 24px;
+}
+
+/* Inside the sticky wrapper the tabs' own bottom margin would double up the spacing — the wrapper
+   already provides the gap below. */
+.bookmarks-page__sticky .bookmarks-tabs {
+  margin-bottom: 0;
 }

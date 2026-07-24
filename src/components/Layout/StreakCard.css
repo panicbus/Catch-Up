@@ -66,6 +66,20 @@
   }
 }
 
+/* At a 5+ day streak the flame is maxed and "on fire" — a soft pulsing golden glow celebrates it. */
+.streak-card__flame--glow {
+  animation: streak-flame-glow 1.7s ease-in-out infinite;
+}
+@keyframes streak-flame-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 1.5px rgba(255, 224, 138, 0.55));
+  }
+  50% {
+    filter: drop-shadow(0 0 5px rgba(255, 224, 138, 0.95));
+  }
+}
+
 .streak-card__row {
   display: flex;
   align-items: center;

@@ -56,10 +56,15 @@ export function BookmarksPage() {
 
   return (
     <div className="bookmarks-page">
-      <div className="bookmarks-page__header">
-        <h1 className="bookmarks-page__title">Bookmarks</h1>
+      <div className="bookmarks-page__sticky">
+        <div className="bookmarks-page__header">
+          <h1 className="bookmarks-page__title">Bookmarks</h1>
+          {tabs.length > 0 && (
+            <ViewModeToggle value={settings.defaultViewMode} onChange={(mode) => update({ defaultViewMode: mode })} />
+          )}
+        </div>
         {tabs.length > 0 && (
-          <ViewModeToggle value={settings.defaultViewMode} onChange={(mode) => update({ defaultViewMode: mode })} />
+          <BookmarksChannelTabs tabs={tabs} activeChannelId={activeChannelId} onSelect={setActiveChannelId} />
         )}
       </div>
 
@@ -67,7 +72,6 @@ export function BookmarksPage() {
         <EmptyState title="No bookmarks yet" body="Tap the bookmark icon on any story to save it here." />
       ) : (
         <>
-          <BookmarksChannelTabs tabs={tabs} activeChannelId={activeChannelId} onSelect={setActiveChannelId} />
           <NewsFeed
             articles={articles}
             channelName={activeChannelId ? channels.find((c) => c.id === activeChannelId)?.name ?? '' : 'Bookmarks'}

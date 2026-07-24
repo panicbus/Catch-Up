@@ -10,9 +10,70 @@
   color: #fff;
   font-size: 14px;
   font-weight: 700;
-  box-shadow: 0 6px 16px -6px rgba(43, 35, 32, 0.5);
-  transition: box-shadow 0.1s;
 }
-.roll-the-dice-button:hover {
-  box-shadow: 0 8px 20px -6px rgba(43, 35, 32, 0.6);
+
+/* --- 3D die ------------------------------------------------------------------------------------ */
+.dice {
+  --die-size: 18px;
+  display: inline-block;
+  width: var(--die-size);
+  height: var(--die-size);
+  perspective: 240px;
+}
+
+.dice__cube {
+  /* Must be block-level — as a bare inline <span> its width/height:100% would be ignored, collapsing
+     the cube to 0 and shrinking every face to its content size. */
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  /* Rests dead-on (front face flat, no other faces peeking) — the 3D only reveals itself as it rolls. */
+  transform: rotateX(0deg);
+}
+
+/* Roll forward one full turn on hover: front → bottom → back → top → front, a different pip count
+   coming up on each face. A positive rotateX tips the bottom face up toward the viewer first. */
+.roll-the-dice-button:hover .dice__cube {
+  animation: dice-roll 0.85s ease;
+}
+@keyframes dice-roll {
+  from {
+    transform: rotateX(0deg);
+  }
+  to {
+    transform: rotateX(360deg);
+  }
+}
+
+.dice__face {
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  background: #fbfaf6;
+  /* Each face only shows when its front is toward the viewer — so the pips it carries appear as it
+     rolls into view, and we never see a mirrored face through the back. */
+  backface-visibility: hidden;
+}
+
+/* Pips as SVG circles — identical size, crisp at any render size. */
+.dice__pips {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Cube face placement (half of --die-size = 9px). */
+.dice__face--front {
+  transform: translateZ(9px);
+}
+.dice__face--back {
+  transform: rotateX(180deg) translateZ(9px);
+}
+.dice__face--top {
+  transform: rotateX(90deg) translateZ(9px);
+}
+.dice__face--bottom {
+  transform: rotateX(-90deg) translateZ(9px);
 }

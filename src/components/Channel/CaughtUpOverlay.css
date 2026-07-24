@@ -1,8 +1,9 @@
-/* Sticky, zero-height row so the banner floats over the cards instead of pushing them down. Pinned
-   near the top of the scroll viewport while you stay caught up. */
+/* Sticky, zero-height row so the banner floats over the cards instead of pushing them down. Sits
+   about a third of the way down the viewport (rather than pinned to the very top) so the reward
+   lands in view where the eye already is when you finish. */
 .caught-up-overlay {
   position: sticky;
-  top: 12px;
+  top: 33vh;
   z-index: 30;
   height: 0;
   display: flex;
@@ -14,18 +15,21 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 18px;
-  border-radius: 999px;
+  justify-content: center;
+  gap: 14px;
+  padding: 20px 48px;
+  min-height: 168px;
+  border-radius: 3px;
   background: var(--bg);
-  border: 1px solid var(--border);
-  box-shadow: 0 12px 30px -8px rgba(0, 0, 0, 0.4);
+  border: 2px solid var(--border-strong);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  /* Same face as the "Catch Up" wordmark (Logo.tsx uses var(--font-display)). */
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: 27px;
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
-  animation: caught-up-overlay-in 0.28s ease;
+  animation: caught-up-overlay-in 0.3s ease;
 }
 
 /* The confetti originates from the centre of the badge. Zero-size anchor with overflow visible so
