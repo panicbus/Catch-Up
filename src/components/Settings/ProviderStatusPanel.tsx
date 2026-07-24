@@ -33,9 +33,6 @@ export function ProviderStatusPanel() {
           </span>
         </div>
       ))}
-      <p className="provider-status__note">
-        API keys are set via environment variables (see .env.example) — there's no in-app key entry yet.
-      </p>
     </div>
   );
 }

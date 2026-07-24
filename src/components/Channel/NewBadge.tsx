@@ -5,6 +5,9 @@ import './NewBadge.css';
 
 const HOVER_DELAY_MS = 500;
 
+/** The "Recent" badge — a purely time-based marker (published < 24h ago), shown regardless of
+ * read state. Internal name/CSS classes stay `NewBadge`/`new-badge` (the visible label changed
+ * from "NEW" to "Recent") to avoid churning the grid-view positioning rules that key off them. */
 export function NewBadge({ publishedAt }: { publishedAt: string }) {
   const isMobile = useIsMobile();
   const [hovering, setHovering] = useState(false);
@@ -52,10 +55,10 @@ export function NewBadge({ publishedAt }: { publishedAt: string }) {
       // see DismissButton for the same fix and why click-time stopPropagation alone is too late.
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <span className="new-badge">NEW</span>
+      <span className="new-badge">Recent</span>
       {showTooltip && (
         <span className="new-badge__tooltip" role="tooltip">
-          Published within 24 hrs
+          Published less than 24 hours ago
         </span>
       )}
     </span>

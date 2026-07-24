@@ -1,7 +1,7 @@
 import { useCallback, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { NewBadge } from './NewBadge';
 import { PaywallBadge } from './PaywallBadge';
-import { DismissButton } from './DismissButton';
+import { DismissButton, type DismissVariant } from './DismissButton';
 import { BookmarkButton } from '../common/BookmarkButton';
 import { relativeTime } from '../../services/formatters';
 import { api } from '../../services/api';
@@ -87,6 +87,15 @@ interface NewsCardProps {
    * instant snap a grid-column change can't otherwise be transitioned out of. List view doesn't
    * set this — there's no reflow there to animate. */
   animateReflow?: boolean;
+  /** True when this card was cleared *in place* by a passive trigger (scrolled past the top, or
+   * opened) rather than swept away with the check button — see NewsFeed's keepVisible set. The card
+   * stays put but reads as done: de-emphasized, with a "Read" marker. Distinct from the "Recent"
+   * time badge, which is left alone. Only ever set on already-read cards in the main (unread)
+   * section, never in the archive. */
+  readInPlace?: boolean;
+  /** Files a read-in-place card away: plays the fly-off then removes it from the feed (into the
+   * archive on a channel, or simply out of view in The Pool). Only meaningful when readInPlace. */
+  onArchiveReadInPlace?: (articleId: string) => void;
 }
 
 type ExitReason = null | 'read' | 'unbookmark';
@@ -105,6 +114,8 @@ export function NewsCard({
   onBookmarkToggled,
   paneMode,
   animateReflow,
+  readInPlace,
+  onArchiveReadInPlace,
 }: NewsCardProps) {
   const [exitReason, setExitReason] = useState<ExitReason>(null);
   const [imageFailed, setImageFailed] = useState(false);
@@ -130,23 +141,33 @@ export function NewsCard({
     onCommit: () => commitDismiss(SWIPE_DISMISS_MS),
   });
 
+  // What the check button means for this card right now (drives its icon/animation and the action).
+  const dismissVariant: DismissVariant = !article.read ? 'unread' : readInPlace ? 'readInPlace' : 'archived';
+
   const handleDismissClick = useCallback(() => {
     if (exitReason) return;
-    if (article.read) {
-      // Already read — undo, don't re-mark. Never animates: undoing never removes a card from
-      // its current list (it either stays in place, or moves out of the "read" section, which is
-      // handled below by the same staysInPlace check).
+    if (dismissVariant === 'archived') {
+      // Undo — bring an already-filed story back to unread. No fly-off (it isn't leaving this list;
+      // it either stays put here, or moves out of the archive/read section on the reload).
       void api.markArticleUnread(article.id, article.channelId);
       return;
     }
+    if (dismissVariant === 'readInPlace') {
+      // Finalize a read-in-place card: fly it off, then hand it back to the feed to file away
+      // (archive on a channel; drop from view in The Pool). Already read, so no data change.
+      setExitReason('read');
+      window.setTimeout(() => onArchiveReadInPlace?.(article.id), BUTTON_DISMISS_MS);
+      return;
+    }
+    // Unread.
     if (staysInPlace) {
-      // Stays visible in this list either way — just flip the icon, no fly-off.
+      // Stays visible in this list either way (Bookmarks) — just flip the icon, no fly-off.
       void api.markArticleRead(article.id, article.channelId);
       return;
     }
     setExitReason('read');
     commitDismiss(BUTTON_DISMISS_MS);
-  }, [exitReason, article.read, article.id, article.channelId, staysInPlace, commitDismiss]);
+  }, [exitReason, dismissVariant, article.id, article.channelId, staysInPlace, commitDismiss, onArchiveReadInPlace]);
 
   const handleReadFullStory = useCallback(
     (e: MouseEvent<HTMLAnchorElement>) => {
@@ -191,7 +212,11 @@ export function NewsCard({
 
   return (
     <div
-      className={`news-card ${paneMode ? 'news-card--pane' : ''} ${canExpand ? '' : 'news-card--static'} ${exitClass}`}
+      className={`news-card ${paneMode ? 'news-card--pane' : ''} ${canExpand ? '' : 'news-card--static'} ${readInPlace ? 'news-card--read-in-place' : ''} ${exitClass}`}
+      // Read by useScrollCatchUp's IntersectionObserver: data-article-id identifies which story
+      // scrolled past, and data-unread marks which cards it should watch (only ones still unread).
+      data-article-id={article.id}
+      data-unread={!article.read}
       // Not role="button" — this element wraps other real interactive controls (dismiss,
       // bookmark, "Read full story"), and a button containing more buttons/links is an ARIA
       // anti-pattern (confuses how assistive tech tabs through it). "article" is the correct
@@ -209,7 +234,7 @@ export function NewsCard({
     >
       <div className="news-card__actions">
         {!hideDismiss && (
-          <DismissButton onDismiss={handleDismissClick} disabled={!!exitReason} read={article.read} />
+          <DismissButton onDismiss={handleDismissClick} disabled={!!exitReason} variant={dismissVariant} />
         )}
         <BookmarkButton
           articleId={article.id}
@@ -221,14 +246,33 @@ export function NewsCard({
         />
       </div>
 
-      {article.channelName && (
-        <div className="news-card__channel-label" style={{ color: getTileColor(article.channelId) }}>
-          {article.channelName}
+      {/* Read marker sits top-right, tucked under the action icons — a distinct "you've read this"
+          cue, separate from the dimming and from the (unrelated) "Recent" recency badge. */}
+      {readInPlace && (
+        <span className="news-card__read-badge">
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+          Read
+        </span>
+      )}
+
+      {/* Eyebrow: the channel/category label and the "Recent" badge sit together on one line, so
+          "Recent" reads as a tag on the category rather than floating by the title. "Recent" is a
+          pure recency signal (published < 24h) — NOT gated on read state, so a read-but-still-timely
+          story keeps it; read-ness is conveyed separately (dimming + the Read marker). */}
+      {(article.channelName || !hideNewBadge) && (
+        <div className="news-card__eyebrow">
+          {article.channelName && (
+            <span className="news-card__channel-label" style={{ color: getTileColor(article.channelId) }}>
+              {article.channelName}
+            </span>
+          )}
+          {!hideNewBadge && <NewBadge publishedAt={article.publishedAt} />}
         </div>
       )}
 
       <div className="news-card__top">
-        {!hideNewBadge && !article.read && <NewBadge publishedAt={article.publishedAt} />}
         <span className="news-card__title">{article.title}</span>
       </div>
 

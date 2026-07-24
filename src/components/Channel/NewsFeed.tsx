@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { flushSync } from 'react-dom';
 import { groupByDay } from '../../utils/groupByDay';
 import { intersperseByContent } from '../../utils/intersperseByContent';
 import { formatDateHeader } from '../../services/formatters';
 import { api } from '../../services/api';
+import { useScrollCatchUp } from '../../hooks/useScrollCatchUp';
 import { NewsCard, type NewsCardData } from './NewsCard';
 import { AllCaughtUp } from './AllCaughtUp';
+import { CaughtUpOverlay } from './CaughtUpOverlay';
 import type { ViewMode } from '../../../ipc-contract';
 import './NewsFeed.css';
 
@@ -36,14 +38,31 @@ interface NewsFeedProps {
   /** Whether marking a card read removes it from view (with the fly-off animation) instead of
    * leaving it in place with just the dismiss icon flipped to its undo state. Defaults to
    * matching partitionByRead — channel view's inbox behavior removes, Bookmarks' flat list
-   * doesn't — but The Pool wants both at once: no archive/celebration/streak (partitionByRead
-   * stays false) yet still remove a story once you've read it, so it passes this explicitly. */
+   * doesn't — but The Pool wants both at once: no archive/celebration (partitionByRead
+   * stays false) yet still remove a story once the check button dismisses it, so it passes this
+   * explicitly. */
   removeOnRead?: boolean;
   /** Whether unbookmarking a card removes it from view. Defaults to matching partitionByRead too
    * (Bookmarks removes since its whole list IS the bookmarked set; channel view doesn't). The
    * Pool overrides this to false — unlike Bookmarks, unbookmarking there shouldn't empty a
    * general feed just because a save-for-later flag got cleared. */
   removeCardOnUnbookmark?: boolean;
+  /** Enables the low-friction catch-up behavior: scrolling a story past the top or opening it marks
+   * it read *in place* (dimmed, kept where it is via keepVisible below, rather than swept to the
+   * archive), reaching the bottom clears the on-screen stragglers, and hitting zero unread fires
+   * the celebration + advances the streak. Defaults to matching partitionByRead (on for channel
+   * view, off for Bookmarks); The Pool turns it on explicitly even though it isn't partitioned. */
+  catchUpMode?: boolean;
+  /** Reports how many stories are currently read-in-place (dimmed, kept in the feed) so a parent
+   * can drive a "move all to archive" control's enabled state. */
+  onReadInPlaceCountChange?: (count: number) => void;
+}
+
+/** Imperative handle for parents (ChannelPage's "move read to archive" button). */
+export interface NewsFeedHandle {
+  /** Files every read-in-place card away at once (to the archive on a channel, out of view in The
+   * Pool) by clearing the keep-visible set. */
+  flushReadInPlace: () => void;
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -83,6 +102,8 @@ function GridSection({
   removeCardOnUnbookmark,
   expandedArticleId,
   onToggleExpand,
+  readInPlaceIds,
+  onArchiveReadInPlace,
 }: {
   articles: NewsCardData[];
   isGrid: boolean;
@@ -90,6 +111,10 @@ function GridSection({
   removeCardOnUnbookmark: boolean;
   expandedArticleId: string | null;
   onToggleExpand: (articleId: string) => void;
+  /** Ids passively read this session (NewsFeed's keepVisible) — a card in this set that's read and
+   * not currently expanded renders dimmed with the "Read" marker. Undefined outside catch-up mode. */
+  readInPlaceIds?: Set<string>;
+  onArchiveReadInPlace?: (articleId: string) => void;
 }) {
   const containerClass = isGrid ? 'news-feed__grid' : 'news-feed__list';
 
@@ -97,6 +122,8 @@ function GridSection({
     <div className={containerClass}>
       {articles.map((article) => {
         const isExpanded = expandedArticleId === article.id;
+        // Don't dim the card you're actively reading — only collapsed, read, kept-in-place cards.
+        const readInPlace = !!readInPlaceIds?.has(article.id) && article.read && !isExpanded;
         return (
           <NewsCard
             key={article.id}
@@ -106,6 +133,8 @@ function GridSection({
             expanded={isExpanded}
             paneMode={isGrid && isExpanded}
             animateReflow={isGrid}
+            readInPlace={readInPlace}
+            onArchiveReadInPlace={onArchiveReadInPlace}
             onToggleExpand={() => onToggleExpand(article.id)}
           />
         );
@@ -121,6 +150,8 @@ function DayGroups({
   removeCardOnUnbookmark,
   expandedArticleId,
   onToggleExpand,
+  readInPlaceIds,
+  onArchiveReadInPlace,
 }: {
   articles: NewsCardData[];
   viewMode: ViewMode;
@@ -128,6 +159,8 @@ function DayGroups({
   removeCardOnUnbookmark: boolean;
   expandedArticleId: string | null;
   onToggleExpand: (articleId: string) => void;
+  readInPlaceIds?: Set<string>;
+  onArchiveReadInPlace?: (articleId: string) => void;
 }) {
   const byDay = groupByDay(articles, 'publishedAt');
 
@@ -143,6 +176,8 @@ function DayGroups({
             removeCardOnUnbookmark={removeCardOnUnbookmark}
             expandedArticleId={expandedArticleId}
             onToggleExpand={onToggleExpand}
+            readInPlaceIds={readInPlaceIds}
+            onArchiveReadInPlace={onArchiveReadInPlace}
           />
         </section>
       ))}
@@ -208,42 +243,133 @@ function ReadArchive({
   );
 }
 
-export function NewsFeed({
-  articles,
-  channelName,
-  viewMode,
-  maxUnreadStories = Infinity,
-  partitionByRead = true,
-  removeOnRead = partitionByRead,
-  removeCardOnUnbookmark = !partitionByRead,
-}: NewsFeedProps) {
+export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsFeed(
+  {
+    articles,
+    channelName,
+    viewMode,
+    maxUnreadStories = Infinity,
+    partitionByRead = true,
+    removeOnRead = partitionByRead,
+    removeCardOnUnbookmark = !partitionByRead,
+    catchUpMode = partitionByRead,
+    onReadInPlaceCountChange,
+  }: NewsFeedProps,
+  ref
+) {
   const [justCleared, setJustCleared] = useState(false);
   const [expandedArticleId, setExpandedArticleId] = useState<string | null>(null);
+  // Ids cleared *in place* this session by a passive trigger (scroll-past or open). They stay in the
+  // main section (dimmed) instead of jumping to the archive, so the list never reflows out from
+  // under you mid-scroll. Resets on remount — on your next visit those reads settle into the archive
+  // (channel) or drop out (The Pool) naturally, since they're no longer held here.
+  const [keepVisible, setKeepVisible] = useState<Set<string>>(() => new Set());
   const prevUnreadCountRef = useRef<number | null>(null);
+  const feedRef = useRef<HTMLDivElement>(null);
 
-  // `unread` is the true count, used for the celebration/streak logic below — articles arrive
-  // already sorted newest-first (see articlesCache.getArticles). Filtered whenever either
-  // partitionByRead or removeOnRead wants read articles gone from the main section — The Pool
-  // sets removeOnRead alone (partitionByRead stays false, so this is still the only section
-  // rendered, never an archive).
-  const unread = partitionByRead || removeOnRead ? articles.filter((a) => !a.read) : articles;
+  const byId = useMemo(() => new Map(articles.map((a) => [a.id, a])), [articles]);
+
+  // articles arrive already sorted newest-first (see articlesCache.getArticles).
+  const baseUnread = partitionByRead || removeOnRead ? articles.filter((a) => !a.read) : articles;
   // Intersperse *before* slicing to the cap, not after — groupByDay (used below) always re-sorts
-  // each day's own bucket back to pure chronological order, so any interspersing done after
-  // grouping can only rearrange whatever already survived this cut. Doing it here instead means a
-  // content-having article that would otherwise be sliced off entirely (behind a long recent-but-
-  // empty run from a source like Google News RSS) gets pulled into the visible set at all — the
-  // per-day intersperse in DayGroups/ReadArchive then just distributes it well within its day.
-  const visibleUnread = intersperseByContent(unread, hasReadableContent).slice(0, maxUnreadStories);
-  const read = partitionByRead ? articles.filter((a) => a.read) : [];
+  // each day's own bucket back to pure chronological order, so any interspersing done after grouping
+  // can only rearrange whatever already survived this cut. Doing it here means a content-having
+  // article that would otherwise be sliced off entirely (behind a long recent-but-empty run from a
+  // source like Google News RSS) still makes it into the visible set.
+  const cappedBase = intersperseByContent(baseUnread, hasReadableContent).slice(0, maxUnreadStories);
+  const cappedBaseIds = useMemo(() => new Set(cappedBase.map((a) => a.id)), [cappedBase]);
+
+  // Main section: the capped unread cards, plus (in catch-up mode) the ones read-in-place this
+  // session so they stay put and dimmed. Filtering `articles` directly keeps chronological order.
+  const mainArticles = articles.filter(
+    (a) => cappedBaseIds.has(a.id) || (catchUpMode && a.read && keepVisible.has(a.id))
+  );
+  // Archive gets read cards that AREN'T being kept in place (i.e. swept away with the check button,
+  // or read in a previous session).
+  const archive = partitionByRead ? articles.filter((a) => a.read && !keepVisible.has(a.id)) : [];
+
+  // The true, uncapped unread count — the source of truth for the celebration + streak, independent
+  // of the display cap and of what's being kept visible in place.
+  const trueUnreadCount = articles.reduce((n, a) => (a.read ? n : n + 1), 0);
+
+  const markReadInPlace = useCallback((articleId: string, channelId: string) => {
+    setKeepVisible((prev) => {
+      const next = new Set(prev);
+      next.add(articleId);
+      return next;
+    });
+    // Guarded — this app has no error boundary, so a throw here (e.g. a stale preload bundle after a
+    // main-process change, pre-restart) would otherwise blank the whole app instead of just skipping.
+    try {
+      void api.markArticleRead(articleId, channelId)?.catch((err) => console.error('[NewsFeed] markRead failed', err));
+    } catch (err) {
+      console.error('[NewsFeed] markRead failed synchronously', err);
+    }
+  }, []);
+
+  // Files a single read-in-place card away — drop it from keepVisible so it re-partitions into the
+  // archive (channel) or out of view (The Pool). Used by a card's own check button.
+  const archiveReadInPlace = useCallback((articleId: string) => {
+    setKeepVisible((prev) => {
+      if (!prev.has(articleId)) return prev;
+      const next = new Set(prev);
+      next.delete(articleId);
+      return next;
+    });
+  }, []);
+
+  // Report how many cards are currently read-in-place so ChannelPage can enable/disable its
+  // "move read to archive" button. Count only cards actually present + read + kept.
+  const readInPlaceCount = catchUpMode
+    ? articles.reduce((n, a) => (a.read && keepVisible.has(a.id) ? n + 1 : n), 0)
+    : 0;
+  useEffect(() => {
+    onReadInPlaceCountChange?.(readInPlaceCount);
+  }, [readInPlaceCount, onReadInPlaceCountChange]);
+
+  useImperativeHandle(ref, () => ({ flushReadInPlace: () => setKeepVisible(new Set()) }), []);
+
+  const onPassedTop = useCallback(
+    (articleId: string) => {
+      const a = byId.get(articleId);
+      if (a && !a.read) markReadInPlace(a.id, a.channelId);
+    },
+    [byId, markReadInPlace]
+  );
+
+  const onReachedBottom = useCallback(() => {
+    // Clear whatever unread is still on screen — the last screenful that never crossed the top.
+    for (const a of cappedBase) {
+      if (!a.read) markReadInPlace(a.id, a.channelId);
+    }
+  }, [cappedBase, markReadInPlace]);
+
+  const unreadKey = cappedBase
+    .filter((a) => !a.read)
+    .map((a) => a.id)
+    .join('|');
+
+  useScrollCatchUp({
+    containerRef: feedRef,
+    enabled: catchUpMode,
+    unreadKey,
+    onPassedTop,
+    onReachedBottom,
+  });
 
   const toggleExpand = (articleId: string) => {
+    const willOpen = expandedArticleId !== articleId;
+    // Opening a card counts as reading it — mark it read in place (it stays put, dimmed once
+    // collapsed again). Collapsing does nothing to read state.
+    if (willOpen && catchUpMode) {
+      const a = byId.get(articleId);
+      if (a && !a.read) markReadInPlace(a.id, a.channelId);
+    }
     const apply = () => setExpandedArticleId((prev) => (prev === articleId ? null : articleId));
-    // Only grid view has a reflow worth animating (list view already expands smoothly in place,
-    // no grid-column snap involved) — see GridSection's animateReflow/NewsCard's view-transition-
-    // name. flushSync forces the state update (and its DOM effects) to commit synchronously
-    // inside the callback, which startViewTransition requires to capture an accurate "after"
-    // snapshot — React's normal batching would otherwise let the callback return before the DOM
-    // actually reflects the new state.
+    // Only grid view has a reflow worth animating (list view already expands smoothly in place, no
+    // grid-column snap involved) — see GridSection's animateReflow/NewsCard's view-transition-name.
+    // flushSync forces the state update to commit synchronously inside the callback, which
+    // startViewTransition requires to capture an accurate "after" snapshot.
     if (viewMode === 'grid' && document.startViewTransition) {
       document.startViewTransition(() => flushSync(apply));
     } else {
@@ -251,54 +377,60 @@ export function NewsFeed({
     }
   };
 
-  // `justCleared` genuinely needs a normal effect here (not a render-time computation) — this
-  // app renders under React.StrictMode, which double-invokes function components in dev, and any
-  // render-time approach (mutating a ref, or even calling setState conditionally during render)
-  // ends up flip-flopping across the two passes and committing the wrong value. An effect avoids
-  // that: it only fires once per real commit. The one-render lag this introduces (AllCaughtUp
-  // mounts with celebrate=false, then gets updated to celebrate=true on the next render) is fine
-  // as long as AllCaughtUp actually reacts to that later prop change — see its own effect.
+  // `justCleared` genuinely needs a normal effect here (not a render-time computation) — this app
+  // renders under React.StrictMode, which double-invokes function components in dev, and any
+  // render-time approach ends up flip-flopping across the two passes. An effect only fires once per
+  // real commit.
   useEffect(() => {
-    if (!partitionByRead) return;
+    if (!catchUpMode) return;
     const prevCount = prevUnreadCountRef.current;
-    if (prevCount !== null && prevCount > 0 && unread.length === 0) {
+    if (prevCount !== null && prevCount > 0 && trueUnreadCount === 0) {
       setJustCleared(true);
-      // This genuine >0 -> 0 transition is what advances the daily streak — not merely opening
-      // the app (see dataStore.recordCatchUp). Idempotent per calendar day on the main side.
-      // Guarded: this app has no error boundary, so an uncaught throw here (e.g. a stale preload
-      // bundle missing this IPC method after a main-process change, before a restart) would
-      // otherwise blank the entire app instead of just silently skipping the streak bump.
+      // This genuine >0 -> 0 transition is what advances the daily streak (idempotent per calendar
+      // day on the main side). Guarded — no error boundary; see markReadInPlace above.
       try {
         void api.recordCatchUp()?.catch((err) => console.error('[NewsFeed] recordCatchUp failed', err));
       } catch (err) {
         console.error('[NewsFeed] recordCatchUp failed synchronously', err);
       }
-    } else if (unread.length > 0) {
+    } else if (trueUnreadCount > 0) {
       setJustCleared(false);
     }
-    prevUnreadCountRef.current = unread.length;
+    prevUnreadCountRef.current = trueUnreadCount;
     // Only the unread count should re-run this — article identity churns constantly on refresh.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partitionByRead, unread.length]);
+  }, [catchUpMode, trueUnreadCount]);
+
+  const caughtUp = catchUpMode && trueUnreadCount === 0;
+  // Nothing left on screen (a fresh visit to an already-clear channel, or after the kept-in-place
+  // reads have settled into the archive on remount) → the full-page celebration, as before.
+  const showFullCaughtUp = caughtUp && mainArticles.length === 0;
 
   return (
-    <div className="news-feed">
-      {partitionByRead && unread.length === 0 ? (
+    <div className="news-feed" ref={feedRef}>
+      {showFullCaughtUp ? (
         <AllCaughtUp channelName={channelName} celebrate={justCleared} />
       ) : (
-        <DayGroups
-          articles={visibleUnread}
-          viewMode={viewMode}
-          staysInPlace={!removeOnRead}
-          removeCardOnUnbookmark={removeCardOnUnbookmark}
-          expandedArticleId={expandedArticleId}
-          onToggleExpand={toggleExpand}
-        />
+        <>
+          {/* Just reached zero this session, with the cleared cards still shown dimmed in place —
+              float the reward over them instead of replacing the feed. */}
+          {caughtUp && mainArticles.length > 0 && <CaughtUpOverlay channelName={channelName} />}
+          <DayGroups
+            articles={mainArticles}
+            viewMode={viewMode}
+            staysInPlace={!removeOnRead}
+            removeCardOnUnbookmark={removeCardOnUnbookmark}
+            expandedArticleId={expandedArticleId}
+            onToggleExpand={toggleExpand}
+            readInPlaceIds={catchUpMode ? keepVisible : undefined}
+            onArchiveReadInPlace={catchUpMode ? archiveReadInPlace : undefined}
+          />
+        </>
       )}
 
-      {read.length > 0 && (
+      {archive.length > 0 && (
         <ReadArchive
-          articles={read}
+          articles={archive}
           viewMode={viewMode}
           removeCardOnUnbookmark={removeCardOnUnbookmark}
           expandedArticleId={expandedArticleId}
@@ -307,4 +439,4 @@ export function NewsFeed({
       )}
     </div>
   );
-}
+});

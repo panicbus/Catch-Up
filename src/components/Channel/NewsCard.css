@@ -22,6 +22,36 @@
   cursor: default;
 }
 
+/* Cleared in place by a passive trigger (scrolled past / opened) — stays put but reads as done.
+   Dimmed so unread cards visibly stand out from it, without hiding it. Kept separate from the
+   "Recent" time badge, which stays at full strength. See NewsCard.tsx's readInPlace. */
+.news-card--read-in-place {
+  opacity: 0.55;
+}
+/* No hover reaction on an already-read card — it's settled, not an active target. Overrides the
+   base .news-card:hover box-shadow so it doesn't lift on hover. */
+.news-card--read-in-place:hover {
+  box-shadow: var(--shadow-card);
+}
+
+/* The "Read" marker — top-right, tucked just under the action icons. The distinct "you've read
+   this" cue, separate from the dimming and from the (unrelated) "Recent" recency badge. */
+.news-card__read-badge {
+  position: absolute;
+  top: 40px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 999px;
+  background: rgba(74, 156, 109, 0.16);
+  color: #3f8a60;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 /* Background itself is set inline per-card (see getStoryCardColor in NewsCard.tsx) — hashed by
    article id rather than a positional nth-child cycle, since a fixed cycle lines up into visible
    color columns once the grid is more than one card wide. --story-card-1 above is just the
@@ -70,17 +100,19 @@
   pointer-events: none;
 }
 
-/* The Pool only (see NewsCardData.channelName) — an eyebrow label above the title identifying
-   which channel a card came from, since cards there are mixed across every channel. Sits in
-   normal flow (not absolutely positioned like the actions/NEW badge), so the top-right action
-   icons just need it to stay clear of their own column via the same padding-right convention
-   .news-card__top already uses. */
+/* Eyebrow row: category (channel) label + the "Recent" badge, side by side above the title. */
+.news-card__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 72px;
+}
+
 .news-card__channel-label {
   font-size: 10.5px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding-right: 68px;
 }
 
 .news-card__top {
@@ -204,15 +236,4 @@
 }
 .news-feed__grid .news-card__snippet:not(.news-card__snippet--full) {
   -webkit-line-clamp: 3;
-}
-
-/* Grid view puts the NEW badge under the action icons instead of inline before the title. The
-   title keeps its existing padding-right (68px, above, sized to the action icons' own footprint,
-   independent of where the badge sits) so every wrapped line stays clear of that column. Targets
-   the wrap (not .new-badge itself) so the wrap - the tooltip's positioning anchor - moves with
-   it, instead of collapsing to 0x0 once its only child is taken out of flow. */
-.news-feed__grid .new-badge-wrap {
-  position: absolute;
-  top: 46px;
-  right: 8px;
 }

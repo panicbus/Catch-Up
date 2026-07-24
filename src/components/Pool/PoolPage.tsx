@@ -12,11 +12,13 @@ const SHOWN_OPTIONS = [10, 25, 50] as const;
 
 /** Every channel's stories merged into one chronological feed — filterable down to a single
  * channel, but never a subchannel (that's what keeps this "a pool," not just another channel
- * view). No archive, no "all caught up" celebration, and clearing it doesn't touch the streak
- * (partitionByRead stays false) — but marking a story read still removes it from view via
- * NewsFeed's removeOnRead, since it's still the real, shared read state underneath (it'll show
- * as read back on its own channel page too). Unbookmarking, unlike on Bookmarks, does NOT remove
- * a card here — this is a general feed, not a bookmarks-only one. */
+ * view). Gets the same low-friction catch-up behavior as a channel (catchUpMode): scrolling past
+ * or opening a story clears it in place, and reaching zero unread fires the celebration and bumps
+ * the streak — clearing The Pool means you've read everything across every channel, the ultimate
+ * catch-up. It has no per-day "Read stories" archive though (partitionByRead stays false), so a
+ * story read via the check button is removed from view (removeOnRead) and passively-read ones drop
+ * out on the next visit rather than moving to an archive. Unbookmarking, unlike on Bookmarks, does
+ * NOT remove a card here — this is a general feed, not a bookmarks-only one. */
 export function PoolPage() {
   const { channels } = useChannels();
   const { articles, loading } = usePoolArticles(channels);
@@ -82,6 +84,7 @@ export function PoolPage() {
           maxUnreadStories={shownCount}
           partitionByRead={false}
           removeOnRead
+          catchUpMode
           removeCardOnUnbookmark={false}
         />
       )}

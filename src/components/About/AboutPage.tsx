@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import type { ProviderStatus } from '../../../ipc-contract';
-import { SourceStatusDot } from './SourceStatusDot';
 import '../Settings/SettingsPage.css';
 import './AboutPage.css';
 
@@ -53,18 +52,11 @@ export function AboutPage() {
       </section>
 
       <section className="settings-section">
-        <h2 className="settings-section__title">News sources</h2>
+        <h2 className="settings-section__title">News providers</h2>
         <p className="about-page__text">
-          Every story comes from one of the sources below, pulled in parallel with no overlapping coverage.
+          Every story comes from one of the following news providers, pulled in parallel with no
+          overlapping coverage: {providers.map((p) => p.label).join(', ')}.
         </p>
-        <ul className="about-page__sources-list">
-          {providers.map((p) => (
-            <li key={p.id}>
-              {p.label}
-              <SourceStatusDot provider={p} />
-            </li>
-          ))}
-        </ul>
       </section>
 
       <footer className="about-page__footer">

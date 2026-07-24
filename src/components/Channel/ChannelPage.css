@@ -16,24 +16,63 @@
 
 /* Breaks out to the full width of the panel (matching .channel-page's own 40px padding with a
    negative margin) so the sticky bar's background reads as a full-bleed toolbar rather than an
-   inset block, while its content stays aligned with the rest of the page via matching padding. */
-.channel-page__controls {
+   inset block, while its content stays aligned with the rest of the page via matching padding.
+   Wraps the controls row AND the subchannel manage panel so both stick together. */
+.channel-page__sticky {
   position: sticky;
   top: 0;
   background: var(--bg);
   margin: 0 -40px 8px;
   padding: 14px 40px;
   z-index: 3;
+}
+
+.channel-page__controls {
   display: flex;
-  align-items: center;
+  /* Top-align so the view toggle + archive button line up with the FIRST row of subchannel pills
+     rather than centering against a two-row-tall wrapped bar. */
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
 }
 
 .channel-page__controls-left {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   min-width: 0;
+  gap: 8px;
+}
+
+/* The toggle + archive button; kept from shrinking or wrapping under the pills, and pinned to the
+   top so they align with the first pill row. */
+.channel-page__controls-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.channel-page__archive-read {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s, border-color 0.12s, opacity 0.12s;
+}
+.channel-page__archive-read:not(:disabled):hover {
+  border-color: #4a9c6d;
+  color: #3f8a60;
+  background: rgba(74, 156, 109, 0.1);
+}
+.channel-page__archive-read:disabled {
+  opacity: 0.4;
 }
 
 /* Picks up the page's own title once it scrolls out from behind this sticky bar (see
@@ -45,8 +84,13 @@
 .channel-page__sticky-title {
   display: grid;
   grid-template-columns: 0fr;
+  /* Never give up width to the wrapping subchannel bar beside it — without this the title's column
+     gets squeezed and the name clips once the pills wrap to a second row. */
+  flex-shrink: 0;
   opacity: 0;
   margin-right: 0;
+  /* Vertically center the single-line title against the ~30px-tall first pill row. */
+  padding-top: 4px;
   transition: grid-template-columns 0.35s ease, opacity 0.25s ease, margin-right 0.35s ease;
 }
 .channel-page__sticky-title--visible {

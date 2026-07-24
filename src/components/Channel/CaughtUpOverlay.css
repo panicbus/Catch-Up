@@ -1,0 +1,51 @@
+/* Sticky, zero-height row so the banner floats over the cards instead of pushing them down. Pinned
+   near the top of the scroll viewport while you stay caught up. */
+.caught-up-overlay {
+  position: sticky;
+  top: 12px;
+  z-index: 30;
+  height: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.caught-up-overlay__badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 30px -8px rgba(0, 0, 0, 0.4);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  animation: caught-up-overlay-in 0.28s ease;
+}
+
+/* The confetti originates from the centre of the badge. Zero-size anchor with overflow visible so
+   the pieces fly outward past it. */
+.caught-up-overlay__confetti {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  overflow: visible;
+}
+
+@keyframes caught-up-overlay-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

@@ -7,17 +7,70 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  position: relative;
   color: var(--text-faint);
-}
-.dismiss-button:hover {
-  color: #4a9c6d;
 }
 .dismiss-button:disabled {
   opacity: 0.4;
 }
 
+/* A visible disc, not just a bare checkmark — a clear "mark this read" target. Explicit box so it
+   stays a perfect circle regardless of the flex context around it. Fills green on hover so the
+   action reads as "complete/done", distinct from the bookmark's accent-red save. */
+.dismiss-button__disc {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.13s, border-color 0.13s, color 0.13s;
+}
+.dismiss-button:hover .dismiss-button__disc {
+  border-color: #4a9c6d;
+  background: #4a9c6d;
+  color: #fff;
+}
+
+/* Read-in-place (dimmed in the feed) — filled green with a check, click files it to the archive. */
+.dismiss-button--read .dismiss-button__disc {
+  border-color: #4a9c6d;
+  background: #4a9c6d;
+  color: #fff;
+}
+
+/* Already archived (or a stays-in-place list) — muted "undo" affordance. */
+.dismiss-button--archived .dismiss-button__disc {
+  border-color: #4a9c6d;
+  background: rgba(74, 156, 109, 0.16);
+  color: #3f8a60;
+}
+.dismiss-button--archived:hover .dismiss-button__disc {
+  background: var(--surface-hover);
+  border-color: var(--text-faint);
+  color: var(--text-muted);
+}
+
+/* Bookmark-style wag when clearing — pairs with the radiating BurstEffect. */
+.dismiss-button__disc--wag {
+  animation: dismiss-wag 380ms ease;
+  transform-origin: 50% 55%;
+}
+@keyframes dismiss-wag {
+  0% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(-16deg) scale(1.18); }
+  45% { transform: rotate(12deg) scale(1.18); }
+  65% { transform: rotate(-8deg) scale(1.08); }
+  85% { transform: rotate(4deg) scale(1); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+
 .dismiss-button__icon {
-  width: 18px;
-  height: 18px;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+  width: 13px;
+  height: 13px;
 }

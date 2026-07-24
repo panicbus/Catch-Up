@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useChannels } from '../../hooks/useChannels';
 import { useArticles } from '../../hooks/useArticles';
@@ -6,11 +6,19 @@ import { useSettings } from '../../hooks/useSettings';
 import { SubchannelBar } from './SubchannelBar';
 import { SubchannelManagePanel } from '../common/SubchannelManagePanel';
 import { ViewModeToggle } from './ViewModeToggle';
-import { NewsFeed } from './NewsFeed';
+import { NewsFeed, type NewsFeedHandle } from './NewsFeed';
 import { EmptyState } from '../common/EmptyState';
 import { Button } from '../common/Button';
 import { api } from '../../services/api';
 import './ChannelPage.css';
+
+function ArchiveIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 5h18v4H3zM5 9v10h14V9M10 13h4" />
+    </svg>
+  );
+}
 
 function RefreshIcon({ spinning }: { spinning: boolean }) {
   return (
@@ -40,6 +48,8 @@ export function ChannelPage() {
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const [managingSubchannels, setManagingSubchannels] = useState(false);
   const [titleScrolledOut, setTitleScrolledOut] = useState(false);
+  const [readInPlaceCount, setReadInPlaceCount] = useState(0);
+  const feedRef = useRef<NewsFeedHandle>(null);
   // A callback ref (rather than useRef + a effect keyed on channelId) so the observer attaches
   // exactly when the <h1> node actually mounts — channels load asynchronously via IPC, so on first
   // render `channel` is still null and the early `if (!channel) return null` below skips rendering
@@ -105,27 +115,45 @@ export function ChannelPage() {
       </div>
       {refreshNote && <p className="channel-page__refresh">{refreshNote}</p>}
 
-      <div className="channel-page__controls">
-        <div className="channel-page__controls-left">
-          <span
-            className={`channel-page__sticky-title ${titleScrolledOut ? 'channel-page__sticky-title--visible' : ''}`}
-          >
-            <span className="channel-page__sticky-title-inner">{channel.name}</span>
-          </span>
-          <SubchannelBar
-            subchannels={channel.subchannels}
-            activeId={subchannelId}
-            onSelect={setSubchannelId}
-            managing={managingSubchannels}
-            onManageClick={() => setManagingSubchannels((v) => !v)}
-          />
+      {/* The whole toolbar — controls row plus (when open) the subchannel manage panel — is one
+          sticky unit, so the manage panel stays put with the nav instead of scrolling away. Tagged
+          data-sticky-nav so useScrollCatchUp can measure its height and offset the scroll-to-read
+          trigger below it. */}
+      <div className="channel-page__sticky" data-sticky-nav>
+        <div className="channel-page__controls">
+          <div className="channel-page__controls-left">
+            <span
+              className={`channel-page__sticky-title ${titleScrolledOut ? 'channel-page__sticky-title--visible' : ''}`}
+            >
+              <span className="channel-page__sticky-title-inner">{channel.name}</span>
+            </span>
+            <SubchannelBar
+              subchannels={channel.subchannels}
+              activeId={subchannelId}
+              onSelect={setSubchannelId}
+              managing={managingSubchannels}
+              onManageClick={() => setManagingSubchannels((v) => !v)}
+            />
+          </div>
+          <div className="channel-page__controls-right">
+            <button
+              type="button"
+              className="channel-page__archive-read"
+              disabled={readInPlaceCount === 0}
+              onClick={() => feedRef.current?.flushReadInPlace()}
+              title="Move stories you've read (by scrolling past or opening) into the archive"
+            >
+              <ArchiveIcon />
+              Archive read{readInPlaceCount > 0 ? ` (${readInPlaceCount})` : ''}
+            </button>
+            <ViewModeToggle value={settings.defaultViewMode} onChange={(mode) => update({ defaultViewMode: mode })} />
+          </div>
         </div>
-        <ViewModeToggle value={settings.defaultViewMode} onChange={(mode) => update({ defaultViewMode: mode })} />
-      </div>
 
-      {managingSubchannels && (
-        <SubchannelManagePanel channel={channel} onClose={() => setManagingSubchannels(false)} />
-      )}
+        {managingSubchannels && (
+          <SubchannelManagePanel channel={channel} onClose={() => setManagingSubchannels(false)} />
+        )}
+      </div>
 
       {!loading && articles.length === 0 ? (
         <EmptyState
@@ -134,10 +162,12 @@ export function ChannelPage() {
         />
       ) : (
         <NewsFeed
+          ref={feedRef}
           articles={articles.map((a) => ({ ...a, channelName: channel.name }))}
           channelName={channel.name}
           viewMode={settings.defaultViewMode}
           maxUnreadStories={settings.maxStoriesShown}
+          onReadInPlaceCountChange={setReadInPlaceCount}
         />
       )}
     </div>
