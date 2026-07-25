@@ -16,3 +16,5 @@ data/
 .env
 .env.*
 !.env.example
+# Provider keys bundled into a packaged build (generated from .env at release time)
+packaged.env

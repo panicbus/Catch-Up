@@ -1,0 +1,77 @@
+name: Release (macOS)
+
+# Builds, signs, and notarizes the macOS DMG on a GitHub-hosted macOS runner — where codesign works
+# normally (unlike macOS 26+ locally, where an unremovable com.apple.provenance xattr breaks signing).
+#
+# Trigger: push a version tag (e.g. `git tag v0.7.3 && git push origin v0.7.3`) to build + attach the
+# DMG to a GitHub Release, or run manually from the Actions tab (uploads the DMG as a build artifact).
+#
+# Required repository Secrets (Settings → Secrets and variables → Actions):
+#   MAC_CERT_P12_BASE64          base64 of your exported "Developer ID Application" cert (.p12, cert+key)
+#   MAC_CERT_PASSWORD            the password you set when exporting the .p12
+#   APPLE_ID                     your Apple Developer account email
+#   APPLE_APP_SPECIFIC_PASSWORD  app-specific password (appleid.apple.com → App-Specific Passwords)
+#   APPLE_TEAM_ID                KB8N3Q3ZAF
+#   NEWSDATA_API_KEY             bundled into the app (news providers)
+#   GUARDIAN_API_KEY             "
+#   GNEWS_API_KEY                "
+#   NYTIMES_API_KEY              "
+# (Gemini is intentionally NOT bundled — each user adds their own key in-app.)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write # so a tagged run can create/attach to a GitHub Release
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Import Developer ID signing certificate
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          p12-password: ${{ secrets.MAC_CERT_PASSWORD }}
+
+      - run: npm ci
+
+      - name: Write provider keys for bundling
+        # make-packaged-env.mjs reads .env and emits packaged.env (Gemini excluded); both are ephemeral
+        # on the runner and gitignored.
+        run: |
+          {
+            echo "NEWSDATA_API_KEY=${{ secrets.NEWSDATA_API_KEY }}"
+            echo "GUARDIAN_API_KEY=${{ secrets.GUARDIAN_API_KEY }}"
+            echo "GNEWS_API_KEY=${{ secrets.GNEWS_API_KEY }}"
+            echo "NYTIMES_API_KEY=${{ secrets.NYTIMES_API_KEY }}"
+          } > .env
+
+      - name: Build, sign & notarize DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run release:mac
+
+      - name: Upload DMG as build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: catch-up-macos-dmg
+          path: release/*.dmg
+          if-no-files-found: error
+
+      - name: Attach DMG to a GitHub Release (tagged runs only)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${GITHUB_REF_NAME}" release/*.dmg --title "${GITHUB_REF_NAME}" --generate-notes

@@ -1,6 +1,6 @@
 {
   "name": "catch-up",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "private": true,
   "description": "Your topics. Your pace. All caught up.",
   "author": "Catch Up contributors",
@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "icons:mac": "bash scripts/build-icon.sh",
     "pack:mac:dir": "npm run build && CSC_IDENTITY_AUTO_SELECT=false electron-builder --mac --dir --arm64",
+    "release:mac": "node scripts/make-packaged-env.mjs && npm run build && electron-builder --mac",
     "start": "npm run build && electron .",
     "app": "electron .",
     "bump:patch": "node scripts/bump-version.mjs patch",
@@ -45,6 +46,7 @@
       "output": "release",
       "buildResources": "buildResources"
     },
+    "afterPack": "buildResources/afterPack.js",
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
@@ -56,17 +58,27 @@
       {
         "from": "build",
         "to": "build"
+      },
+      {
+        "from": "packaged.env",
+        "to": "packaged.env"
       }
     ],
     "mac": {
       "icon": "build/icon.icns",
       "category": "public.app-category.news",
-      "identity": null,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "buildResources/entitlements.mac.plist",
+      "entitlementsInherit": "buildResources/entitlements.mac.plist",
+      "notarize": {
+        "teamId": "KB8N3Q3ZAF"
+      },
       "target": [
         {
-          "target": "dir",
+          "target": "dmg",
           "arch": [
-            "arm64"
+            "universal"
           ]
         }
       ]

@@ -18,9 +18,14 @@ import type { Tray } from 'electron';
 // same as "a dev server is running," and conflating the two is what forced the server to be up.
 const useDevServer = process.env.ELECTRON_IS_DEV === '1';
 
-/** Minimal .env loader (KEY=VALUE per line) — avoids adding a dependency for a handful of API keys. */
+/** Minimal .env loader (KEY=VALUE per line) — avoids adding a dependency for a handful of API keys.
+ * In dev, reads the repo's .env (all keys). In a packaged build there is no .env — instead it reads
+ * packaged.env from Contents/Resources (bundled via extraResources; see scripts/make-packaged-env.mjs),
+ * which holds ONLY the news-provider keys. The Gemini key is never bundled — buyers add their own. */
 function loadEnv(): void {
-  const envPath = path.join(__dirname, '..', '.env');
+  const envPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'packaged.env')
+    : path.join(__dirname, '..', '.env');
   if (!fs.existsSync(envPath)) return;
   for (const line of fs.readFileSync(envPath, 'utf-8').split('\n')) {
     const trimmed = line.trim();
