@@ -7,7 +7,7 @@ interface SubchannelBarProps {
   onSelect: (id: string | null) => void;
   onManageClick: () => void;
   managing: boolean;
-  /** Unread count per subchannel id (see useSubchannelCounts) — shown as a small badge on each pill. */
+  /** Unread count per subchannel id (see useChannelArticles) — shown as a small badge on each pill. */
   counts?: Record<string, number>;
   /** Channel-wide unread total — shown on the "All" pill. */
   totalUnread?: number;

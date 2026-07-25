@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useChannels } from '../../hooks/useChannels';
-import { useArticles } from '../../hooks/useArticles';
-import { useSubchannelCounts } from '../../hooks/useSubchannelCounts';
+import { useChannelArticles } from '../../hooks/useChannelArticles';
 import { useSettings } from '../../hooks/useSettings';
 import { SubchannelBar } from './SubchannelBar';
 import { SubchannelManagePanel } from '../common/SubchannelManagePanel';
@@ -58,8 +57,10 @@ export function ChannelPage() {
   const [titleNode, setTitleNode] = useState<HTMLHeadingElement | null>(null);
 
   const channel = channels.find((c) => c.id === channelId) ?? null;
-  const { articles, loading, reload } = useArticles(channelId ?? null, subchannelId);
-  const { counts: subchannelCounts, totalUnread } = useSubchannelCounts(channelId ?? null);
+  const { articles, loading, reload, subchannelCounts, totalUnread } = useChannelArticles(
+    channelId ?? null,
+    subchannelId
+  );
 
   // The sticky controls bar picks up the channel name once the page's own title has scrolled
   // behind it — same threshold, since the sticky bar sits at top: 0, exactly where the title
@@ -87,7 +88,7 @@ export function ChannelPage() {
     const result = await api.refreshChannel(channel.id);
     setRefreshing(false);
     // Belt-and-suspenders: the main process also broadcasts a 'articles' event on a successful
-    // refresh, which useArticles is already subscribed to — but explicitly reloading here means
+    // refresh, which useChannelArticles is already subscribed to — but explicitly reloading here means
     // the list shown can never disagree with the "Found N stories" note above it regardless of
     // whether that broadcast fires, arrives, or is still in flight by the time this resolves.
     reload();

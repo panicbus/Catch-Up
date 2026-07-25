@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { api } from '../services/api';
+import { useReloadOnDataChange } from './useReloadOnDataChange';
 import type { Article, Channel } from '../../ipc-contract';
 
 export interface PoolArticle extends Article {
@@ -54,12 +55,7 @@ export function usePoolArticles(channels: Channel[]) {
     });
   }, [channels]);
 
-  useEffect(() => {
-    reload();
-    return api.onDataChanged((event) => {
-      if (event.type === 'articles' || event.type === 'bookmarks' || event.type === 'readState') reload();
-    });
-  }, [reload]);
+  useReloadOnDataChange(reload, { includeBookmarks: true });
 
   return { articles, loading, reload };
 }

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { api } from '../services/api';
+import { useReloadOnDataChange } from './useReloadOnDataChange';
 import { isNewArticle } from '../utils/isNew';
 import type { Channel } from '../../ipc-contract';
 
@@ -14,7 +15,7 @@ export interface ChannelCount {
 /** Per-channel unread counts (plus a recency flag), and the aggregate unread total for the home
  * header. The unread count is what the channel view actually shows — an earlier version counted only
  * <24h-old unread, so a channel full of day-old unread stories misleadingly read as 0 on the home.
- * Computed once here rather than each tile calling useArticles, since the header needs the sum
+ * Computed once here rather than each tile fetching independently, since the header needs the sum
  * across every channel. */
 export function useChannelCounts(channels: Channel[]) {
   const [counts, setCounts] = useState<Record<string, ChannelCount>>({});
@@ -33,12 +34,10 @@ export function useChannelCounts(channels: Channel[]) {
     ).then((pairs) => setCounts(Object.fromEntries(pairs)));
   }, [channels]);
 
-  useEffect(() => {
-    reload();
-    return api.onDataChanged((event) => {
-      if (event.type === 'articles' || event.type === 'readState') reload();
-    });
-  }, [reload]);
+  // Coalesce: a background sweep broadcasts one 'articles' event per channel, and each reload here
+  // re-fetches EVERY channel — without debouncing, an N-channel sweep would fire N × N fetches. The
+  // home tiles show only counts (no scroll-to-read dimming), so a small settle delay is invisible.
+  useReloadOnDataChange(reload, { debounceMs: 150 });
 
   const totalUnread = Object.values(counts).reduce((sum, c) => sum + c.unread, 0);
 

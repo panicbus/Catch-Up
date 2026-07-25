@@ -71,8 +71,13 @@ export class ArticlesCache {
     this.repruneAllBuckets();
   }
 
-  /** One-time catch-up on load for channels that already overflowed a cap before it existed —
-   * ongoing enforcement happens in prune() on every merge from here on. */
+  /** Runs the FULL prune() (age cutoff, title dedup, the 100-unread cap, the Google News RSS cap)
+   * over every bucket once on load — deliberately broader than the old Google-News-only trim it
+   * replaced. This is what retro-applies a newly-tightened cap to channels that already overflowed
+   * in the saved file, so they're trimmed at startup rather than only on their next refresh; from
+   * then on the same prune() runs on every merge. Because it reuses the one prune(), the caps stay
+   * defined in exactly one place — but note any prune() change now also takes effect at cold start,
+   * before any refresh. */
   private repruneAllBuckets(): void {
     let changed = false;
     for (const bucket of Object.values(this.data.byChannel)) {
