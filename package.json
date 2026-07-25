@@ -13,7 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "icons:mac": "bash scripts/build-icon.sh",
     "pack:mac:dir": "npm run build && CSC_IDENTITY_AUTO_SELECT=false electron-builder --mac --dir --arm64",
-    "release:mac": "node scripts/make-packaged-env.mjs && npm run build && electron-builder --mac",
+    "release:mac": "node scripts/make-packaged-env.mjs && npm run build && electron-builder --mac --publish never",
     "start": "npm run build && electron .",
     "app": "electron .",
     "bump:patch": "node scripts/bump-version.mjs patch",
