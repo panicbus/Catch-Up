@@ -123,7 +123,7 @@ export async function runChannel(
   for (const target of targets) {
     try {
       const fetched = await runProviders({ topic: target.topic, channelId, subchannelId: target.subchannelId });
-      added += deps.articlesCache.merge(channelId, target.subchannelId, fetched, (id) => deps.dataStore.isRead(id));
+      added += deps.articlesCache.merge(channelId, target.subchannelId, fetched);
     } catch (e) {
       errors.push(String(e));
     }

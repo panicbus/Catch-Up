@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useChannels } from '../../hooks/useChannels';
 import { useArticles } from '../../hooks/useArticles';
+import { useSubchannelCounts } from '../../hooks/useSubchannelCounts';
 import { useSettings } from '../../hooks/useSettings';
 import { SubchannelBar } from './SubchannelBar';
 import { SubchannelManagePanel } from '../common/SubchannelManagePanel';
@@ -58,6 +59,7 @@ export function ChannelPage() {
 
   const channel = channels.find((c) => c.id === channelId) ?? null;
   const { articles, loading, reload } = useArticles(channelId ?? null, subchannelId);
+  const { counts: subchannelCounts, totalUnread } = useSubchannelCounts(channelId ?? null);
 
   // The sticky controls bar picks up the channel name once the page's own title has scrolled
   // behind it — same threshold, since the sticky bar sits at top: 0, exactly where the title
@@ -130,6 +132,8 @@ export function ChannelPage() {
               onSelect={setSubchannelId}
               managing={managingSubchannels}
               onManageClick={() => setManagingSubchannels((v) => !v)}
+              counts={subchannelCounts}
+              totalUnread={totalUnread}
             />
           </div>
           <div className="channel-page__controls-right">

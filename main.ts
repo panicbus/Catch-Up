@@ -39,7 +39,7 @@ const BG_BY_THEME = { light: '#faf8f5', dark: '#1a1714' } as const;
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 const dataStore = new DataStore();
-const articlesCache = new ArticlesCache();
+const articlesCache = new ArticlesCache((id) => dataStore.isRead(id));
 
 // Drive nativeTheme from the stored preference (not its 'system' default) as early as possible —
 // before any window exists — so the native title-bar area (this window uses titleBarStyle:

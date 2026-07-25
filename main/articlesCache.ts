@@ -34,6 +34,12 @@ interface CacheFile {
 
 const DEFAULT_BUCKET: Omit<ChannelBucket, 'articles'> = { maxAgeDays: 14, maxCount: 300 };
 
+// Hard ceiling on UNREAD stories per channel so the "to catch up on" number never gets overwhelming.
+// Read stories don't count against this (they live out their 14-day life in the archive); when new
+// stories arrive the freshest 100 unread are kept and older unread fall away. maxCount above stays
+// as a high total-storage safety net.
+const MAX_UNREAD_PER_CHANNEL = 100;
+
 // Google News RSS is a last-resort fallback (see registry.ts) precisely because every one of its
 // articles is snippet-less and image-less — a channel whose primary providers come up thin can
 // otherwise end up mostly or entirely filled with it. This caps its share of any one channel
@@ -50,21 +56,28 @@ const GOOGLE_NEWS_RSS_PROVIDER_ID = 'googlenewsrss';
 export class ArticlesCache {
   private data: CacheFile;
   private readonly filePath: string;
+  /** Read-state lookup, supplied by main.ts from the data store (the cache doesn't own read state).
+   * A live function, not a snapshot — so pruning always reflects the current read state. */
+  private readonly isRead: (articleId: string) => boolean;
 
-  constructor() {
+  constructor(isRead: (articleId: string) => boolean) {
+    this.isRead = isRead;
     this.filePath = articlesCacheFilePath();
     this.data = this.read();
     this.migrateGoogleNewsRssSnippets();
-    this.trimExcessGoogleNewsRss();
+    // Re-run the full prune (age, dedup, the 100-unread cap, the Google News RSS cap) over every
+    // bucket on load, so channels that already overflowed in the saved file get trimmed now rather
+    // than only on their next refresh.
+    this.repruneAllBuckets();
   }
 
-  /** One-time catch-up for channels that already accumulated more than the cap before it existed —
+  /** One-time catch-up on load for channels that already overflowed a cap before it existed —
    * ongoing enforcement happens in prune() on every merge from here on. */
-  private trimExcessGoogleNewsRss(): void {
+  private repruneAllBuckets(): void {
     let changed = false;
     for (const bucket of Object.values(this.data.byChannel)) {
       const before = bucket.articles.length;
-      this.capGoogleNewsRss(bucket);
+      this.prune(bucket);
       if (bucket.articles.length !== before) changed = true;
     }
     if (changed) this.write();
@@ -147,14 +160,8 @@ export class ArticlesCache {
    * after the prune, and not already read. This is deliberately narrower than "rows inserted": a
    * story can be re-fetched after it aged out of the cache while its read state lingers (read ids
    * are kept longer than the cache cap for busy channels), and stale results can be pruned right
-   * back out — neither is something new to show the user, so neither should be counted as "found."
-   * `isRead` is supplied by the caller (only the data store knows read state). */
-  merge(
-    channelId: string,
-    subchannelId: string | null,
-    incoming: FetchedArticle[],
-    isRead?: (id: string) => boolean
-  ): number {
+   * back out — neither is something new to show the user, so neither should be counted as "found." */
+  merge(channelId: string, subchannelId: string | null, incoming: FetchedArticle[]): number {
     const bucket = (this.data.byChannel[channelId] ??= { ...DEFAULT_BUCKET, articles: [] });
     const seenIds = new Set(bucket.articles.map((a) => a.id));
     const seenTitles = new Set(bucket.articles.map((a) => normalizeTitle(a.title)));
@@ -191,12 +198,13 @@ export class ArticlesCache {
     this.prune(bucket);
     this.write();
     const surviving = new Set(bucket.articles.map((a) => a.id));
-    return addedIds.filter((id) => surviving.has(id) && !isRead?.(id)).length;
+    return addedIds.filter((id) => surviving.has(id) && !this.isRead(id)).length;
   }
 
   private prune(bucket: ChannelBucket): void {
     const cutoff = Date.now() - bucket.maxAgeDays * 24 * 60 * 60 * 1000;
     const seenTitles = new Set<string>();
+    let unreadKept = 0;
     bucket.articles = bucket.articles
       .filter((a) => new Date(a.publishedAt).getTime() >= cutoff)
       .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
@@ -207,6 +215,14 @@ export class ArticlesCache {
         if (seenTitles.has(key)) return false;
         seenTitles.add(key);
         return true;
+      })
+      // Cap UNREAD to the newest MAX_UNREAD_PER_CHANNEL (list is newest-first). Read stories are
+      // always kept here (they age out via the cutoff above / the archive), and are never dropped to
+      // make room for unread — so the "to catch up on" number can't exceed the cap.
+      .filter((a) => {
+        if (this.isRead(a.id)) return true;
+        unreadKept += 1;
+        return unreadKept <= MAX_UNREAD_PER_CHANNEL;
       })
       .slice(0, bucket.maxCount);
     this.capGoogleNewsRss(bucket);

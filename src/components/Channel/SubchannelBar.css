@@ -6,13 +6,40 @@
 }
 
 .subchannel-bar__chip {
-  padding: 6px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 14px;
   border-radius: 999px;
   border: 1px solid rgba(120, 80, 40, 0.14);
   background: #f3ecdf;
   color: var(--text-muted);
   font-size: 13px;
   font-weight: 500;
+}
+
+/* Small unread count badge on a pill (see useSubchannelCounts). Subtle on the inactive cream pill,
+   readable white-on-translucent on the active accent pill. */
+.subchannel-bar__chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(120, 80, 40, 0.14);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+.subchannel-bar__chip--active .subchannel-bar__chip-count {
+  background: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+:root[data-theme='dark'] .subchannel-bar__chip-count {
+  background: rgba(255, 255, 255, 0.12);
 }
 .subchannel-bar__chip:hover {
   background: var(--surface-hover);

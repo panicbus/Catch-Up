@@ -1,5 +1,5 @@
 import { useChannels } from '../../hooks/useChannels';
-import { useChannelNewCounts } from '../../hooks/useChannelNewCounts';
+import { useChannelCounts } from '../../hooks/useChannelCounts';
 import { ChannelSearchBar } from './ChannelSearchBar';
 import { ChannelTabGrid } from './ChannelTabGrid';
 import { RollTheDiceButton } from './RollTheDiceButton';
@@ -8,7 +8,7 @@ import './HomePage.css';
 
 export function HomePage() {
   const { channels, loading } = useChannels();
-  const { counts, total } = useChannelNewCounts(channels);
+  const { counts, totalUnread } = useChannelCounts(channels);
 
   return (
     <div className="home-page">
@@ -26,8 +26,8 @@ export function HomePage() {
           <div className="home-page__heading">
             <div className="home-page__heading-title">Your channels</div>
             <div className="home-page__heading-subtitle">
-              {channels.length} channel{channels.length === 1 ? '' : 's'} · {total} stor
-              {total === 1 ? 'y' : 'ies'} to catch up on
+              {channels.length} channel{channels.length === 1 ? '' : 's'} · {totalUnread} stor
+              {totalUnread === 1 ? 'y' : 'ies'} to catch up on
             </div>
           </div>
           <div className="home-page__dice-row">

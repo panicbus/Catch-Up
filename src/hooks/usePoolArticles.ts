@@ -14,7 +14,7 @@ const MAX_PER_CHANNEL = 50;
 
 /** Aggregates every channel's articles (channel-level and subchannel-level alike — The Pool
  * doesn't drill into subchannels, only whole channels) into one chronological list. Same
- * fan-out-then-merge shape as useChannelNewCounts: N parallel per-channel getArticles calls,
+ * fan-out-then-merge shape as useChannelCounts: N parallel per-channel getArticles calls,
  * merged client-side, rather than a new IPC endpoint — articles already carry channelId, so
  * there's nothing a main-process change would buy here. */
 export function usePoolArticles(channels: Channel[]) {
