@@ -4,6 +4,7 @@ import type { ArticlesCache } from './articlesCache';
 import type { ClassificationStore } from './classificationStore';
 import { runAll, runChannel, type RefreshDeps } from './refreshAgent';
 import { getProviderStatus } from './providers/registry';
+import { pingModel } from './providers/classifier';
 import type { Article, ArticleListParams, DataChangeEvent } from '../ipc-contract';
 import type { CachedArticle } from './articlesCache';
 
@@ -125,5 +126,25 @@ export function registerIpcHandlers({ dataStore, articlesCache, classificationSt
     dataStore.setSettings(partial);
     if (partial.theme) nativeTheme.themeSource = partial.theme;
     broadcast({ type: 'settings' });
+  });
+
+  ipcMain.handle('getAiConfig', () => ({
+    enabled: dataStore.getAiEnabled(),
+    // A key from .env (dev) counts as configured too, so it won't needlessly prompt the modal.
+    keyConfigured: dataStore.hasGeminiApiKey() || !!process.env.GEMINI_API_KEY?.trim(),
+  }));
+  ipcMain.handle('setAiFilteringEnabled', (_e, enabled: boolean) => {
+    dataStore.setAiEnabled(enabled);
+    broadcast({ type: 'settings' });
+  });
+  ipcMain.handle('saveGeminiApiKey', async (_e, key: string) => {
+    const result = await pingModel(key);
+    if (!result.ok) return result;
+    // Valid — persist it, apply to the running process so it works without a restart, and turn AI on.
+    dataStore.setGeminiApiKey(key);
+    dataStore.setAiEnabled(true);
+    process.env.GEMINI_API_KEY = key.trim();
+    broadcast({ type: 'settings' });
+    return { ok: true };
   });
 }

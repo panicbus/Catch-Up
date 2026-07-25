@@ -81,6 +81,19 @@ export interface AppSettings {
   maxStoriesShown: 10 | 25 | 50;
 }
 
+export interface AiConfig {
+  /** Whether AI relevance filtering is turned on. */
+  enabled: boolean;
+  /** Whether a Gemini API key is stored (the key itself is never sent to the renderer). */
+  keyConfigured: boolean;
+}
+
+export interface SaveKeyResult {
+  ok: boolean;
+  /** User-facing reason the key was rejected, when ok is false. */
+  error?: string;
+}
+
 export interface RefreshResult {
   channelId: string | null;
   added: number;
@@ -165,6 +178,13 @@ export interface CatchUpApi {
   // Settings
   getSettings: () => Promise<AppSettings>;
   setSettings: (partial: Partial<AppSettings>) => Promise<void>;
+
+  // AI relevance filtering. The key itself never crosses to the renderer — getAiConfig reports only
+  // whether one is configured.
+  getAiConfig: () => Promise<AiConfig>;
+  setAiFilteringEnabled: (enabled: boolean) => Promise<void>;
+  /** Validate a key (one tiny Gemini call), and on success store it and turn AI filtering on. */
+  saveGeminiApiKey: (key: string) => Promise<SaveKeyResult>;
 
   // Change-notification push (main -> renderer). Implemented directly on ipcRenderer in preload,
   // not a request/response invoke.

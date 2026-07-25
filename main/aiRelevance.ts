@@ -21,10 +21,12 @@ export async function filterRelevant(
   channelName: string,
   subchannelName: string | null,
   store: ClassificationStore,
+  aiEnabled: boolean,
 ): Promise<FetchedArticle[]> {
   // Stage 1 — free heuristic.
   const heuristic = filterByRelevance(fetched, topic);
-  if (!isAiConfigured() || heuristic.length === 0) return heuristic;
+  // Stage 2 requires the user to have turned AI filtering on AND a key to be configured.
+  if (!aiEnabled || !isAiConfigured() || heuristic.length === 0) return heuristic;
 
   // Stage 2 — AI. Apply cached verdicts; collect the ones still needing a fresh classification.
   const withId = heuristic.map((a) => ({ article: a, id: articleId(a.url) }));

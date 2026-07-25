@@ -45,6 +45,42 @@ export function isAiConfigured(): boolean {
   return !!process.env.GEMINI_API_KEY?.trim();
 }
 
+/** Validate a candidate key with one tiny request, so the in-app key modal can give real feedback
+ * instead of silently falling back. Returns a friendly, status-specific error on failure. */
+export async function pingModel(key: string): Promise<{ ok: boolean; error?: string }> {
+  const trimmed = key.trim();
+  if (!trimmed) return { ok: false, error: 'Please paste your Gemini API key.' };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(GEMINI_ENDPOINT(GEMINI_MODEL, trimmed), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: 'Reply with JSON {"ok":true}' }] }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0 },
+      }),
+    });
+    if (res.ok) return { ok: true };
+    if (res.status === 400 || res.status === 403) {
+      return { ok: false, error: 'That key was rejected. Double-check you copied the whole key.' };
+    }
+    if (res.status === 429) {
+      return {
+        ok: false,
+        error:
+          'That key is over its quota or its free tier isn’t enabled for this model. Check your quota in Google AI Studio, then try again.',
+      };
+    }
+    return { ok: false, error: `Gemini returned an error (HTTP ${res.status}). Try again in a moment.` };
+  } catch {
+    return { ok: false, error: 'Couldn’t reach Gemini. Check your internet connection and try again.' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function buildPrompt(input: ClassifyInput): { system: string; user: string } {
   const topic = input.subchannelName
     ? `${input.channelName} — specifically "${input.subchannelName}"`

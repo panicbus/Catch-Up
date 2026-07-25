@@ -24,6 +24,10 @@ interface DataFile {
   userId: 'local';
   onboarding: { completed: boolean; completedAt: string | null };
   settings: AppSettings;
+  /** AI relevance filtering. Kept OUT of `settings` because `settings` is sent to the renderer wholesale
+   * (getSettings) and the apiKey is a secret — the renderer only ever learns whether one is configured
+   * (see ipcHandlers.getAiConfig), never the key itself. */
+  ai: { enabled: boolean; apiKey: string | null };
   channels: Channel[];
   bookmarks: StoredBookmarkEntry[];
   readArticleIds: ReadEntry[];
@@ -41,6 +45,7 @@ const DEFAULT_DATA: DataFile = {
     rollTheDiceChannelIds: null,
     maxStoriesShown: 25,
   },
+  ai: { enabled: false, apiKey: null },
   channels: [],
   bookmarks: [],
   readArticleIds: [],
@@ -371,6 +376,30 @@ export class DataStore {
 
   setSettings(partial: Partial<AppSettings>): void {
     this.data.settings = { ...this.data.settings, ...partial };
+    this.write();
+  }
+
+  // AI relevance filtering. The apiKey never leaves the main process except as a boolean via
+  // hasGeminiApiKey() (see ipcHandlers.getAiConfig).
+  getAiEnabled(): boolean {
+    return this.data.ai.enabled;
+  }
+
+  setAiEnabled(enabled: boolean): void {
+    this.data.ai.enabled = enabled;
+    this.write();
+  }
+
+  getGeminiApiKey(): string | null {
+    return this.data.ai.apiKey;
+  }
+
+  hasGeminiApiKey(): boolean {
+    return !!this.data.ai.apiKey;
+  }
+
+  setGeminiApiKey(key: string | null): void {
+    this.data.ai.apiKey = key && key.trim() ? key.trim() : null;
     this.write();
   }
 

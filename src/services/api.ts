@@ -40,5 +40,9 @@ export const api: CatchUpApi = {
   getSettings: () => getBridge().getSettings(),
   setSettings: (partial) => getBridge().setSettings(partial),
 
+  getAiConfig: () => getBridge().getAiConfig(),
+  setAiFilteringEnabled: (enabled) => getBridge().setAiFilteringEnabled(enabled),
+  saveGeminiApiKey: (key) => getBridge().saveGeminiApiKey(key),
+
   onDataChanged: (listener) => getBridge().onDataChanged(listener),
 };

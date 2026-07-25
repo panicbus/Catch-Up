@@ -46,6 +46,10 @@ const api: CatchUpApi = {
   getSettings: () => ipcRenderer.invoke('getSettings'),
   setSettings: (partial) => ipcRenderer.invoke('setSettings', partial),
 
+  getAiConfig: () => ipcRenderer.invoke('getAiConfig'),
+  setAiFilteringEnabled: (enabled) => ipcRenderer.invoke('setAiFilteringEnabled', enabled),
+  saveGeminiApiKey: (key) => ipcRenderer.invoke('saveGeminiApiKey', key),
+
   onDataChanged: (listener) => {
     const channel = 'catchup:data-changed';
     const wrapped = (_: unknown, event: DataChangeEvent) => listener(event);

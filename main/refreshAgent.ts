@@ -135,7 +135,8 @@ export async function runChannel(
         target.topic,
         channel.name,
         target.subchannelName,
-        deps.classificationStore
+        deps.classificationStore,
+        deps.dataStore.getAiEnabled()
       );
       added += deps.articlesCache.merge(channelId, target.subchannelId, relevant);
     } catch (e) {

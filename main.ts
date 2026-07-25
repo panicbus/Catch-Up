@@ -43,6 +43,14 @@ const dataStore = new DataStore();
 const articlesCache = new ArticlesCache((id) => dataStore.isRead(id));
 const classificationStore = new ClassificationStore();
 
+// A key entered via the in-app modal is stored in dataStore (userData), not .env — apply it to the
+// process so the pure classifier (which reads process.env.GEMINI_API_KEY) picks it up. A stored key
+// takes precedence over a .env one so the user's explicit in-app choice always wins.
+{
+  const storedKey = dataStore.getGeminiApiKey();
+  if (storedKey) process.env.GEMINI_API_KEY = storedKey;
+}
+
 // Drive nativeTheme from the stored preference (not its 'system' default) as early as possible —
 // before any window exists — so the native title-bar area (this window uses titleBarStyle:
 // 'hiddenInset') and the very first CSS paint both already agree with the user's choice instead of
