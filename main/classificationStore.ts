@@ -95,7 +95,12 @@ export class ClassificationStore {
   recordClassifications(entries: { id: string; keep: boolean }[]): void {
     if (entries.length === 0) return;
     const today = todayStr();
-    if (this.data.daily.date !== today) this.data.daily = { date: today, count: 0 };
+    if (this.data.daily.date !== today) {
+      this.data.daily = { date: today, count: 0 };
+      // The app runs for weeks in the tray without restarting, so prune here on each day-rollover
+      // (not just in the constructor) to keep verdicts from accumulating unbounded during a session.
+      this.prune();
+    }
     const at = new Date().toISOString();
     for (const e of entries) this.data.verdicts[e.id] = { keep: e.keep, at };
     this.data.daily.count += entries.length;

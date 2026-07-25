@@ -1,6 +1,6 @@
 import { articleId } from './providers/dedupe';
 import { filterByRelevance } from './providers/relevance';
-import { classifyOffTopic, isAiConfigured } from './providers/classifier';
+import { classifyOffTopic, isAiConfigured, MAX_BATCH } from './providers/classifier';
 import type { ClassificationStore } from './classificationStore';
 import type { FetchedArticle } from './providers/types';
 
@@ -11,13 +11,14 @@ import type { FetchedArticle } from './providers/types';
  *   1. HEURISTIC (always, free): filterByRelevance() drops loose Google-News-RSS junk. Cheap, and it
  *      shrinks what the AI ever sees.
  *   2. AI (when configured + under the daily cap): reuse any cached verdict; classify only the
- *      not-yet-seen survivors; drop the ones the model judged clearly off-topic. Cache every fresh
- *      verdict so each story is classified at most once.
+ *      not-yet-seen survivors, in chunks no larger than the model batch size; drop the ones judged
+ *      clearly off-topic. Cache every fresh verdict so each story is classified at most once.
  * Every AI failure path (no key, error, rate-limit, cap reached, malformed reply) simply keeps the
  * heuristic result — the refresh can never break or block on the model. */
 export async function filterRelevant(
   fetched: FetchedArticle[],
   topic: string,
+  channelId: string,
   channelName: string,
   subchannelName: string | null,
   store: ClassificationStore,
@@ -28,40 +29,43 @@ export async function filterRelevant(
   // Stage 2 requires the user to have turned AI filtering on AND a key to be configured.
   if (!aiEnabled || !isAiConfigured() || heuristic.length === 0) return heuristic;
 
-  // Stage 2 — AI. Apply cached verdicts; collect the ones still needing a fresh classification.
-  const withId = heuristic.map((a) => ({ article: a, id: articleId(a.url) }));
-  const kept: FetchedArticle[] = [];
-  const toClassify: { article: FetchedArticle; id: string }[] = [];
+  // Verdicts are cached per (channel, article), not per article alone: relevance is channel-specific
+  // and the same URL legitimately lands in several channels, so a "keep" for one channel must not
+  // silently admit the story into another. `id` is what the model sees; `cacheKey` is channel-scoped.
+  const entries = heuristic.map((a) => {
+    const id = articleId(a.url);
+    return { article: a, id, cacheKey: `${channelId}:${id}` };
+  });
 
-  for (const entry of withId) {
-    const cached = store.getVerdict(entry.id);
-    if (cached === true) kept.push(entry.article);
-    else if (cached === false) continue; // previously judged off-topic — stays dropped
-    else toClassify.push(entry); // never seen — needs the model
+  const kept: FetchedArticle[] = [];
+  const toClassify: typeof entries = [];
+  for (const e of entries) {
+    const cached = store.getVerdict(e.cacheKey);
+    if (cached === true) kept.push(e.article);
+    else if (cached === false) continue; // previously judged off-topic for this channel — stays dropped
+    else toClassify.push(e); // never seen — needs the model
   }
 
-  if (toClassify.length === 0) return orderLike(heuristic, kept);
-
-  // Respect the daily cap: classify up to the remaining budget; anything beyond it is kept as-is
-  // (heuristic result) and left unclassified to retry on a future cycle once budget frees up.
+  // Budget-limit the total for the day, then classify in chunks no larger than MAX_BATCH (so nothing
+  // is ever silently truncated). Anything over budget, or in a chunk the model couldn't classify, is
+  // kept as-is (heuristic result) and left unclassified to retry on a future cycle.
   const budget = store.remainingDailyBudget();
-  const batch = budget > 0 ? toClassify.slice(0, budget) : [];
-  const overflow = toClassify.slice(batch.length);
-  for (const e of overflow) kept.push(e.article); // over cap → trust the heuristic, don't drop
+  const classifiable = budget > 0 ? toClassify.slice(0, budget) : [];
+  for (const e of toClassify.slice(classifiable.length)) kept.push(e.article); // over cap → keep
 
-  if (batch.length > 0) {
+  for (let i = 0; i < classifiable.length; i += MAX_BATCH) {
+    const chunk = classifiable.slice(i, i + MAX_BATCH);
     const offTopic = await classifyOffTopic({
-      items: batch.map((e) => ({ id: e.id, title: e.article.title, snippet: e.article.snippet })),
+      items: chunk.map((e) => ({ id: e.id, title: e.article.title, snippet: e.article.snippet })),
       channelName,
       subchannelName,
     });
     if (offTopic == null) {
-      // Model unavailable/failed — keep the batch, do NOT cache (so it retries next cycle).
-      for (const e of batch) kept.push(e.article);
+      // Model unavailable/failed for this chunk — keep it, do NOT cache (so it retries next cycle).
+      for (const e of chunk) kept.push(e.article);
     } else {
-      const verdicts = batch.map((e) => ({ id: e.id, keep: !offTopic.has(e.id) }));
-      store.recordClassifications(verdicts);
-      for (const e of batch) if (!offTopic.has(e.id)) kept.push(e.article);
+      store.recordClassifications(chunk.map((e) => ({ id: e.cacheKey, keep: !offTopic.has(e.id) })));
+      for (const e of chunk) if (!offTopic.has(e.id)) kept.push(e.article);
     }
   }
 

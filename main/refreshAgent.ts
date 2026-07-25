@@ -133,6 +133,7 @@ export async function runChannel(
       const relevant = await filterRelevant(
         fetched,
         target.topic,
+        channelId,
         channel.name,
         target.subchannelName,
         deps.classificationStore,

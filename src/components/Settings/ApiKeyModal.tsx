@@ -57,7 +57,9 @@ export function ApiKeyModal({ onSave, onClose, onSaved }: ApiKeyModalProps) {
           placeholder="Paste your Gemini API key"
           value={key}
           onChange={(e) => setKey(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && key.trim()) void submit();
+          }}
           autoFocus
           spellCheck={false}
           autoComplete="off"

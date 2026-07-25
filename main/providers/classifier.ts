@@ -24,8 +24,9 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-flash-latest';
 const GEMINI_ENDPOINT = (model: string, key: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
-// Guardrail so a single classify call can never send an unbounded prompt (aiRelevance also chunks).
-const MAX_BATCH = 30;
+// Max articles per model call. aiRelevance chunks its work into MAX_BATCH-sized calls; the truncation
+// in classifyOffTopic below is only a last-resort guard so a prompt can never grow unbounded.
+export const MAX_BATCH = 30;
 const REQUEST_TIMEOUT_MS = 15_000;
 
 export interface ClassifyItem {
