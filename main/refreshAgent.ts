@@ -1,6 +1,8 @@
 import type { DataStore } from './dataStore';
 import type { ArticlesCache } from './articlesCache';
+import type { ClassificationStore } from './classificationStore';
 import { runProviders, getProviderStatus } from './providers/registry';
+import { filterRelevant } from './aiRelevance';
 import type { DataChangeEvent } from '../ipc-contract';
 
 const INTERVAL_MS = 30 * 60 * 1000;
@@ -18,6 +20,7 @@ const STAGGER_FACTOR = 3;
 export interface RefreshDeps {
   dataStore: DataStore;
   articlesCache: ArticlesCache;
+  classificationStore: ClassificationStore;
   broadcast: (event: DataChangeEvent) => void;
 }
 
@@ -110,11 +113,12 @@ export async function runChannel(
       : channel.subchannels.filter(
           (sc) => hashToInt(sc.id) % STAGGER_FACTOR === (options.staggerCycle as number) % STAGGER_FACTOR
         );
-  const targets: { topic: string; subchannelId: string | null }[] = [
-    { topic: asSearchPhrase(channel.name), subchannelId: null },
+  const targets: { topic: string; subchannelId: string | null; subchannelName: string | null }[] = [
+    { topic: asSearchPhrase(channel.name), subchannelId: null, subchannelName: null },
     ...subchannels.map((sc) => ({
       topic: `${asSearchPhrase(channel.name)} ${asSearchPhrase(sc.name)}`,
       subchannelId: sc.id,
+      subchannelName: sc.name,
     })),
   ];
 
@@ -123,7 +127,17 @@ export async function runChannel(
   for (const target of targets) {
     try {
       const fetched = await runProviders({ topic: target.topic, channelId, subchannelId: target.subchannelId });
-      added += deps.articlesCache.merge(channelId, target.subchannelId, fetched);
+      // Relevance stage: free heuristic first (drops loose RSS junk), then the AI classifier when a
+      // key is configured (drops tangential/wrong-sense results the keywords can't catch). Always
+      // degrades to the heuristic on any AI failure — see aiRelevance.ts.
+      const relevant = await filterRelevant(
+        fetched,
+        target.topic,
+        channel.name,
+        target.subchannelName,
+        deps.classificationStore
+      );
+      added += deps.articlesCache.merge(channelId, target.subchannelId, relevant);
     } catch (e) {
       errors.push(String(e));
     }

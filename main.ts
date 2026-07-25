@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { DataStore } from './main/dataStore';
 import { ArticlesCache } from './main/articlesCache';
+import { ClassificationStore } from './main/classificationStore';
 import { registerIpcHandlers, broadcast } from './main/ipcHandlers';
 import { createTray } from './main/tray';
 import { buildAssetsDir } from './main/paths';
@@ -40,6 +41,7 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 const dataStore = new DataStore();
 const articlesCache = new ArticlesCache((id) => dataStore.isRead(id));
+const classificationStore = new ClassificationStore();
 
 // Drive nativeTheme from the stored preference (not its 'system' default) as early as possible —
 // before any window exists — so the native title-bar area (this window uses titleBarStyle:
@@ -90,7 +92,7 @@ function createWindow(): BrowserWindow {
 }
 
 void app.whenReady().then(() => {
-  registerIpcHandlers({ dataStore, articlesCache });
+  registerIpcHandlers({ dataStore, articlesCache, classificationStore });
 
   if (process.platform === 'darwin') {
     const dockIcon = nativeImage.createFromPath(path.join(buildAssetsDir(), 'icon.png'));
@@ -100,12 +102,12 @@ void app.whenReady().then(() => {
   tray = createTray(
     () => mainWindow,
     createWindow,
-    () => void refreshAgent.runAll({ dataStore, articlesCache, broadcast })
+    () => void refreshAgent.runAll({ dataStore, articlesCache, classificationStore, broadcast })
   );
 
   createWindow();
 
-  refreshAgent.start({ dataStore, articlesCache, broadcast });
+  refreshAgent.start({ dataStore, articlesCache, classificationStore, broadcast });
 });
 
 // The background refresh agent must keep running whether or not a window is open — the tray

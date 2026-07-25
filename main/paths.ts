@@ -19,6 +19,12 @@ export function articlesCacheFilePath(): string {
   return path.join(dataDir(), 'articles-cache.json');
 }
 
+/** Persisted AI relevance verdicts (keyed by article id) + the daily-classification counter, so a
+ * story is classified at most once and cost/quota stays bounded. See classificationStore.ts. */
+export function classificationCacheFilePath(): string {
+  return path.join(dataDir(), 'classification-cache.json');
+}
+
 /** Icons live under `build/` in dev; packaged builds copy them via electron-builder extraResources. */
 export function buildAssetsDir(): string {
   if (app.isPackaged) {

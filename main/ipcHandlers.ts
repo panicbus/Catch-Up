@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow, nativeTheme } from 'electron';
 import type { DataStore } from './dataStore';
 import type { ArticlesCache } from './articlesCache';
+import type { ClassificationStore } from './classificationStore';
 import { runAll, runChannel, type RefreshDeps } from './refreshAgent';
 import { getProviderStatus } from './providers/registry';
 import type { Article, ArticleListParams, DataChangeEvent } from '../ipc-contract';
@@ -9,6 +10,7 @@ import type { CachedArticle } from './articlesCache';
 export interface HandlerDeps {
   dataStore: DataStore;
   articlesCache: ArticlesCache;
+  classificationStore: ClassificationStore;
 }
 
 export function broadcast(event: DataChangeEvent): void {
@@ -25,8 +27,8 @@ function toArticle(cached: CachedArticle, dataStore: DataStore): Article {
   };
 }
 
-export function registerIpcHandlers({ dataStore, articlesCache }: HandlerDeps): void {
-  const refreshDeps: RefreshDeps = { dataStore, articlesCache, broadcast };
+export function registerIpcHandlers({ dataStore, articlesCache, classificationStore }: HandlerDeps): void {
+  const refreshDeps: RefreshDeps = { dataStore, articlesCache, classificationStore, broadcast };
 
   ipcMain.handle('getOnboardingStatus', () => dataStore.getOnboardingStatus());
   ipcMain.handle('completeOnboarding', (_e, names: string[]) => {
