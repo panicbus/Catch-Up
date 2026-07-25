@@ -28,7 +28,7 @@ function ChevronIcon({ open }: { open: boolean }) {
 export function ChannelManageList() {
   const { channels } = useChannels();
   const [draft, setDraft] = useState('');
-  const [listOpen, setListOpen] = useState(true);
+  const [listOpen, setListOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
