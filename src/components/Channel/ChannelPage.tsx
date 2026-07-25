@@ -104,6 +104,11 @@ export function ChannelPage() {
     }
   };
 
+  // The "All caught up on X!" message should name whatever you're actually viewing — the active
+  // subchannel when one is selected, otherwise the whole channel.
+  const activeSubchannel = subchannelId ? channel.subchannels.find((s) => s.id === subchannelId) : null;
+  const caughtUpName = activeSubchannel?.name ?? channel.name;
+
   return (
     <div className="channel-page">
       <div className="channel-page__header">
@@ -166,7 +171,7 @@ export function ChannelPage() {
         <NewsFeed
           ref={feedRef}
           articles={articles.map((a) => ({ ...a, channelName: channel.name }))}
-          channelName={channel.name}
+          channelName={caughtUpName}
           viewMode={settings.defaultViewMode}
           maxUnreadStories={settings.maxStoriesShown}
           onReadInPlaceCountChange={setReadInPlaceCount}
