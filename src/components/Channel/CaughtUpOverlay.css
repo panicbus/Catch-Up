@@ -57,6 +57,29 @@
   color: var(--text);
 }
 
+/* Countdown bar pinned to the bottom edge of the badge; fills left→right over the auto-dismiss
+   duration (set inline via animation-duration). */
+.caught-up-overlay__timer {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  width: 0;
+  background: var(--text-faint);
+  border-radius: 0 0 2px 2px;
+  animation-name: caught-up-overlay-timer;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes caught-up-overlay-timer {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
 /* The confetti originates from the centre of the badge. Zero-size anchor with overflow visible so
    the pieces fly outward past it. */
 .caught-up-overlay__confetti {

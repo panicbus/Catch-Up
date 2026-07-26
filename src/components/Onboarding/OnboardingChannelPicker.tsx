@@ -35,7 +35,7 @@ export function OnboardingChannelPicker({ names, onChange }: OnboardingChannelPi
         <input
           className="channel-picker__input"
           type="text"
-          placeholder="Type a topic — e.g. Music, Phish, Local Politics…"
+          placeholder="e.g. Art, Local Politics, Bruce Springsteen… press tab to add."
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}

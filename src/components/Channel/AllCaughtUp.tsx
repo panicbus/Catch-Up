@@ -25,7 +25,7 @@ export function AllCaughtUp({ channelName, celebrate }: AllCaughtUpProps) {
       <div className="all-caught-up__celebration-wrap">
         {showConfetti && <ConfettiEffect pieceCount={50} durationMs={2100} onDone={() => setShowConfetti(false)} />}
       </div>
-      <div className="all-caught-up__title">All caught up on {channelName}!</div>
+      <div className="all-caught-up__title">All caught up in {channelName}!</div>
       <div className="all-caught-up__body">New stories will show up here automatically.</div>
     </div>
   );
