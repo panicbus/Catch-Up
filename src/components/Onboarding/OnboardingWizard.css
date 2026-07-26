@@ -1,4 +1,6 @@
 .onboarding {
+  position: relative;
+  overflow: hidden;
   height: 100vh;
   display: flex;
   align-items: center;
@@ -6,7 +8,21 @@
   background: var(--bg);
 }
 
+/* Diner sketch embedded into the cream via multiply. */
+.onboarding__bg {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+  mix-blend-mode: multiply;
+  opacity: 0.22;
+  pointer-events: none;
+}
+
 .onboarding__card {
+  position: relative;
+  z-index: 1;
   width: 520px;
   max-width: calc(100vw - 48px);
   background: var(--surface);

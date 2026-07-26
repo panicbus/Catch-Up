@@ -4,6 +4,7 @@ import { ChannelSearchBar } from './ChannelSearchBar';
 import { ChannelTabGrid } from './ChannelTabGrid';
 import { RollTheDiceButton } from './RollTheDiceButton';
 import { EmptyState } from '../common/EmptyState';
+import dinerBg from '../../assets/diner-bg.png';
 import './HomePage.css';
 
 export function HomePage() {
@@ -12,6 +13,8 @@ export function HomePage() {
 
   return (
     <div className="home-page">
+      {/* Diner sketch embedded into the cream via multiply (white → cream, lines show through). */}
+      <div className="home-page__bg" style={{ backgroundImage: `url("${dinerBg}")` }} aria-hidden="true" />
       <div className="home-page__utility-bar">
         <ChannelSearchBar />
       </div>

@@ -3,6 +3,7 @@ import { Logo } from '../Layout/Logo';
 import { OnboardingChannelPicker } from './OnboardingChannelPicker';
 import { Button } from '../common/Button';
 import { api } from '../../services/api';
+import dinerBg from '../../assets/diner-bg.png';
 import './OnboardingWizard.css';
 
 interface OnboardingWizardProps {
@@ -29,6 +30,8 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 
   return (
     <div className="onboarding">
+      {/* Diner sketch embedded into the cream via multiply (shared with Home). */}
+      <div className="onboarding__bg" style={{ backgroundImage: `url("${dinerBg}")` }} aria-hidden="true" />
       <div className="onboarding__card">
         <div className="onboarding__header">
           <Logo size={88} />

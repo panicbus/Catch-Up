@@ -1,5 +1,28 @@
 .home-page {
+  position: relative;
+  min-height: 100%;
+  box-sizing: border-box;
+  background: var(--bg); /* cream backdrop the sketch multiplies into */
   padding: 10px 40px 40px;
+}
+
+/* Diner sketch embedded into the cream: multiply drops the white to the cream beneath, leaving the
+   lines. Tune `opacity` to taste. */
+.home-page__bg {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+  mix-blend-mode: multiply;
+  opacity: 0.22;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.home-page > *:not(.home-page__bg) {
+  position: relative;
+  z-index: 1;
 }
 
 .home-page__utility-bar {
