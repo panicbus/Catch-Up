@@ -59,6 +59,14 @@ export function registerIpcHandlers({ dataStore, articlesCache, classificationSt
     dataStore.reorderChannel(channelId, direction);
     broadcast({ type: 'channels' });
   });
+  ipcMain.handle('setChannelOrder', (_e, orderedIds: string[]) => {
+    dataStore.setChannelOrder(orderedIds);
+    broadcast({ type: 'channels' });
+  });
+  ipcMain.handle('setChannelPause', (_e, channelId: string, hours: number | null) => {
+    dataStore.setChannelPause(channelId, hours);
+    broadcast({ type: 'channels' });
+  });
 
   ipcMain.handle('addSubchannel', (_e, channelId: string, name: string) => {
     const sub = dataStore.addSubchannel(channelId, name);

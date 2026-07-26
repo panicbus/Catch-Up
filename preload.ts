@@ -21,6 +21,8 @@ const api: CatchUpApi = {
   renameChannel: (channelId, name) => ipcRenderer.invoke('renameChannel', channelId, name),
   deleteChannel: (channelId) => ipcRenderer.invoke('deleteChannel', channelId),
   reorderChannel: (channelId, direction) => ipcRenderer.invoke('reorderChannel', channelId, direction),
+  setChannelOrder: (orderedIds) => ipcRenderer.invoke('setChannelOrder', orderedIds),
+  setChannelPause: (channelId, hours) => ipcRenderer.invoke('setChannelPause', channelId, hours),
 
   addSubchannel: (channelId, name) => ipcRenderer.invoke('addSubchannel', channelId, name),
   renameSubchannel: (channelId, subchannelId, name) =>

@@ -10,6 +10,13 @@
   margin-bottom: 8px;
 }
 
+.channel-page__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .channel-page__title {
   font-size: 24px;
 }

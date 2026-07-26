@@ -1,0 +1,86 @@
+.pause-control-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.pause-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+/* Labelled button (channel page) — matches the secondary buttons next to it. */
+.pause-control--button {
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.pause-control--button:hover {
+  background: var(--surface-hover);
+}
+
+/* Compact icon (home tiles). */
+.pause-control--icon {
+  width: 26px;
+  height: 26px;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+.pause-control--icon:hover {
+  background: rgba(255, 255, 255, 0.38);
+}
+
+/* Paused state reads as "resume" — greenish go color, matching the onboarding Continue button. */
+.pause-control--paused.pause-control--button {
+  border-color: #3f9d5a;
+  color: #3f9d5a;
+}
+.pause-control--paused.pause-control--icon {
+  background: rgba(63, 157, 90, 0.9);
+  color: #fff;
+}
+
+/* Duration dropdown. */
+.pause-control__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 150px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card-hover);
+}
+.pause-control__menu-label {
+  padding: 4px 8px 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+.pause-control__menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.pause-control__menu-item:hover {
+  background: var(--surface-hover);
+}

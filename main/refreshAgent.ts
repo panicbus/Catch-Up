@@ -76,7 +76,8 @@ export async function runAll(deps: RefreshDeps): Promise<RunResult[]> {
   if (isRunning) return [];
   isRunning = true;
   try {
-    const channels = deps.dataStore.getChannels();
+    // Skip paused channels — the whole point of pausing is no background fetching.
+    const channels = deps.dataStore.getChannels().filter((c) => !deps.dataStore.isChannelPaused(c.id));
     const results: RunResult[] = [];
     const cycle = backgroundCycle++;
     for (const channel of channels) {

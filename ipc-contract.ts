@@ -13,6 +13,9 @@ export interface Channel {
   createdAt: string;
   sortOrder: number;
   subchannels: Subchannel[];
+  /** ISO timestamp the channel is paused until; null when active. While paused, the background
+   * refresh skips it and it shows grayed out. */
+  pausedUntil: string | null;
 }
 
 export interface Article {
@@ -143,6 +146,10 @@ export interface CatchUpApi {
   renameChannel: (channelId: string, name: string) => Promise<void>;
   deleteChannel: (channelId: string) => Promise<void>;
   reorderChannel: (channelId: string, direction: 'up' | 'down') => Promise<void>;
+  /** Set the whole channel order at once (used by Home drag-to-reorder). Ids in display order. */
+  setChannelOrder: (orderedIds: string[]) => Promise<void>;
+  /** Pause a channel's auto-refresh for `hours` (24/48/168), or pass null to resume immediately. */
+  setChannelPause: (channelId: string, hours: number | null) => Promise<void>;
 
   // Subchannel CRUD
   addSubchannel: (channelId: string, name: string) => Promise<Subchannel>;

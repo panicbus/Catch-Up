@@ -97,6 +97,10 @@ export class DataStore {
     this.data = this.read();
     this.readIds = new Set(this.data.readArticleIds.map((r) => r.id));
     this.migrateCapitalization();
+    // Backfill pausedUntil for channels saved before the pause feature existed.
+    for (const channel of this.data.channels) {
+      if (channel.pausedUntil === undefined) channel.pausedUntil = null;
+    }
   }
 
   /** One-time normalization for channels/subchannels created before auto-capitalization existed —
@@ -197,10 +201,40 @@ export class DataStore {
       createdAt: new Date().toISOString(),
       sortOrder: this.data.channels.length,
       subchannels: [],
+      pausedUntil: null,
     };
     this.data.channels.push(channel);
     if (opts.persist !== false) this.write();
     return channel;
+  }
+
+  /** Pause a channel's auto-refresh for `hours`, or resume it with null. */
+  setChannelPause(channelId: string, hours: number | null): void {
+    const channel = this.requireChannel(channelId);
+    channel.pausedUntil = hours == null ? null : new Date(Date.now() + hours * 3600_000).toISOString();
+    this.write();
+  }
+
+  /** Whether the channel is currently paused (pausedUntil in the future). Expired pauses read as
+   * active without needing a separate cleanup pass. */
+  isChannelPaused(channelId: string): boolean {
+    const channel = this.data.channels.find((c) => c.id === channelId);
+    return !!channel?.pausedUntil && new Date(channel.pausedUntil).getTime() > Date.now();
+  }
+
+  /** Reorder all channels to match the given id order (Home drag-to-reorder), renumbering sortOrder.
+   * Ids not present are appended in their existing relative order, so a stale list can't drop any. */
+  setChannelOrder(orderedIds: string[]): void {
+    const byId = new Map(this.data.channels.map((c) => [c.id, c]));
+    const reordered: Channel[] = [];
+    for (const id of orderedIds) {
+      const c = byId.get(id);
+      if (c && !reordered.includes(c)) reordered.push(c);
+    }
+    for (const c of this.data.channels) if (!reordered.includes(c)) reordered.push(c);
+    reordered.forEach((c, i) => (c.sortOrder = i));
+    this.data.channels = reordered;
+    this.write();
   }
 
   renameChannel(channelId: string, name: string): void {

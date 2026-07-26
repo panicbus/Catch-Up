@@ -9,6 +9,7 @@ import { ViewModeToggle } from './ViewModeToggle';
 import { NewsFeed, type NewsFeedHandle } from './NewsFeed';
 import { EmptyState } from '../common/EmptyState';
 import { Button } from '../common/Button';
+import { PauseChannelControl } from '../common/PauseChannelControl';
 import { api } from '../../services/api';
 import './ChannelPage.css';
 
@@ -113,10 +114,13 @@ export function ChannelPage() {
     <div className="channel-page">
       <div className="channel-page__header">
         <h1 className="channel-page__title" ref={setTitleNode}>{channel.name}</h1>
-        <Button variant="secondary" size="sm" onClick={handleRefresh} disabled={refreshing}>
-          <RefreshIcon spinning={refreshing} />
-          {refreshing ? 'Refreshing…' : 'Refresh'}
-        </Button>
+        <div className="channel-page__header-actions">
+          <PauseChannelControl channelId={channel.id} pausedUntil={channel.pausedUntil} />
+          <Button variant="secondary" size="sm" onClick={handleRefresh} disabled={refreshing}>
+            <RefreshIcon spinning={refreshing} />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </Button>
+        </div>
       </div>
       {refreshNote && <p className="channel-page__refresh">{refreshNote}</p>}
 
