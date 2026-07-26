@@ -18,6 +18,7 @@ export const api: CatchUpApi = {
   reorderChannel: (channelId, direction) => getBridge().reorderChannel(channelId, direction),
   setChannelOrder: (orderedIds) => getBridge().setChannelOrder(orderedIds),
   setChannelPause: (channelId, hours) => getBridge().setChannelPause(channelId, hours),
+  clearChannel: (channelId) => getBridge().clearChannel(channelId),
 
   addSubchannel: (channelId, name) => getBridge().addSubchannel(channelId, name),
   renameSubchannel: (channelId, subchannelId, name) =>

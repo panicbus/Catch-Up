@@ -353,6 +353,22 @@ export class DataStore {
     this.write();
   }
 
+  /** Mark many articles read in one write (manual "clear" of a channel). */
+  markManyRead(ids: string[]): void {
+    let changed = false;
+    const at = new Date().toISOString();
+    for (const id of ids) {
+      if (this.readIds.has(id)) continue;
+      this.readIds.add(id);
+      this.data.readArticleIds.push({ id, readAt: at });
+      changed = true;
+    }
+    if (changed) {
+      this.pruneReadArticleIds();
+      this.write();
+    }
+  }
+
   markUnread(articleId: string): void {
     if (!this.readIds.has(articleId)) return;
     this.readIds.delete(articleId);

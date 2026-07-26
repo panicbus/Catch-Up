@@ -150,6 +150,8 @@ export interface CatchUpApi {
   setChannelOrder: (orderedIds: string[]) => Promise<void>;
   /** Pause a channel's auto-refresh for `hours` (24/48/168), or pass null to resume immediately. */
   setChannelPause: (channelId: string, hours: number | null) => Promise<void>;
+  /** Manually clear a channel: mark all its stories read (no caught-up celebration). */
+  clearChannel: (channelId: string) => Promise<void>;
 
   // Subchannel CRUD
   addSubchannel: (channelId: string, name: string) => Promise<Subchannel>;

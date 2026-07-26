@@ -5,7 +5,17 @@
   margin-top: 14px;
 }
 
+/* Wrapper is the grid item + drag target; the tile Link fills it, controls overlay the corners. */
+.channel-tile-wrap {
+  position: relative;
+  display: flex;
+}
+.channel-tile-wrap--dragging {
+  opacity: 0.4;
+}
+
 .channel-tile {
+  flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -15,7 +25,67 @@
   text-decoration: none;
   color: #fff;
   box-shadow: 0 4px 14px -8px rgba(60, 30, 20, 0.35);
-  transition: box-shadow 0.15s;
+  transition: box-shadow 0.15s, filter 0.15s, opacity 0.15s;
+}
+
+/* Paused channels read as muted. */
+.channel-tile--paused {
+  filter: grayscale(0.9);
+  opacity: 0.72;
+}
+
+/* Drag handle, top-left. */
+.channel-tile__handle {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  cursor: grab;
+  opacity: 0.8;
+  transition: background 0.12s, opacity 0.12s;
+}
+.channel-tile__handle:hover {
+  background: rgba(255, 255, 255, 0.34);
+  opacity: 1;
+}
+.channel-tile__handle:active {
+  cursor: grabbing;
+}
+
+/* Always-visible mini controls, bottom-right. */
+.channel-tile__controls {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.channel-tile__ctrl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.channel-tile__ctrl:hover {
+  background: rgba(255, 255, 255, 0.38);
 }
 
 .channel-tile:hover {

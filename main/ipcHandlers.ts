@@ -113,6 +113,12 @@ export function registerIpcHandlers({ dataStore, articlesCache, classificationSt
     dataStore.markUnread(articleId);
     broadcast({ type: 'readState', channelId });
   });
+  ipcMain.handle('clearChannel', (_e, channelId: string) => {
+    // Mark every cached story in the channel read — a manual "clear" (no celebration).
+    const ids = articlesCache.getArticles(channelId, null).map((a) => a.id);
+    dataStore.markManyRead(ids);
+    broadcast({ type: 'readState', channelId });
+  });
   ipcMain.handle('getRandomArticle', (_e, excludeArticleId?: string) => {
     // Copy — getReadArticleIds() returns the store's live internal Set by reference, and adding
     // excludeArticleId to it directly would incorrectly mark that article "read" in memory.
