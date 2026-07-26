@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../services/api';
 import './PauseChannelControl.css';
 
-const OPTIONS: { label: string; hours: number }[] = [
-  { label: '24 hours', hours: 24 },
-  { label: '48 hours', hours: 48 },
-  { label: '1 week', hours: 168 },
+const OPTIONS: { label: string; value: number | 'forever' }[] = [
+  { label: '24 hours', value: 24 },
+  { label: '48 hours', value: 48 },
+  { label: '1 week', value: 168 },
+  { label: 'Until I say so', value: 'forever' },
 ];
 
 export function isChannelPaused(pausedUntil: string | null | undefined): boolean {
@@ -56,9 +57,9 @@ export function PauseChannelControl({ channelId, pausedUntil, variant = 'button'
     e.preventDefault();
     e.stopPropagation();
   };
-  const pause = (e: React.MouseEvent, hours: number) => {
+  const pause = (e: React.MouseEvent, value: number | 'forever') => {
     stop(e);
-    void api.setChannelPause(channelId, hours);
+    void api.setChannelPause(channelId, value);
     setOpen(false);
   };
   const resume = (e: React.MouseEvent) => {
@@ -104,11 +105,11 @@ export function PauseChannelControl({ channelId, pausedUntil, variant = 'button'
           <div className="pause-control__menu-label">Pause for…</div>
           {OPTIONS.map((o) => (
             <button
-              key={o.hours}
+              key={o.value}
               type="button"
               role="menuitem"
               className="pause-control__menu-item"
-              onClick={(e) => pause(e, o.hours)}
+              onClick={(e) => pause(e, o.value)}
             >
               {o.label}
             </button>

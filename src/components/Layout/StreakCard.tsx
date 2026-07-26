@@ -3,27 +3,40 @@ import './StreakCard.css';
 
 const PROGRESS_SEGMENTS = 5;
 
-/** The flame grows with the streak: a small single flame at 1 day, incrementally bigger each day,
- * biggest at 5 (and capped there — see FLAME_MAX_LEVEL). Scaled from its base so it grows upward,
- * with a brighter inner core for depth. */
+/** The fire builds with the streak: a single small flame at 1 day that grows and sprouts side
+ * flames into a full multi-flame fire by day 5 (capped there — see FLAME_MAX_LEVEL). At the full
+ * 5-day fire the flames flicker (see .streak-card__fire--flicker in the CSS). Twice the old size. */
 const FLAME_MAX_LEVEL = 5;
 
 function FlameIcon({ level }: { level: number }) {
   const lvl = Math.min(Math.max(level, 1), FLAME_MAX_LEVEL);
-  const scale = 0.66 + (lvl - 1) * 0.105; // ~0.66 at day 1 → ~1.08 at day 5+
-  // Once the flame is maxed out (5+ days), it's "on fire" — a gentle pulsing ember glow marks it.
-  const glowing = level >= FLAME_MAX_LEVEL;
+  const t = (lvl - 1) / (FLAME_MAX_LEVEL - 1); // 0 at day 1 → 1 at day 5
+  const full = level >= FLAME_MAX_LEVEL;
+
+  // Grow each flame from its base; side flames emerge after the first day or so. When full, the
+  // CSS flicker animation drives the transforms instead, so we leave them unset here.
+  const centerScaleY = 0.6 + 0.4 * t;
+  const sideScaleY = 0.45 + 0.55 * t;
+  const sideOpacity = Math.max(0, Math.min(1, (t - 0.15) / 0.85));
+  const sideStyle = full ? undefined : { transform: `scaleY(${sideScaleY})`, opacity: sideOpacity };
+
   return (
     <svg
-      viewBox="0 0 20 20"
-      width="20"
-      height="20"
+      viewBox="0 0 44 44"
+      width="40"
+      height="40"
       aria-hidden="true"
-      className={`streak-card__flame ${glowing ? 'streak-card__flame--glow' : ''}`}
+      className={`streak-card__fire ${full ? 'streak-card__fire--flicker' : ''}`}
     >
-      <g style={{ transformOrigin: '10px 17px', transform: `scale(${scale})` }}>
-        <path d="M10 3c4 4 4 8 0 14-4-6-4-10 0-14z" fill="#ff9d2e" />
-        <path d="M10 8c2 2 2 4 0 7-2-3-2-5 0-7z" fill="#ffe08a" />
+      <g className="streak-card__flame streak-card__flame--left" style={sideStyle}>
+        <path d="M13 23 C 16.5 27, 16.5 32, 13 40 C 9.5 32, 9.5 27, 13 23 Z" fill="#ff7a1a" />
+      </g>
+      <g className="streak-card__flame streak-card__flame--right" style={sideStyle}>
+        <path d="M31 23 C 34.5 27, 34.5 32, 31 40 C 27.5 32, 27.5 27, 31 23 Z" fill="#ff7a1a" />
+      </g>
+      <g className="streak-card__flame streak-card__flame--center" style={full ? undefined : { transform: `scaleY(${centerScaleY})` }}>
+        <path d="M22 8 C 30 17, 30 26, 22 40 C 14 26, 14 17, 22 8 Z" fill="#ff9d2e" />
+        <path d="M22 19 C 26 24, 26 30, 22 36 C 18 30, 18 24, 22 19 Z" fill="#ffe08a" />
       </g>
     </svg>
   );

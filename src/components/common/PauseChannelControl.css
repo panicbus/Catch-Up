@@ -41,11 +41,11 @@
 
 /* Paused state reads as "resume" — greenish go color, matching the onboarding Continue button. */
 .pause-control--paused.pause-control--button {
-  border-color: #3f9d5a;
-  color: #3f9d5a;
+  border-color: var(--go);
+  color: var(--go);
 }
 .pause-control--paused.pause-control--icon {
-  background: rgba(63, 157, 90, 0.9);
+  background: var(--go);
   color: #fff;
 }
 

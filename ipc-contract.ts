@@ -13,9 +13,13 @@ export interface Channel {
   createdAt: string;
   sortOrder: number;
   subchannels: Subchannel[];
-  /** ISO timestamp the channel is paused until; null when active. While paused, the background
-   * refresh skips it and it shows grayed out. */
+  /** ISO timestamp the channel is paused until; null when active. A far-future sentinel means
+   * "until I say so" (indefinite). While paused, the background refresh skips it and it shows grayed
+   * out. */
   pausedUntil: string | null;
+  /** Human label for the current pause ("24 hours", "1 week", "until I say so"), for the paused
+   * channel view; null when active. */
+  pausedLabel: string | null;
 }
 
 export interface Article {
@@ -148,8 +152,9 @@ export interface CatchUpApi {
   reorderChannel: (channelId: string, direction: 'up' | 'down') => Promise<void>;
   /** Set the whole channel order at once (used by Home drag-to-reorder). Ids in display order. */
   setChannelOrder: (orderedIds: string[]) => Promise<void>;
-  /** Pause a channel's auto-refresh for `hours` (24/48/168), or pass null to resume immediately. */
-  setChannelPause: (channelId: string, hours: number | null) => Promise<void>;
+  /** Pause a channel's auto-refresh: a number of hours (24/48/168), 'forever' (until explicitly
+   * resumed), or null to resume immediately. */
+  setChannelPause: (channelId: string, duration: number | 'forever' | null) => Promise<void>;
   /** Manually clear a channel: mark all its stories read (no caught-up celebration). */
   clearChannel: (channelId: string) => Promise<void>;
 

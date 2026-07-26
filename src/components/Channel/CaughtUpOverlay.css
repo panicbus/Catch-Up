@@ -65,7 +65,7 @@
   bottom: 0;
   height: 4px;
   width: 0;
-  background: var(--text-faint);
+  background: var(--go);
   border-radius: 0 0 2px 2px;
   animation-name: caught-up-overlay-timer;
   animation-timing-function: linear;

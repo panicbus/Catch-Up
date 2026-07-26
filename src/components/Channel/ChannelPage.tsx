@@ -9,7 +9,8 @@ import { ViewModeToggle } from './ViewModeToggle';
 import { NewsFeed, type NewsFeedHandle } from './NewsFeed';
 import { EmptyState } from '../common/EmptyState';
 import { Button } from '../common/Button';
-import { PauseChannelControl } from '../common/PauseChannelControl';
+import { PauseChannelControl, isChannelPaused } from '../common/PauseChannelControl';
+import { ChannelPausedScreen } from './ChannelPausedScreen';
 import { api } from '../../services/api';
 import './ChannelPage.css';
 
@@ -17,6 +18,14 @@ function ArchiveIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 5h18v4H3zM5 9v10h14V9M10 13h4" />
+    </svg>
+  );
+}
+
+function ClearIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 13l4 4L19 7" />
     </svg>
   );
 }
@@ -51,6 +60,7 @@ export function ChannelPage() {
   const [titleScrolledOut, setTitleScrolledOut] = useState(false);
   const [readInPlaceCount, setReadInPlaceCount] = useState(0);
   const feedRef = useRef<NewsFeedHandle>(null);
+  const clearSuppressRef = useRef(false);
   // A callback ref (rather than useRef + a effect keyed on channelId) so the observer attaches
   // exactly when the <h1> node actually mounts — channels load asynchronously via IPC, so on first
   // render `channel` is still null and the early `if (!channel) return null` below skips rendering
@@ -105,10 +115,31 @@ export function ChannelPage() {
     }
   };
 
+  // Manual "clear" (mark all read). Arm the suppress ref first so NewsFeed treats the resulting
+  // 0-unread as a manual clear — no celebration, no streak advance.
+  const handleClear = () => {
+    if (totalUnread === 0) return;
+    clearSuppressRef.current = true;
+    void api.clearChannel(channel.id);
+  };
+
   // The "All caught up on X!" message should name whatever you're actually viewing — the active
   // subchannel when one is selected, otherwise the whole channel.
   const activeSubchannel = subchannelId ? channel.subchannels.find((s) => s.id === subchannelId) : null;
   const caughtUpName = activeSubchannel?.name ?? channel.name;
+
+  // While paused, the channel view is replaced by a grayed "on a break" takeover — only Resume acts.
+  if (isChannelPaused(channel.pausedUntil)) {
+    return (
+      <div className="channel-page">
+        <ChannelPausedScreen
+          name={channel.name}
+          pausedUntil={channel.pausedUntil}
+          onResume={() => void api.setChannelPause(channel.id, null)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="channel-page">
@@ -116,6 +147,10 @@ export function ChannelPage() {
         <h1 className="channel-page__title" ref={setTitleNode}>{channel.name}</h1>
         <div className="channel-page__header-actions">
           <PauseChannelControl channelId={channel.id} pausedUntil={channel.pausedUntil} />
+          <Button variant="secondary" size="sm" onClick={handleClear} disabled={totalUnread === 0} title="Mark all stories read">
+            <ClearIcon />
+            Clear
+          </Button>
           <Button variant="secondary" size="sm" onClick={handleRefresh} disabled={refreshing}>
             <RefreshIcon spinning={refreshing} />
             {refreshing ? 'Refreshing…' : 'Refresh'}
@@ -179,6 +214,7 @@ export function ChannelPage() {
           viewMode={settings.defaultViewMode}
           maxUnreadStories={settings.maxStoriesShown}
           onReadInPlaceCountChange={setReadInPlaceCount}
+          suppressCelebrationRef={clearSuppressRef}
         />
       )}
     </div>

@@ -66,17 +66,57 @@
   }
 }
 
-/* At a 5+ day streak the flame is maxed and "on fire" — a soft pulsing golden glow celebrates it. */
-.streak-card__flame--glow {
-  animation: streak-flame-glow 1.7s ease-in-out infinite;
+/* Each flame scales from its own base (bottom-center) so it grows upward. */
+.streak-card__flame {
+  transform-box: fill-box;
+  transform-origin: bottom center;
 }
-@keyframes streak-flame-glow {
+
+/* Full 5-day fire: a soft pulsing golden glow + the flames flicker at staggered rates for an
+   organic fire feel. */
+.streak-card__fire--flicker {
+  animation: streak-fire-glow 1.7s ease-in-out infinite;
+}
+@keyframes streak-fire-glow {
   0%,
   100% {
-    filter: drop-shadow(0 0 1.5px rgba(255, 224, 138, 0.55));
+    filter: drop-shadow(0 0 2px rgba(255, 180, 60, 0.55));
   }
   50% {
-    filter: drop-shadow(0 0 5px rgba(255, 224, 138, 0.95));
+    filter: drop-shadow(0 0 7px rgba(255, 200, 90, 0.95));
+  }
+}
+
+.streak-card__fire--flicker .streak-card__flame--center {
+  animation: streak-flicker-center 0.9s ease-in-out infinite;
+}
+.streak-card__fire--flicker .streak-card__flame--left {
+  animation: streak-flicker-left 0.7s ease-in-out infinite;
+}
+.streak-card__fire--flicker .streak-card__flame--right {
+  animation: streak-flicker-right 0.8s ease-in-out infinite;
+}
+@keyframes streak-flicker-center {
+  0%, 100% { transform: scaleY(1) scaleX(1); }
+  50% { transform: scaleY(1.14) scaleX(0.96); }
+}
+@keyframes streak-flicker-left {
+  0%, 100% { transform: scaleY(0.96) scaleX(1); opacity: 0.9; }
+  40% { transform: scaleY(1.12) scaleX(0.94); opacity: 1; }
+  70% { transform: scaleY(0.88) scaleX(1.02); opacity: 0.85; }
+}
+@keyframes streak-flicker-right {
+  0%, 100% { transform: scaleY(1.06) scaleX(0.98); opacity: 1; }
+  45% { transform: scaleY(0.9) scaleX(1.03); opacity: 0.88; }
+  75% { transform: scaleY(1.13) scaleX(0.95); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streak-card__fire--flicker,
+  .streak-card__fire--flicker .streak-card__flame--center,
+  .streak-card__fire--flicker .streak-card__flame--left,
+  .streak-card__fire--flicker .streak-card__flame--right {
+    animation: none;
   }
 }
 

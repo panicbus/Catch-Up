@@ -4,7 +4,7 @@ import './CaughtUpOverlay.css';
 
 /** How long the caught-up notice lingers before auto-dismissing. The timer bar fills over this same
  * duration so the countdown is visible. */
-const DISMISS_MS = 5000;
+const DISMISS_MS = 4000;
 
 /** The "All caught up!" reward — a floating card layered over the just-cleared cards. Confetti
  * bursts once on appearance; it auto-dismisses after DISMISS_MS (with a filling timer bar), and the

@@ -26,11 +26,11 @@
 }
 
 .btn--success {
-  background: #3f9d5a;
+  background: var(--go);
   color: #fff;
 }
 .btn--success:hover {
-  background: #368a4f;
+  background: var(--go-strong);
 }
 .btn--success:disabled {
   background: var(--border-strong);

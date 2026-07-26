@@ -63,8 +63,8 @@ export function registerIpcHandlers({ dataStore, articlesCache, classificationSt
     dataStore.setChannelOrder(orderedIds);
     broadcast({ type: 'channels' });
   });
-  ipcMain.handle('setChannelPause', (_e, channelId: string, hours: number | null) => {
-    dataStore.setChannelPause(channelId, hours);
+  ipcMain.handle('setChannelPause', (_e, channelId: string, duration: number | 'forever' | null) => {
+    dataStore.setChannelPause(channelId, duration);
     broadcast({ type: 'channels' });
   });
 

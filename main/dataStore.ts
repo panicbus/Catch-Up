@@ -56,6 +56,16 @@ const DEFAULT_DATA: DataFile = {
 // stories · 2 week archive" label promises, this is what actually stops collecting past it.
 const READ_STATE_MAX_AGE_DAYS = 14;
 
+// Sentinel pausedUntil for an indefinite ("until I say so") pause — far enough out that the normal
+// "pausedUntil > now" check treats it as paused forever, no special-casing needed.
+const PAUSE_FOREVER_UNTIL = '9999-12-31T00:00:00.000Z';
+function pauseLabelForHours(hours: number): string {
+  if (hours === 24) return '24 hours';
+  if (hours === 48) return '48 hours';
+  if (hours === 168) return '1 week';
+  return `${hours} hours`;
+}
+
 function genId(prefix: string): string {
   return `${prefix}_${crypto.randomBytes(6).toString('hex')}`;
 }
@@ -97,9 +107,10 @@ export class DataStore {
     this.data = this.read();
     this.readIds = new Set(this.data.readArticleIds.map((r) => r.id));
     this.migrateCapitalization();
-    // Backfill pausedUntil for channels saved before the pause feature existed.
+    // Backfill pause fields for channels saved before the pause feature existed.
     for (const channel of this.data.channels) {
       if (channel.pausedUntil === undefined) channel.pausedUntil = null;
+      if (channel.pausedLabel === undefined) channel.pausedLabel = null;
     }
   }
 
@@ -202,16 +213,26 @@ export class DataStore {
       sortOrder: this.data.channels.length,
       subchannels: [],
       pausedUntil: null,
+      pausedLabel: null,
     };
     this.data.channels.push(channel);
     if (opts.persist !== false) this.write();
     return channel;
   }
 
-  /** Pause a channel's auto-refresh for `hours`, or resume it with null. */
-  setChannelPause(channelId: string, hours: number | null): void {
+  /** Pause a channel's auto-refresh: a number of hours, 'forever' (indefinite), or null to resume. */
+  setChannelPause(channelId: string, duration: number | 'forever' | null): void {
     const channel = this.requireChannel(channelId);
-    channel.pausedUntil = hours == null ? null : new Date(Date.now() + hours * 3600_000).toISOString();
+    if (duration == null) {
+      channel.pausedUntil = null;
+      channel.pausedLabel = null;
+    } else if (duration === 'forever') {
+      channel.pausedUntil = PAUSE_FOREVER_UNTIL;
+      channel.pausedLabel = 'until I say so';
+    } else {
+      channel.pausedUntil = new Date(Date.now() + duration * 3600_000).toISOString();
+      channel.pausedLabel = pauseLabelForHours(duration);
+    }
     this.write();
   }
 

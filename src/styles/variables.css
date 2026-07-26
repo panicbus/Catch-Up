@@ -5,6 +5,11 @@
   --accent-soft: #fdeceb;
   --accent-gradient: linear-gradient(160deg, #e4483a, #f2874a);
 
+  /* "Go" / success green — one green shared by read checkmarks, Continue/Resume buttons, and the
+     caught-up timer bar. */
+  --go: #3f8a60;
+  --go-strong: #347552;
+
   /* Surface */
   --bg: #f5efe3;
   --surface: #ffffff;

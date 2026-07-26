@@ -60,6 +60,10 @@ interface NewsFeedProps {
   /** Reports how many stories are currently read-in-place (dimmed, kept in the feed) so a parent
    * can drive a "move all to archive" control's enabled state. */
   onReadInPlaceCountChange?: (count: number) => void;
+  /** Set true by the parent right before a manual "clear" (mark-all-read); the next >0→0 unread
+   * transition is then treated as a manual clear — no celebration, no streak advance. Consumed
+   * (reset to false) once handled. */
+  suppressCelebrationRef?: { current: boolean };
 }
 
 /** Imperative handle for parents (ChannelPage's "move read to archive" button). */
@@ -274,6 +278,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     catchUpMode = partitionByRead,
     showReadDimmed = false,
     onReadInPlaceCountChange,
+    suppressCelebrationRef,
   }: NewsFeedProps,
   ref
 ) {
@@ -417,17 +422,26 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     if (!catchUpMode) return;
     const prevCount = prevUnreadCountRef.current;
     if (prevCount !== null && prevCount > 0 && trueUnreadCount === 0) {
-      setJustCleared(true);
-      // This genuine >0 -> 0 transition is what advances the daily streak (idempotent per calendar
-      // day on the main side). Guarded — no error boundary; see markReadInPlace above.
-      try {
-        void api.recordCatchUp()?.catch((err) => console.error('[NewsFeed] recordCatchUp failed', err));
-      } catch (err) {
-        console.error('[NewsFeed] recordCatchUp failed synchronously', err);
+      if (suppressCelebrationRef?.current) {
+        // This 0 came from a manual "clear", not from genuinely reading through — no celebration and
+        // no streak advance.
+        suppressCelebrationRef.current = false;
+        setJustCleared(false);
+      } else {
+        setJustCleared(true);
+        // This genuine >0 -> 0 transition is what advances the daily streak (idempotent per calendar
+        // day on the main side). Guarded — no error boundary; see markReadInPlace above.
+        try {
+          void api.recordCatchUp()?.catch((err) => console.error('[NewsFeed] recordCatchUp failed', err));
+        } catch (err) {
+          console.error('[NewsFeed] recordCatchUp failed synchronously', err);
+        }
       }
     } else if (trueUnreadCount > 0) {
       setJustCleared(false);
       setCelebrationDismissed(false);
+      // Drop any stale suppress flag once there's unread again, so a later genuine catch-up celebrates.
+      if (suppressCelebrationRef) suppressCelebrationRef.current = false;
     }
     prevUnreadCountRef.current = trueUnreadCount;
     // Only the unread count should re-run this — article identity churns constantly on refresh.
