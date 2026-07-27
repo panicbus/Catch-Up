@@ -17,6 +17,8 @@
  * id so a story is classified at most once, and a daily cap bounds spend/quota. See aiRelevance.ts
  * for how the heuristic pre-filter, this call, and the cache are combined. */
 
+import type { ChannelProfile } from './channelProfiles';
+
 // `gemini-flash-latest` is Google's alias for the current free-tier Flash model — it keeps working
 // as older pinned versions (gemini-2.0-flash, etc.) roll off the free tier. Override with GEMINI_MODEL
 // to pin a specific version if you ever need reproducibility.
@@ -40,6 +42,10 @@ export interface ClassifyInput {
   channelName: string;
   /** null for a channel-level search. */
   subchannelName: string | null;
+  /** The channel's profile (channelProfiles.ts) — its category + on-topic/anti-topic keywords, handed
+   * to the model as the channel's definition so its judgement matches the heuristic's. Optional so the
+   * classifier still works standalone (e.g. tests) without one. */
+  profile?: ChannelProfile;
 }
 
 export function isAiConfigured(): boolean {
@@ -94,8 +100,19 @@ function buildPrompt(input: ClassifyInput): { system: string; user: string } {
     'the topic words (e.g. a celebrity story for a "Pop Culture" topic) — judge the meaning, not ' +
     'keyword overlap. When unsure, KEEP it (do not list it). Respond with JSON only: ' +
     '{"remove": [<ids of the clearly off-topic articles>]}.';
+
+  // Hand the model the channel's profile as its definition — the broad news category it belongs to,
+  // and example on-topic / off-topic keywords — so its call lines up with the heuristic's.
+  const profile = input.profile;
+  const guidance: string[] = [];
+  if (profile?.category) guidance.push(`This is a ${profile.category} channel.`);
+  if (profile?.include.length) guidance.push(`On-topic stories often involve: ${profile.include.slice(0, 20).join(', ')}.`);
+  if (profile?.exclude.length) guidance.push(`Off-topic for this channel: ${profile.exclude.join(', ')}.`);
+
   const user =
-    `TOPIC: ${topic}\n\nARTICLES:\n` +
+    `TOPIC: ${topic}\n` +
+    (guidance.length ? `${guidance.join(' ')}\n` : '') +
+    `\nARTICLES:\n` +
     JSON.stringify(
       input.items.map((i) => ({ id: i.id, title: i.title, snippet: i.snippet ?? '' })),
     );

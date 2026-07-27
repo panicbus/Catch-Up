@@ -22,7 +22,13 @@ export const gNewsProvider: NewsProvider = {
     if (!key) return [];
     if (isCoolingDown(PROVIDER_ID)) return [];
 
-    const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(query.topic)}&lang=en&token=${key}`;
+    // GNews /search has no category filter and returns no section, so it can't lean on those signals.
+    // For a topic/entity channel (no category) we tighten server-side with in=title,description so the
+    // entity must appear in the headline/blurb, not just the body. Category channels stay broad — their
+    // channel word (e.g. "Music") rarely appears verbatim in a real headline — and rely on the
+    // relevance scorer + AI layer downstream instead.
+    const inParam = query.category ? '' : '&in=title,description';
+    const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(query.topic)}&lang=en&token=${key}${inParam}`;
     try {
       const res = await fetch(url);
       if (!res.ok) {

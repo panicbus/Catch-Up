@@ -1,6 +1,6 @@
 import fs from 'fs';
 import { articlesCacheFilePath } from './paths';
-import { articleId, normalizeTitle, normalizeUrl } from './providers/dedupe';
+import { articleId, normalizeUrl, titleDedupeKey } from './providers/dedupe';
 import { isPaywalledDomain } from './providers/paywallDomains';
 import type { FetchedArticle } from './providers/types';
 
@@ -155,9 +155,10 @@ export class ArticlesCache {
     return this.data.byChannel[channelId]?.articles.find((a) => a.id === articleId);
   }
 
-  /** Merges fetched provider articles into a channel's bucket, deduping by URL and by normalized
-   * headline (catches wire/syndicated stories republished verbatim under different URLs across
-   * outlets), and pruning by age then count. Each incoming article carries its own real originating
+  /** Merges fetched provider articles into a channel's bucket, deduping by URL and by a stopword-
+   * stripped headline key (catches wire/syndicated stories republished under different URLs, plus
+   * near-duplicates that differ only by a filler word), and pruning by age then count. Each incoming
+   * article carries its own real originating
    * provider (tagged by runProviders) — a single call here can merge results from several providers
    * queried in parallel, so there's no one blanket provider for the whole batch.
    *
@@ -169,14 +170,14 @@ export class ArticlesCache {
   merge(channelId: string, subchannelId: string | null, incoming: FetchedArticle[]): number {
     const bucket = (this.data.byChannel[channelId] ??= { ...DEFAULT_BUCKET, articles: [] });
     const seenIds = new Set(bucket.articles.map((a) => a.id));
-    const seenTitles = new Set(bucket.articles.map((a) => normalizeTitle(a.title)));
+    const seenKeys = new Set(bucket.articles.map((a) => titleDedupeKey(a.title)));
     const addedIds: string[] = [];
     for (const article of incoming) {
       const id = articleId(article.url);
-      const normalizedTitle = normalizeTitle(article.title);
-      if (seenIds.has(id) || seenTitles.has(normalizedTitle)) continue;
+      const dedupeKey = titleDedupeKey(article.title);
+      if (seenIds.has(id) || seenKeys.has(dedupeKey)) continue;
       seenIds.add(id);
-      seenTitles.add(normalizedTitle);
+      seenKeys.add(dedupeKey);
       let hostname = '';
       try {
         hostname = new URL(normalizeUrl(article.url)).hostname;
@@ -208,17 +209,17 @@ export class ArticlesCache {
 
   private prune(bucket: ChannelBucket): void {
     const cutoff = Date.now() - bucket.maxAgeDays * 24 * 60 * 60 * 1000;
-    const seenTitles = new Set<string>();
+    const seenKeys = new Set<string>();
     let unreadKept = 0;
     bucket.articles = bucket.articles
       .filter((a) => new Date(a.publishedAt).getTime() >= cutoff)
       .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
-      // Collapses any title duplicates already sitting in the cache from before dedupe existed —
-      // sorted newest-first above, so this keeps the most recent republication of each story.
+      // Collapses title duplicates and near-duplicates already sitting in the cache (from before the
+      // fuzzy key existed) — sorted newest-first above, so this keeps the most recent of each story.
       .filter((a) => {
-        const key = normalizeTitle(a.title);
-        if (seenTitles.has(key)) return false;
-        seenTitles.add(key);
+        const key = titleDedupeKey(a.title);
+        if (seenKeys.has(key)) return false;
+        seenKeys.add(key);
         return true;
       })
       // Cap UNREAD to the newest MAX_UNREAD_PER_CHANNEL (list is newest-first). Read stories are

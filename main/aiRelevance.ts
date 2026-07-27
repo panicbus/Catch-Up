@@ -2,14 +2,15 @@ import { articleId } from './providers/dedupe';
 import { filterByRelevance } from './providers/relevance';
 import { classifyOffTopic, isAiConfigured, MAX_BATCH } from './providers/classifier';
 import type { ClassificationStore } from './classificationStore';
+import type { ChannelProfile } from './providers/channelProfiles';
 import type { FetchedArticle } from './providers/types';
 
 /** The relevance stage of a refresh, combining the free heuristic and the AI classifier. Sits in
  * main/ (not the pure providers/ folder) because it orchestrates the fs-backed classification store.
  *
  * Pipeline for one freshly-fetched batch:
- *   1. HEURISTIC (always, free): filterByRelevance() drops loose Google-News-RSS junk. Cheap, and it
- *      shrinks what the AI ever sees.
+ *   1. HEURISTIC (always, free): filterByRelevance() applies the soft additive relevance gate (the
+ *      channel profile + section signals). Cheap, and it shrinks what the AI ever sees.
  *   2. AI (when configured + under the daily cap): reuse any cached verdict; classify only the
  *      not-yet-seen survivors, in chunks no larger than the model batch size; drop the ones judged
  *      clearly off-topic. Cache every fresh verdict so each story is classified at most once.
@@ -21,11 +22,12 @@ export async function filterRelevant(
   channelId: string,
   channelName: string,
   subchannelName: string | null,
+  profile: ChannelProfile,
   store: ClassificationStore,
   aiEnabled: boolean,
 ): Promise<FetchedArticle[]> {
-  // Stage 1 — free heuristic.
-  const heuristic = filterByRelevance(fetched, topic);
+  // Stage 1 — free heuristic (the soft additive gate, using the channel's profile).
+  const heuristic = filterByRelevance(fetched, { topic, channelName, subchannelName, profile });
   // Stage 2 requires the user to have turned AI filtering on AND a key to be configured.
   if (!aiEnabled || !isAiConfigured() || heuristic.length === 0) return heuristic;
 
@@ -59,6 +61,7 @@ export async function filterRelevant(
       items: chunk.map((e) => ({ id: e.id, title: e.article.title, snippet: e.article.snippet })),
       channelName,
       subchannelName,
+      profile,
     });
     if (offTopic == null) {
       // Model unavailable/failed for this chunk — keep it, do NOT cache (so it retries next cycle).

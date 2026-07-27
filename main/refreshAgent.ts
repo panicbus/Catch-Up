@@ -3,6 +3,7 @@ import type { ArticlesCache } from './articlesCache';
 import type { ClassificationStore } from './classificationStore';
 import { runProviders, getProviderStatus } from './providers/registry';
 import { filterRelevant } from './aiRelevance';
+import { channelProfile } from './providers/channelProfiles';
 import type { DataChangeEvent } from '../ipc-contract';
 
 const INTERVAL_MS = 30 * 60 * 1000;
@@ -105,6 +106,11 @@ export async function runChannel(
     };
   }
 
+  // Derived once per channel: which broad news category (if any) this channel is, plus its on-topic
+  // /anti-topic keyword rules. Drives both the provider query (category-narrowed where supported) and
+  // the relevance gate + AI classifier downstream.
+  const profile = channelProfile(channel.name);
+
   // The plain channel-name search always runs, even when subchannels exist — subchannels narrow
   // in addition to the channel's own general coverage, not instead of it. Overlap between this and
   // a subchannel-specific search is handled by articlesCache.merge()'s existing URL/title dedup.
@@ -127,8 +133,13 @@ export async function runChannel(
   const errors: string[] = [];
   for (const target of targets) {
     try {
-      const fetched = await runProviders({ topic: target.topic, channelId, subchannelId: target.subchannelId });
-      // Relevance stage: free heuristic first (drops loose RSS junk), then the AI classifier when a
+      const fetched = await runProviders({
+        topic: target.topic,
+        channelId,
+        subchannelId: target.subchannelId,
+        category: profile.category,
+      });
+      // Relevance stage: free heuristic first (soft additive gate), then the AI classifier when a
       // key is configured (drops tangential/wrong-sense results the keywords can't catch). Always
       // degrades to the heuristic on any AI failure — see aiRelevance.ts.
       const relevant = await filterRelevant(
@@ -137,6 +148,7 @@ export async function runChannel(
         channelId,
         channel.name,
         target.subchannelName,
+        profile,
         deps.classificationStore,
         deps.dataStore.getAiEnabled()
       );

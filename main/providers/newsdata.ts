@@ -1,4 +1,5 @@
 import type { NewsProvider, ProviderArticle, ProviderQuery } from './types';
+import { PROVIDER_CATEGORY } from './channelProfiles';
 import { isCoolingDown, isHardFailureStatus, startCooldown, RATE_LIMIT_COOLDOWN_MS } from './cooldown';
 
 interface NewsDataResult {
@@ -8,6 +9,8 @@ interface NewsDataResult {
   source_id?: string;
   pubDate?: string;
   image_url?: string;
+  category?: string[];
+  keywords?: string[];
 }
 
 const PROVIDER_ID = 'newsdata';
@@ -22,7 +25,9 @@ export const newsDataProvider: NewsProvider = {
     if (!key) return [];
     if (isCoolingDown(PROVIDER_ID)) return [];
 
-    const url = `https://newsdata.io/api/1/news?apikey=${key}&q=${encodeURIComponent(query.topic)}&language=en`;
+    const cat = query.category ? PROVIDER_CATEGORY.newsdata[query.category] : undefined;
+    const catParam = cat ? `&category=${cat}` : '';
+    const url = `https://newsdata.io/api/1/news?apikey=${key}&q=${encodeURIComponent(query.topic)}&language=en${catParam}`;
     try {
       const res = await fetch(url);
       if (!res.ok) {
@@ -42,6 +47,8 @@ export const newsDataProvider: NewsProvider = {
           source: r.source_id ?? 'NewsData',
           publishedAt: r.pubDate ? new Date(r.pubDate).toISOString() : new Date().toISOString(),
           imageUrl: r.image_url ?? null,
+          section: r.category?.[0] ?? null,
+          tags: r.keywords ?? null,
         }));
     } catch (e) {
       console.warn('[newsdata] fetch error', e);

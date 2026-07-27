@@ -16,6 +16,9 @@ interface NytDoc {
   abstract?: string;
   pub_date?: string;
   multimedia?: { url?: string }[];
+  section_name?: string;
+  news_desk?: string;
+  keywords?: { value?: string }[];
 }
 
 const PROVIDER_ID = 'nytimes';
@@ -52,6 +55,12 @@ export const nytimesProvider: NewsProvider = {
             source: 'The New York Times',
             publishedAt: d.pub_date ?? new Date().toISOString(),
             imageUrl: image ? `https://www.nytimes.com/${image}` : null,
+            // Read the desk/section back as a relevance signal. No server-side fq filter: NYT is
+            // rate-limited (5/min) and its desk/section values don't map cleanly to our categories
+            // (entertainment → Arts/Movies/Culture, politics → news_desk not section_name), so a wrong
+            // fq would waste a scarce call by returning nothing. The scorer reads this instead.
+            section: d.section_name ?? d.news_desk ?? null,
+            tags: d.keywords?.map((k) => k.value).filter((v): v is string => !!v) ?? null,
           };
         });
     } catch (e) {

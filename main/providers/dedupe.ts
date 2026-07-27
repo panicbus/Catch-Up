@@ -30,3 +30,25 @@ export function normalizeTitle(title: string): string {
     .trim()
     .replace(/\s+/g, ' ');
 }
+
+/** Function words that carry no identity — the bits that get shuffled when the same wire story is
+ * re-headlined ("…arrives **in** stellar debut" vs "…**on** stellar debut"). Shared with the
+ * relevance scorer. Kept here because dedupe.ts is the lowest-level (crypto-only) module, so both
+ * channelProfiles.ts and relevance.ts can import it without an import cycle. */
+export const STOPWORDS = new Set([
+  'a', 'an', 'the',
+  'and', 'or', 'but', 'nor', 'so', 'yet',
+  'of', 'in', 'on', 'at', 'to', 'for', 'with', 'as', 'by', 'from', 'into', 'onto', 'over', 'under', 'after', 'before', 'about', 'up', 'out',
+  'is', 'are', 'was', 'were', 'be', 'been', 'being', 'has', 'have', 'had', 'will', 'would', 'can', 'could',
+  'this', 'that', 'these', 'those', 'it', 'its',
+]);
+
+/** A stricter dedup key than normalizeTitle: drops STOPWORDS so headlines that differ only by a
+ * filler word collapse together, while PRESERVING word order so genuinely different sentences with
+ * the same words don't ("man bites dog" ≠ "dog bites man"). Falls back to the full normalized title
+ * if stripping leaves nothing, so all-stopword titles aren't all fused into one empty key. */
+export function titleDedupeKey(title: string): string {
+  const normalized = normalizeTitle(title);
+  const kept = normalized.split(' ').filter((w) => w && !STOPWORDS.has(w));
+  return kept.length ? kept.join(' ') : normalized;
+}

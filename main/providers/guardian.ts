@@ -1,4 +1,5 @@
 import type { NewsProvider, ProviderArticle, ProviderQuery } from './types';
+import { PROVIDER_CATEGORY } from './channelProfiles';
 import { isCoolingDown, isHardFailureStatus, startCooldown, RATE_LIMIT_COOLDOWN_MS } from './cooldown';
 
 interface GuardianResult {
@@ -7,6 +8,7 @@ interface GuardianResult {
   webPublicationDate?: string;
   sectionName?: string;
   fields?: { trailText?: string; thumbnail?: string };
+  tags?: { webTitle?: string }[];
 }
 
 const PROVIDER_ID = 'guardian';
@@ -21,7 +23,9 @@ export const guardianProvider: NewsProvider = {
     if (!key) return [];
     if (isCoolingDown(PROVIDER_ID)) return [];
 
-    const url = `https://content.guardianapis.com/search?q=${encodeURIComponent(query.topic)}&api-key=${key}&show-fields=trailText,thumbnail`;
+    const section = query.category ? PROVIDER_CATEGORY.guardian[query.category] : undefined;
+    const sectionParam = section ? `&section=${section}` : '';
+    const url = `https://content.guardianapis.com/search?q=${encodeURIComponent(query.topic)}&api-key=${key}&show-fields=trailText,thumbnail&show-tags=keyword${sectionParam}`;
     try {
       const res = await fetch(url);
       if (!res.ok) {
@@ -41,6 +45,8 @@ export const guardianProvider: NewsProvider = {
           source: 'The Guardian',
           publishedAt: r.webPublicationDate ?? new Date().toISOString(),
           imageUrl: r.fields?.thumbnail ?? null,
+          section: r.sectionName ?? null,
+          tags: r.tags?.map((t) => t.webTitle).filter((t): t is string => !!t) ?? null,
         }));
     } catch (e) {
       console.warn('[guardian] fetch error', e);
