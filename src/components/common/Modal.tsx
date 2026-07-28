@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import './Modal.css';
 
 interface ModalProps {
@@ -23,7 +24,10 @@ export function Modal({ title, children, onClose, contentClassName, icon, center
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
-  return (
+  // Portaled to <body> so the overlay escapes any stacking context its call site sits inside (e.g.
+  // Home's channel tiles are positioned with z-index:1, which would otherwise trap and paint over a
+  // modal rendered inline within the page). Its z-index then applies against the whole document.
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div
         className={`modal ${contentClassName ?? ''}`}
@@ -40,6 +44,7 @@ export function Modal({ title, children, onClose, contentClassName, icon, center
         )}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

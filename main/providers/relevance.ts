@@ -119,13 +119,17 @@ interface ScoredSignals {
 }
 
 interface GateContext {
-  /** Terms that must appear for a subchannel and score as strong positives (the ambiguous channel
+  /** Terms that must appear for a strict batch and score as strong positives (the ambiguous channel
    * name is removed for category channels, so it never counts). */
   specificTerms: string[];
   include: string[];
   exclude: string[];
   category: NewsCategory | null;
-  isSubchannel: boolean;
+  /** When true, a story must NAME a specific term to be kept (the strict tier). True for every
+   * subchannel, AND for a topic/entity channel's own main feed — a specific entity (a band, a person)
+   * should be named in a genuine story about it, unlike a broad category word ("music") a real story
+   * rarely repeats. Only a CATEGORY channel's main feed is lenient (this stays false there). */
+  requireSpecificTerm: boolean;
 }
 
 function buildGateContext(ctx: RelevanceContext): GateContext {
@@ -141,7 +145,7 @@ function buildGateContext(ctx: RelevanceContext): GateContext {
     include: ctx.profile.include,
     exclude: ctx.profile.exclude,
     category: ctx.profile.category,
-    isSubchannel: ctx.subchannelName != null,
+    requireSpecificTerm: ctx.subchannelName != null || ctx.profile.type === 'topic',
   };
 }
 
@@ -216,12 +220,15 @@ function scoreArticle(article: FetchedArticle, gate: GateContext): ScoredSignals
 function keepArticle(article: FetchedArticle, gate: GateContext): boolean {
   const signals = scoreArticle(article, gate);
 
-  if (gate.isSubchannel) {
-    // Strict: must name a specific term, and must not be net-negative.
+  if (gate.requireSpecificTerm) {
+    // Strict tier (every subchannel + a topic/entity channel's main feed): the specific term must be
+    // named (in the title, a provider tag, or the snippet), and the story must not be net-negative.
+    // This is what keeps a Star-Trek or generic-marketing story out of a "Phish" channel — a real
+    // Phish story names Phish, so a story that never does is dropped.
     return signals.hasSpecificTerm && signals.score >= KEEP_SCORE;
   }
 
-  // Main channel: lenient — keep unless net-negative. The loose RSS fallback additionally needs some
+  // Lenient tier (a CATEGORY channel's main feed only): keep unless net-negative. The loose RSS fallback additionally needs some
   // positive evidence (its keyword search is the main source of wrong-sense noise, e.g. "Virginia
   // Tech" for a Tech channel — which now scores nothing, since "tech" is the ambiguous channel word).
   if (article.provider === FALLBACK_PROVIDER_ID && !signals.hasPositive) return false;
