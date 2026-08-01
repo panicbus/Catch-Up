@@ -243,6 +243,14 @@ function scoreArticle(article: FetchedArticle, gate: GateContext): ScoredSignals
 
   // Locality (topic/entity channels with a home location only — see buildGateContext). A story
   // mentioning no resolvable place is left untouched; only a clear near/far mention nudges the score.
+  // KNOWN NUANCE (verified in relevance.test.ts, not a bug): the "title/tag evidence always
+  // survives distance" guarantee only fully holds for a channel's OWN term, because gate.include
+  // is always the parent channel's word(s) (never the subchannel's). A SUBCHANNEL's own term named
+  // only in the title (without the parent channel's word also present) floors at +3, same as a
+  // channel-word-only-in-snippet match, so it CAN still be tipped out by localityFar. This is
+  // acceptable, not accidental: subchannels are already the strict tier elsewhere in this file
+  // ("when in doubt, keep out"), so a subchannel story with no other corroborating evidence being
+  // more sensitive to a distant, unrelated place mention is consistent with that existing bar.
   if (gate.locality) {
     const km = nearestMentionKm(article.title, article.snippet, gate.locality);
     if (km !== null) {

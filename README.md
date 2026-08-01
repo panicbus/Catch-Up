@@ -147,6 +147,8 @@ The DMG then appears at `https://github.com/panicbus/Catch-Up/releases/tag/v0.11
 |--------|--------------|
 | `npm run dev` | Compile main process, start Vite, launch the app (renderer hot-reloads) |
 | `npm run typecheck` | Type-check both the renderer and the Electron main process |
+| `npm run test` | Run the main-process test suite once (relevance/locality/refresh pipeline) |
+| `npm run test:watch` | Run the test suite in watch mode |
 | `npm run build` | Production build of the renderer + compiled main process |
 | `npm run start` | Build, then launch the built app |
 | `npm run pack:mac:dir` | Build and package an unsigned macOS `.app` (arm64) into `release/` |

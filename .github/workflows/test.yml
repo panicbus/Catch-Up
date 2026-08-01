@@ -1,0 +1,25 @@
+name: Test
+
+# Type-checks and runs the test suite on every push/PR — separate from release.yml (which only
+# runs on a version tag). No signing/provider keys needed here, so this doesn't require any repo
+# Secrets and runs on the cheaper Linux runner.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
