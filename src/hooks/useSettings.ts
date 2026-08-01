@@ -8,6 +8,7 @@ const FALLBACK: AppSettings = {
   theme: 'light',
   rollTheDiceChannelIds: null,
   maxStoriesShown: 25,
+  homeLocation: null,
 };
 
 export function useSettings() {

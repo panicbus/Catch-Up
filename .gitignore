@@ -11,8 +11,9 @@ release
 # Local-only Claude Code skills (not shared via the repo)
 .claude/skills/
 
-# Local data (JSON stores) and secrets
-data/
+# Local data (JSON stores) and secrets. Anchored to the repo root (`/data/`, not `data/`) so it
+# doesn't also match main/data/ — the bundled, committed gazetteer asset used by main/locality/.
+/data/
 .env
 .env.*
 !.env.example

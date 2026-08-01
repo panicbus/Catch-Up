@@ -42,6 +42,7 @@ export const api: CatchUpApi = {
 
   getSettings: () => getBridge().getSettings(),
   setSettings: (partial) => getBridge().setSettings(partial),
+  resolveHomeLocation: (query) => getBridge().resolveHomeLocation(query),
 
   getAiConfig: () => getBridge().getAiConfig(),
   setAiFilteringEnabled: (enabled) => getBridge().setAiFilteringEnabled(enabled),

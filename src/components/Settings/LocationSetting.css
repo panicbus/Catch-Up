@@ -1,0 +1,35 @@
+.location-setting__hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.location-setting__row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.location-setting__input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.location-setting__error {
+  font-size: 13px;
+  color: var(--accent-strong);
+  margin-top: 8px;
+}
+
+.location-setting__confirm {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}

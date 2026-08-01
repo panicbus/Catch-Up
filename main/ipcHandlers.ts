@@ -7,6 +7,7 @@ import { getProviderStatus } from './providers/registry';
 import { pingModel } from './providers/classifier';
 import type { Article, ArticleListParams, DataChangeEvent } from '../ipc-contract';
 import type { CachedArticle } from './articlesCache';
+import { resolveCity } from './locality/gazetteer';
 
 export interface HandlerDeps {
   dataStore: DataStore;
@@ -141,6 +142,7 @@ export function registerIpcHandlers({ dataStore, articlesCache, classificationSt
     if (partial.theme) nativeTheme.themeSource = partial.theme;
     broadcast({ type: 'settings' });
   });
+  ipcMain.handle('resolveHomeLocation', (_e, query: string) => resolveCity(query));
 
   ipcMain.handle('getAiConfig', () => ({
     enabled: dataStore.getAiEnabled(),

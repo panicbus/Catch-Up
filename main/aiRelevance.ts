@@ -25,9 +25,11 @@ export async function filterRelevant(
   profile: ChannelProfile,
   store: ClassificationStore,
   aiEnabled: boolean,
+  homeLocation: { lat: number; lon: number } | null,
 ): Promise<FetchedArticle[]> {
-  // Stage 1 — free heuristic (the soft additive gate, using the channel's profile).
-  const heuristic = filterByRelevance(fetched, { topic, channelName, subchannelName, profile });
+  // Stage 1 — free heuristic (the soft additive gate, using the channel's profile). Locality is a
+  // heuristic-only signal (see relevance.ts) — deliberately not surfaced to the AI classifier below.
+  const heuristic = filterByRelevance(fetched, { topic, channelName, subchannelName, profile, homeLocation });
   // Stage 2 requires the user to have turned AI filtering on AND a key to be configured.
   if (!aiEnabled || !isAiConfigured() || heuristic.length === 0) return heuristic;
 

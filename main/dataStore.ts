@@ -44,6 +44,7 @@ const DEFAULT_DATA: DataFile = {
     theme: 'light',
     rollTheDiceChannelIds: null,
     maxStoriesShown: 25,
+    homeLocation: null,
   },
   ai: { enabled: false, apiKey: null },
   channels: [],

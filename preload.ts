@@ -48,6 +48,7 @@ const api: CatchUpApi = {
 
   getSettings: () => ipcRenderer.invoke('getSettings'),
   setSettings: (partial) => ipcRenderer.invoke('setSettings', partial),
+  resolveHomeLocation: (query) => ipcRenderer.invoke('resolveHomeLocation', query),
 
   getAiConfig: () => ipcRenderer.invoke('getAiConfig'),
   setAiFilteringEnabled: (enabled) => ipcRenderer.invoke('setAiFilteringEnabled', enabled),

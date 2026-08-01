@@ -27,6 +27,8 @@
 
 import { normalizeTitle } from './dedupe';
 import { sectionMatchesCategory, sectionIsForeign } from './channelProfiles';
+import { looksLikePlaceChannel } from '../locality/gazetteer';
+import { nearestMentionKm } from '../locality/placeExtraction';
 import type { ChannelProfile, NewsCategory } from './channelProfiles';
 import type { FetchedArticle } from './types';
 
@@ -53,8 +55,22 @@ const W = {
   excludeHit: -4, // an anti-topic keyword — a clear negative
   foreignSection: -4, // section belongs to a DIFFERENT category — a clear negative
   urlPathForeign: -2, // URL path belongs to a different category — a weaker negative
+  // Topic/entity channels only (see GateContext.locality) — a nearby mentioned place is a mild
+  // positive, a distant one a clear negative. For a topic channel's own main feed the channel's
+  // term is scored twice over (once as a specificTerm, once as profile.include — same word, both
+  // paths), so the weakest kept case (the term named ONLY in the snippet) actually floors at +3
+  // (termSnippet 2 + includeSnippet 1), not +2 — verified empirically, not assumed. -4 tips that
+  // floor below KEEP_SCORE when the story's nearest mentioned place is far away, while a title or
+  // tag match (floors at +5) survives regardless of distance — strong on-topic evidence should
+  // never be overridden by geography alone.
+  localityNear: 1,
+  localityFar: -4,
 };
 const KEEP_SCORE = 0; // keep when the summed score is >= this (i.e. not net-negative)
+// TUNABLE: distance bands (km) for the locality signal above. Inside NEAR, a mild boost; beyond
+// FAR, a mild penalty; the middle band is deliberately neutral (no cliff at one arbitrary radius).
+const LOCALITY_NEAR_KM = 100;
+const LOCALITY_FAR_KM = 500;
 
 export interface QueryTerms {
   /** Meaningful, de-duplicated topic tokens (lowercased, stopwords removed). */
@@ -70,6 +86,9 @@ export interface RelevanceContext {
   /** null for a channel-level (main) batch. */
   subchannelName: string | null;
   profile: ChannelProfile;
+  /** The user's configured home city (Settings), or null when unset. Only ever applied to topic/
+   * entity channels — see buildGateContext. */
+  homeLocation: { lat: number; lon: number } | null;
 }
 
 /** Tokenize a provider search topic into scorable terms. `normalizeTitle` already lowercases and
@@ -130,6 +149,11 @@ interface GateContext {
    * should be named in a genuine story about it, unlike a broad category word ("music") a real story
    * rarely repeats. Only a CATEGORY channel's main feed is lenient (this stays false there). */
   requireSpecificTerm: boolean;
+  /** The user's home location, but only when the locality signal should actually apply: a topic/
+   * entity channel, a home location configured, AND the channel isn't itself a place (see
+   * looksLikePlaceChannel) — every legitimate story in a channel named "Ukraine" would otherwise get
+   * penalized purely for being far from home. null means the signal is inactive. */
+  locality: { lat: number; lon: number } | null;
 }
 
 function buildGateContext(ctx: RelevanceContext): GateContext {
@@ -140,12 +164,15 @@ function buildGateContext(ctx: RelevanceContext): GateContext {
   const ambiguous =
     ctx.profile.type === 'category' ? new Set(buildQueryTerms(ctx.channelName).terms) : new Set<string>();
   const specificTerms = allTerms.filter((t) => !ambiguous.has(t));
+  const localityEligible =
+    ctx.profile.type === 'topic' && ctx.homeLocation != null && !looksLikePlaceChannel(ctx.channelName);
   return {
     specificTerms,
     include: ctx.profile.include,
     exclude: ctx.profile.exclude,
     category: ctx.profile.category,
     requireSpecificTerm: ctx.subchannelName != null || ctx.profile.type === 'topic',
+    locality: localityEligible ? ctx.homeLocation : null,
   };
 }
 
@@ -211,6 +238,16 @@ function scoreArticle(article: FetchedArticle, gate: GateContext): ScoredSignals
       } else if (sig === 'foreign') {
         score += W.urlPathForeign;
       }
+    }
+  }
+
+  // Locality (topic/entity channels with a home location only — see buildGateContext). A story
+  // mentioning no resolvable place is left untouched; only a clear near/far mention nudges the score.
+  if (gate.locality) {
+    const km = nearestMentionKm(article.title, article.snippet, gate.locality);
+    if (km !== null) {
+      if (km <= LOCALITY_NEAR_KM) score += W.localityNear;
+      else if (km >= LOCALITY_FAR_KM) score += W.localityFar;
     }
   }
 

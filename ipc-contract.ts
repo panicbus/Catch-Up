@@ -86,6 +86,12 @@ export interface AppSettings {
    * Defaults to 25, one of the three choices Settings offers (10/25/50), so the picker always
    * shows a real selection rather than landing on an unlabeled in-between value. */
   maxStoriesShown: 10 | 25 | 50;
+  /** User's home city, used to deprioritize geographically distant local stories in topic/entity
+   * channels (e.g. a "Wildfires" channel showing a small far-away town's fire story). Resolved
+   * against the bundled city gazetteer at save time — `query` is what the user typed, `label`/
+   * `lat`/`lon` are the resolved match. null = feature inactive (also how pre-existing data files
+   * without this field behave once loaded). Never applied to broad category channels. */
+  homeLocation: { query: string; label: string; lat: number; lon: number } | null;
 }
 
 export interface AiConfig {
@@ -192,6 +198,10 @@ export interface CatchUpApi {
   // Settings
   getSettings: () => Promise<AppSettings>;
   setSettings: (partial: Partial<AppSettings>) => Promise<void>;
+  /** Resolve a free-text city string ("Los Angeles, CA") against the bundled gazetteer, without
+   * persisting anything — the caller decides whether to save it via setSettings. Returns null when
+   * no match is found. */
+  resolveHomeLocation: (query: string) => Promise<{ label: string; lat: number; lon: number } | null>;
 
   // AI relevance filtering. The key itself never crosses to the renderer — getAiConfig reports only
   // whether one is configured.

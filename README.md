@@ -13,6 +13,7 @@ Catch Up is fully local: no account, no server, no telemetry. Everything it stor
 - **Channels** — add any topic (a subject, a person, a team, a hobby) and Catch Up pulls matching stories from multiple news providers automatically, refreshed in the background every 30 minutes.
 - **Subchannels** — narrow a channel with keyword searches (e.g. a *Music* channel with *Phish* and *Goose* subchannels) without losing the channel's own general coverage; subchannel results **add to** the channel feed rather than replacing it.
 - **Smart relevance filtering** — a foundational, zero-cost gate keeps off-topic stories out of each channel (no more politics leaking into *Music*, or a story that merely says "Tech" landing in *Tech*). Optionally, an AI layer (your own free Gemini key) sharpens it further. See [How relevance filtering works](#how-relevance-filtering-works).
+- **Local-story deprioritization** — set your home city in Settings and topic/entity channels (e.g. a *Wildfires* channel) quietly deprioritize local stories about places far from you, so a small distant town's story doesn't crowd out the ones near you. Broad category channels are unaffected. Fully offline — no external geocoding call.
 - **The Pool** — every channel's stories merged into one chronological feed, filterable by channel, with a configurable how-many-shown limit. For skimming across everything at once instead of channel by channel.
 - **Read once, done** — mark a story read and it's gone from the active list; no infinite scroll, no algorithmic reshuffling. A capped, chronological archive keeps the last two weeks around if you want to look back. Unread stories are capped per channel so the "to catch up on" number never gets overwhelming.
 - **Pause a channel** — take a break from a channel for 24 hours, 48 hours, a week, or "until I say so." Paused channels stop fetching in the background.
@@ -39,6 +40,8 @@ The scores add up, so one strong off-topic signal drops a story while a strong o
 **Stage 2 — optional AI (your own Gemini key).** When enabled in Settings, freshly-fetched stories that survive Stage 1 are run past a model that judges *meaning*, not keywords — dropping the tangential/wrong-sense results the heuristic can't catch. Verdicts are cached per story and bounded by a daily cap, so it stays cheap (and free-tier friendly). Every AI failure path degrades silently to the Stage-1 result — the app never breaks or blocks on the model.
 
 **Deduplication** runs on every merge: stories are collapsed by URL and by a filler-word-insensitive headline key, so the same wire story republished under different URLs — or two headlines differing only by a word like *in*/*on* — appear once.
+
+**Local-story deprioritization (topic/entity channels only).** When you've set a home city in Settings, Stage 1's score gets one more input: the story's title/snippet is scanned for place names against a bundled city gazetteer, and a story whose nearest mentioned place is far from home gets a mild penalty (a strong on-topic story survives regardless of distance; only borderline ones get tipped out). Broad category channels never apply this — they're supposed to show geographic variety.
 
 ---
 
@@ -205,3 +208,5 @@ Catch Up has no account system, doesn't sync to a server, and doesn't collect te
 - if — and only if — you turn on AI relevance filtering, the article titles/snippets sent to your chosen AI provider (Gemini) to judge relevance.
 
 Turn AI filtering off (the default) and nothing but the news-provider requests ever leaves your machine.
+
+The home-city lookup used for local-story deprioritization runs entirely offline against a bundled place database — no geocoding API, no network call, no key. That database is a trimmed extract of [GeoNames](https://www.geonames.org/) (all populated places with population > 5,000), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
