@@ -1,6 +1,6 @@
 {
   "name": "catch-up",
-  "version": "0.11.3",
+  "version": "0.11.4",
   "private": true,
   "description": "Your topics. Your pace. All caught up.",
   "author": "Catch Up contributors",
@@ -9,8 +9,12 @@
     "compile:electron": "tsc -p tsconfig.electron.json",
     "dev": "npm run compile:electron && concurrently -k \"npm run watch:electron\" \"vite\" \"wait-on tcp:127.0.0.1:5173 file:dist-electron/main.js file:dist-electron/preload.js && ELECTRON_IS_DEV=1 electron .\"",
     "watch:electron": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
+    "compile:server": "tsc -p tsconfig.server.json",
+    "watch:server": "tsc -p tsconfig.server.json --watch --preserveWatchOutput",
+    "dev:server": "npm run compile:server && concurrently -k \"npm run watch:server\" \"node --watch dist-server/server/index.js\"",
+    "start:server": "npm run compile:server && node dist-server/server/index.js",
     "build": "tsc -p tsconfig.json && vite build && npm run compile:electron",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "icons:mac": "bash scripts/build-icon.sh",
@@ -24,12 +28,21 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "pg": "^8.22.0",
+    "prisma": "^7.9.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.1",
     "rss-parser": "^3.13.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

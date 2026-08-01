@@ -1,0 +1,181 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../server/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Every table below is scoped by userId from day one, even though only one User row exists for
+// now (the founder's own account) — see the approved web-deployment plan. Real sign-in later only
+// changes how a request resolves its acting user, not any of this shape.
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  displayName  String?  @map("display_name")
+  passwordHash String?  @map("password_hash") // nullable/unused this phase — real accounts later
+  authProvider String?  @map("auth_provider") // nullable/unused this phase
+  isOwner      Boolean  @default(false) @map("is_owner")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  channels               Channel[]
+  subchannels            Subchannel[]
+  articles               Article[]
+  readStates             ReadState[]
+  bookmarks              Bookmark[]
+  settings               Settings?
+  streak                 Streak?
+  classificationVerdicts ClassificationCache[]
+  classificationBudgets  ClassificationDailyBudget[]
+
+  @@map("users")
+}
+
+model Channel {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  name        String
+  slug        String
+  sortOrder   Int       @map("sort_order")
+  pausedUntil DateTime? @map("paused_until")
+  pausedLabel String?   @map("paused_label")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subchannels Subchannel[]
+  articles    Article[]
+  bookmarks   Bookmark[]
+  verdicts    ClassificationCache[]
+
+  @@unique([userId, slug])
+  @@map("channels")
+}
+
+model Subchannel {
+  id        String   @id @default(uuid())
+  channelId String   @map("channel_id")
+  userId    String   @map("user_id") // denormalized for direct scoping, same pattern as every other table
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  channel  Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  articles Article[]
+
+  @@map("subchannels")
+}
+
+model Article {
+  // Keep the existing hash-of-url id (providers/dedupe.ts's articleId()) as the primary key
+  // rather than inventing a new surrogate key.
+  id             String   @id
+  channelId      String   @map("channel_id")
+  subchannelId   String?  @map("subchannel_id")
+  userId         String   @map("user_id")
+  url            String
+  title          String
+  snippet        String?
+  source         String
+  sourceDomain   String   @map("source_domain")
+  imageUrl       String?  @map("image_url")
+  publishedAt    DateTime @map("published_at")
+  fetchedAt      DateTime @map("fetched_at")
+  provider       String
+  paywalled      Boolean  @default(false)
+  titleDedupeKey String   @map("title_dedupe_key")
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel    Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  subchannel Subchannel? @relation(fields: [subchannelId], references: [id], onDelete: SetNull)
+
+  @@index([userId, channelId, publishedAt(sort: Desc)])
+  @@index([userId, channelId, titleDedupeKey])
+  @@map("articles")
+}
+
+model ReadState {
+  userId    String   @map("user_id")
+  articleId String   @map("article_id")
+  readAt    DateTime @default(now()) @map("read_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, articleId])
+  @@map("read_state")
+}
+
+model Bookmark {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  channelId       String   @map("channel_id")
+  subchannelId    String?  @map("subchannel_id")
+  articleId       String   @map("article_id")
+  bookmarkedAt    DateTime @default(now()) @map("bookmarked_at")
+  articleSnapshot Json     @map("article_snapshot") // same denormalized point-in-time snapshot as today
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, articleId])
+  @@map("bookmarks")
+}
+
+model Settings {
+  userId                 String    @id @map("user_id")
+  defaultViewMode        String    @default("list") @map("default_view_mode")
+  refreshIntervalMinutes Int       @default(30) @map("refresh_interval_minutes")
+  theme                  String    @default("light")
+  rollTheDiceChannelIds  String[]  @map("roll_the_dice_channel_ids")
+  maxStoriesShown        Int       @default(25) @map("max_stories_shown")
+  homeLocation           Json?     @map("home_location") // {query,label,lat,lon} or null, same shape as AppSettings today
+  aiEnabled              Boolean   @default(false) @map("ai_enabled")
+  aiApiKey               String?   @map("ai_api_key") // never sent to the frontend; same guarantee as dataStore.ts today
+  onboardingCompleted    Boolean   @default(false) @map("onboarding_completed")
+  onboardingCompletedAt  DateTime? @map("onboarding_completed_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("settings")
+}
+
+model Streak {
+  userId           String    @id @map("user_id")
+  current          Int       @default(0)
+  lastCaughtUpDate DateTime? @map("last_caught_up_date") @db.Date
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("streaks")
+}
+
+// Verdicts are cached per (user, channel, article) — NOT per article alone: the same URL can
+// legitimately be relevant in one channel and not another (confirmed against main/aiRelevance.ts,
+// whose cache key is already `${channelId}:${id}`, not just `id`).
+model ClassificationCache {
+  userId       String   @map("user_id")
+  channelId    String   @map("channel_id")
+  articleId    String   @map("article_id")
+  keep         Boolean
+  classifiedAt DateTime @default(now()) @map("classified_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, channelId, articleId])
+  @@map("classification_cache")
+}
+
+model ClassificationDailyBudget {
+  userId String   @map("user_id")
+  date   DateTime @db.Date
+  count  Int      @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, date])
+  @@map("classification_daily_budget")
+}

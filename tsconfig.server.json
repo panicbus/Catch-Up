@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist-server",
+    "rootDir": ".",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  "include": ["server/**/*.ts", "ipc-contract.ts", "channelName.ts", "main/providers/**/*.ts", "main/aiRelevance.ts", "main/locality/**/*.ts"],
+  "exclude": ["main/providers/**/*.test.ts", "main/locality/**/*.test.ts"]
+}

@@ -37,6 +37,15 @@ function emptyFile(): StoreFile {
   return { schemaVersion: 1, verdicts: {}, daily: { date: todayStr(), count: 0 } };
 }
 
+/** The public shape aiRelevance.ts actually depends on — an interface, not this file's concrete
+ * class, so a differently-backed implementation (e.g. a database-backed one for a hosted server)
+ * can be swapped in without aiRelevance.ts caring which storage this file-based class uses. */
+export interface ClassificationStoreLike {
+  getVerdict(id: string): boolean | undefined;
+  remainingDailyBudget(): number;
+  recordClassifications(entries: { id: string; keep: boolean }[]): void;
+}
+
 export class ClassificationStore {
   private data: StoreFile;
   private readonly filePath: string;

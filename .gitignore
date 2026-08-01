@@ -1,6 +1,7 @@
 node_modules
 dist
 dist-electron
+dist-server
 release
 .DS_Store
 *.log
@@ -19,3 +20,7 @@ release
 !.env.example
 # Provider keys bundled into a packaged build (generated from .env at release time)
 packaged.env
+
+# Generated database client (build output, not source) — lives under server/, never under src/,
+# since the browser-side app must never bundle a database driver.
+/server/generated/prisma

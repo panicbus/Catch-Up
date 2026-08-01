@@ -1,7 +1,7 @@
 import { articleId } from './providers/dedupe';
 import { filterByRelevance } from './providers/relevance';
 import { classifyOffTopic, isAiConfigured, MAX_BATCH } from './providers/classifier';
-import type { ClassificationStore } from './classificationStore';
+import type { ClassificationStoreLike } from './classificationStore';
 import type { ChannelProfile } from './providers/channelProfiles';
 import type { FetchedArticle } from './providers/types';
 
@@ -23,7 +23,7 @@ export async function filterRelevant(
   channelName: string,
   subchannelName: string | null,
   profile: ChannelProfile,
-  store: ClassificationStore,
+  store: ClassificationStoreLike,
   aiEnabled: boolean,
   homeLocation: { lat: number; lon: number } | null,
 ): Promise<FetchedArticle[]> {
