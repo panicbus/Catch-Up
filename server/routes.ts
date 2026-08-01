@@ -40,6 +40,10 @@ function handle(fn: (userId: string, req: Request) => Promise<unknown>) {
   };
 }
 
+// A plain "did the password gate let this through" check — used only by the frontend's password
+// screen to validate what someone typed before storing it. No user resolution needed here.
+router.get('/ping', (_req, res) => res.json({ ok: true }));
+
 // --- Onboarding ------------------------------------------------------------------------------
 
 router.get('/onboarding', handle((userId) => dataStore.getOnboardingStatus(userId)));

@@ -5,6 +5,7 @@ import type {
   Channel,
   DataChangeEvent,
 } from '../../ipc-contract';
+import { clearSitePassword, getSitePassword } from './sitePassword';
 
 // --- Desktop build: talk to the Electron bridge exactly as before ------------------------------
 
@@ -66,8 +67,20 @@ const API_BASE = `${import.meta.env.VITE_API_BASE_URL ?? ''}/api`;
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Site-Password': getSitePassword() ?? '',
+      ...options.headers,
+    },
   });
+  if (res.status === 401) {
+    // The stored password was rejected (changed server-side, or never valid) — clear it and
+    // reload so PasswordGate re-prompts, rather than the app silently failing every call.
+    clearSitePassword();
+    window.location.reload();
+    // Never resolves — the reload above is already in flight; this just satisfies the return type.
+    return new Promise<T>(() => {});
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body?.error || `Request failed: ${res.status}`);
   return body as T;

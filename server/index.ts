@@ -7,6 +7,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { router } from './routes';
+import { passwordGate } from './passwordGate';
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -30,7 +31,7 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-app.use('/api', router);
+app.use('/api', passwordGate, router);
 
 app.listen(PORT, () => {
   console.log(`[server] listening on port ${PORT}`);
