@@ -70,9 +70,13 @@ model Subchannel {
 }
 
 model Article {
-  // Keep the existing hash-of-url id (providers/dedupe.ts's articleId()) as the primary key
-  // rather than inventing a new surrogate key.
-  id             String   @id
+  // Keep the existing hash-of-url id (providers/dedupe.ts's articleId()) as the identifier rather
+  // than inventing a new surrogate key — but the REAL primary key is (channelId, id), not id
+  // alone: the same real-world story can legitimately be picked up by more than one channel's own
+  // search (e.g. a wire story matching both a "Tech" and a "Politics" channel) and needs its own
+  // row in each — confirmed against real migrated data, not theoretical (19 real articles existed
+  // in two channels each before this was caught).
+  id             String
   channelId      String   @map("channel_id")
   subchannelId   String?  @map("subchannel_id")
   userId         String   @map("user_id")
@@ -92,6 +96,7 @@ model Article {
   channel    Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
   subchannel Subchannel? @relation(fields: [subchannelId], references: [id], onDelete: SetNull)
 
+  @@id([channelId, id])
   @@index([userId, channelId, publishedAt(sort: Desc)])
   @@index([userId, channelId, titleDedupeKey])
   @@map("articles")
