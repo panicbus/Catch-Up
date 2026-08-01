@@ -23,3 +23,5 @@ packaged.env
 # Generated database client (build output, not source) — lives under server/, never under src/,
 # since the browser-side app must never bundle a database driver.
 /server/generated/prisma
+.vercel
+.env*
