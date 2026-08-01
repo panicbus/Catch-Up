@@ -1,6 +1,6 @@
 {
   "name": "catch-up",
-  "version": "0.11.4",
+  "version": "0.11.5",
   "private": true,
   "description": "Your topics. Your pace. All caught up.",
   "author": "Catch Up contributors",
@@ -25,7 +25,8 @@
     "bump:patch": "node scripts/bump-version.mjs patch",
     "bump:minor": "node scripts/bump-version.mjs minor",
     "bump:major": "node scripts/bump-version.mjs major",
-    "prepare": "husky"
+    "prepare": "husky",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
