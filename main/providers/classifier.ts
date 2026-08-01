@@ -46,10 +46,14 @@ export interface ClassifyInput {
    * to the model as the channel's definition so its judgement matches the heuristic's. Optional so the
    * classifier still works standalone (e.g. tests) without one. */
   profile?: ChannelProfile;
+  /** Explicit key, for a caller whose key doesn't live in this process's env (e.g. the hosted
+   * server, which stores each account's key in the database instead) — falls back to
+   * process.env.GEMINI_API_KEY when omitted, unchanged from before for the desktop app. */
+  apiKey?: string;
 }
 
-export function isAiConfigured(): boolean {
-  return !!process.env.GEMINI_API_KEY?.trim();
+export function isAiConfigured(apiKey?: string): boolean {
+  return !!(apiKey ?? process.env.GEMINI_API_KEY)?.trim();
 }
 
 /** Validate a candidate key with one tiny request, so the in-app key modal can give real feedback
@@ -121,8 +125,8 @@ function buildPrompt(input: ClassifyInput): { system: string; user: string } {
 
 /** The only provider-specific code. Returns the raw JSON text the model produced, or null on any
  * failure (no key, network error, non-200 incl. 429 rate-limit, timeout). Never throws. */
-async function callModel(system: string, user: string): Promise<string | null> {
-  const key = process.env.GEMINI_API_KEY?.trim();
+async function callModel(system: string, user: string, apiKey?: string): Promise<string | null> {
+  const key = (apiKey ?? process.env.GEMINI_API_KEY)?.trim();
   if (!key) return null;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -157,7 +161,7 @@ export async function classifyOffTopic(input: ClassifyInput): Promise<Set<string
   if (input.items.length === 0) return new Set();
   if (input.items.length > MAX_BATCH) input = { ...input, items: input.items.slice(0, MAX_BATCH) };
   const { system, user } = buildPrompt(input);
-  const raw = await callModel(system, user);
+  const raw = await callModel(system, user, input.apiKey);
   if (raw == null) return null;
   try {
     const parsed = JSON.parse(raw) as { remove?: unknown };

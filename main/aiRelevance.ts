@@ -26,12 +26,13 @@ export async function filterRelevant(
   store: ClassificationStoreLike,
   aiEnabled: boolean,
   homeLocation: { lat: number; lon: number } | null,
+  apiKey?: string,
 ): Promise<FetchedArticle[]> {
   // Stage 1 — free heuristic (the soft additive gate, using the channel's profile). Locality is a
   // heuristic-only signal (see relevance.ts) — deliberately not surfaced to the AI classifier below.
   const heuristic = filterByRelevance(fetched, { topic, channelName, subchannelName, profile, homeLocation });
   // Stage 2 requires the user to have turned AI filtering on AND a key to be configured.
-  if (!aiEnabled || !isAiConfigured() || heuristic.length === 0) return heuristic;
+  if (!aiEnabled || !isAiConfigured(apiKey) || heuristic.length === 0) return heuristic;
 
   // Verdicts are cached per (channel, article), not per article alone: relevance is channel-specific
   // and the same URL legitimately lands in several channels, so a "keep" for one channel must not
@@ -64,6 +65,7 @@ export async function filterRelevant(
       channelName,
       subchannelName,
       profile,
+      apiKey,
     });
     if (offTopic == null) {
       // Model unavailable/failed for this chunk — keep it, do NOT cache (so it retries next cycle).

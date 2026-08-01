@@ -6,6 +6,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import { router } from './routes';
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -28,6 +29,8 @@ app.use(
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
+
+app.use('/api', router);
 
 app.listen(PORT, () => {
   console.log(`[server] listening on port ${PORT}`);
