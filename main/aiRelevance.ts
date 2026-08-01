@@ -44,7 +44,7 @@ export async function filterRelevant(
   const kept: FetchedArticle[] = [];
   const toClassify: typeof entries = [];
   for (const e of entries) {
-    const cached = store.getVerdict(e.cacheKey);
+    const cached = await store.getVerdict(e.cacheKey);
     if (cached === true) kept.push(e.article);
     else if (cached === false) continue; // previously judged off-topic for this channel — stays dropped
     else toClassify.push(e); // never seen — needs the model
@@ -53,7 +53,7 @@ export async function filterRelevant(
   // Budget-limit the total for the day, then classify in chunks no larger than MAX_BATCH (so nothing
   // is ever silently truncated). Anything over budget, or in a chunk the model couldn't classify, is
   // kept as-is (heuristic result) and left unclassified to retry on a future cycle.
-  const budget = store.remainingDailyBudget();
+  const budget = await store.remainingDailyBudget();
   const classifiable = budget > 0 ? toClassify.slice(0, budget) : [];
   for (const e of toClassify.slice(classifiable.length)) kept.push(e.article); // over cap → keep
 
@@ -69,7 +69,7 @@ export async function filterRelevant(
       // Model unavailable/failed for this chunk — keep it, do NOT cache (so it retries next cycle).
       for (const e of chunk) kept.push(e.article);
     } else {
-      store.recordClassifications(chunk.map((e) => ({ id: e.cacheKey, keep: !offTopic.has(e.id) })));
+      await store.recordClassifications(chunk.map((e) => ({ id: e.cacheKey, keep: !offTopic.has(e.id) })));
       for (const e of chunk) if (!offTopic.has(e.id)) kept.push(e.article);
     }
   }

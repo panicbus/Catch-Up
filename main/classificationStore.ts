@@ -39,11 +39,13 @@ function emptyFile(): StoreFile {
 
 /** The public shape aiRelevance.ts actually depends on — an interface, not this file's concrete
  * class, so a differently-backed implementation (e.g. a database-backed one for a hosted server)
- * can be swapped in without aiRelevance.ts caring which storage this file-based class uses. */
+ * can be swapped in without aiRelevance.ts caring which storage this file-based class uses.
+ * Async throughout (even though this file-based implementation completes synchronously) because a
+ * database-backed implementation genuinely can't — aiRelevance.ts awaits every call. */
 export interface ClassificationStoreLike {
-  getVerdict(id: string): boolean | undefined;
-  remainingDailyBudget(): number;
-  recordClassifications(entries: { id: string; keep: boolean }[]): void;
+  getVerdict(id: string): Promise<boolean | undefined>;
+  remainingDailyBudget(): Promise<number>;
+  recordClassifications(entries: { id: string; keep: boolean }[]): Promise<void>;
 }
 
 export class ClassificationStore {
@@ -88,20 +90,20 @@ export class ClassificationStore {
   }
 
   /** A cached verdict for this article, or undefined if it's never been classified. */
-  getVerdict(id: string): boolean | undefined {
+  async getVerdict(id: string): Promise<boolean | undefined> {
     return this.data.verdicts[id]?.keep;
   }
 
   /** How many NEW articles may still be classified today (0 once the cap is hit). Resets at UTC
    * midnight. */
-  remainingDailyBudget(): number {
+  async remainingDailyBudget(): Promise<number> {
     if (this.data.daily.date !== todayStr()) return DAILY_CAP; // new day, not yet reset to disk
     return Math.max(0, DAILY_CAP - this.data.daily.count);
   }
 
   /** Persist verdicts for freshly-classified articles and count them against today's budget. Cached
    * hits must NOT be passed here — only genuinely new classifications count toward the cap. */
-  recordClassifications(entries: { id: string; keep: boolean }[]): void {
+  async recordClassifications(entries: { id: string; keep: boolean }[]): Promise<void> {
     if (entries.length === 0) return;
     const today = todayStr();
     if (this.data.daily.date !== today) {
