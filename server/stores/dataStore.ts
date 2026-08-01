@@ -257,6 +257,13 @@ export async function isRead(userId: string, articleId: string): Promise<boolean
   return !!row;
 }
 
+/** Every read article id for this user — used to build the full exclude-set for "Roll the dice"
+ * (see routes.ts's /random-article), matching the original's getReadArticleIds(). */
+export async function getReadArticleIds(userId: string): Promise<Set<string>> {
+  const rows = await prisma.readState.findMany({ where: { userId }, select: { articleId: true } });
+  return new Set(rows.map((r) => r.articleId));
+}
+
 export async function markRead(userId: string, articleId: string): Promise<void> {
   await prisma.readState.upsert({
     where: { userId_articleId: { userId, articleId } },

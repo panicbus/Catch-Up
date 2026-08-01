@@ -19,6 +19,10 @@ const STAGGER_FACTOR = 3;
 export interface RunResult {
   channelId: string | null;
   added: number;
+  // Always empty — matches the original desktop version's RunResult, which never actually
+  // populates this field either. Kept only so the response shape matches RefreshResult
+  // (ipc-contract.ts) for the frontend, which expects the field to exist.
+  providersRun: string[];
   errors: string[];
   rateLimitedProviders: string[];
 }
@@ -62,7 +66,7 @@ export async function runChannel(
   const channels = await dataStore.getChannels(userId);
   const channel = channels.find((c) => c.id === channelId);
   if (!channel) {
-    return { channelId, added: 0, errors: [`Channel not found: ${channelId}`], rateLimitedProviders: [] };
+    return { channelId, added: 0, providersRun: [], errors: [`Channel not found: ${channelId}`], rateLimitedProviders: [] };
   }
 
   const profile = channelProfile(channel.name);
@@ -122,5 +126,5 @@ export async function runChannel(
     .filter((p) => p.configured && p.rateLimited)
     .map((p) => p.label);
 
-  return { channelId, added, errors, rateLimitedProviders };
+  return { channelId, added, providersRun: [], errors, rateLimitedProviders };
 }

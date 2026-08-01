@@ -143,7 +143,9 @@ router.post('/articles/:articleId/unread', handle((userId, req) => dataStore.mar
 router.get(
   '/random-article',
   handle(async (userId, req) => {
-    const exclude = new Set<string>();
+    // Excludes every already-read article, not just the one explicitly passed — same as the
+    // original (a fresh "roll" should never surface something already caught up on).
+    const exclude = await dataStore.getReadArticleIds(userId);
     const excludeArticleId = req.query.exclude as string | undefined;
     if (excludeArticleId) exclude.add(excludeArticleId);
     const settings = await dataStore.getSettings(userId);
