@@ -1,0 +1,32 @@
+name: Scheduled news refresh
+
+# Runs the news-refresh job on a timer, using GitHub's own free scheduler instead of a paid
+# hosting add-on — GitHub Actions scheduling costs nothing (well within the free monthly minutes
+# for a repo this size) and needs no billing details, unlike some hosts' cron-job products.
+# `workflow_dispatch` also allows triggering a run manually from the Actions tab for testing.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npx tsx server/cron/refresh.ts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEWSDATA_API_KEY: ${{ secrets.NEWSDATA_API_KEY }}
+          GUARDIAN_API_KEY: ${{ secrets.GUARDIAN_API_KEY }}
+          GNEWS_API_KEY: ${{ secrets.GNEWS_API_KEY }}
+          NYTIMES_API_KEY: ${{ secrets.NYTIMES_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
