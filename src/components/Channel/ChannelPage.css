@@ -10,11 +10,26 @@
   margin-bottom: 8px;
 }
 
+.channel-page__actions-column {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .channel-page__header-actions {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.channel-page__refresh-slow {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-strong);
+  white-space: nowrap;
 }
 
 .channel-page__title {

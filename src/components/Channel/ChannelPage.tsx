@@ -55,7 +55,18 @@ export function ChannelPage() {
   const { settings, update } = useSettings();
   const [subchannelId, setSubchannelId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Only shown once a refresh has been running for a while (see handleRefresh) — most refreshes
+  // finish quickly, and showing this immediately every time would make a fast, normal refresh
+  // read as if something might be wrong.
+  const [refreshSlow, setRefreshSlow] = useState(false);
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
+  const refreshSlowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ChannelPage isn't remounted when only the :channelId route param changes (same route element),
+  // so this is the one place a still-in-flight refresh can check "is the channel I started against
+  // still the one on screen" after an await — without it, navigating away mid-refresh lets a slow
+  // response for the OLD channel overwrite the feed and refresh note for whatever channel you've
+  // since switched to.
+  const channelIdRef = useRef(channelId);
   const [managingSubchannels, setManagingSubchannels] = useState(false);
   const [titleScrolledOut, setTitleScrolledOut] = useState(false);
   const [readInPlaceCount, setReadInPlaceCount] = useState(0);
@@ -66,6 +77,25 @@ export function ChannelPage() {
   // render `channel` is still null and the early `if (!channel) return null` below skips rendering
   // the title entirely; a plain useRef effect would run once against that null ref and never retry.
   const [titleNode, setTitleNode] = useState<HTMLHeadingElement | null>(null);
+
+  // Navigating away mid-refresh must not fire the delayed message (or any state update) against
+  // an unmounted component.
+  useEffect(() => {
+    return () => {
+      if (refreshSlowTimerRef.current) clearTimeout(refreshSlowTimerRef.current);
+    };
+  }, []);
+
+  // Switching channels reuses this same component instance, so refresh UI left over from the
+  // previous channel (a note, a spinner, a pending "this is taking a while" timer) has to be
+  // cleared explicitly here — otherwise it just sits there describing a channel you're no longer on.
+  useEffect(() => {
+    channelIdRef.current = channelId;
+    setRefreshNote(null);
+    setRefreshSlow(false);
+    setRefreshing(false);
+    if (refreshSlowTimerRef.current) clearTimeout(refreshSlowTimerRef.current);
+  }, [channelId]);
 
   const channel = channels.find((c) => c.id === channelId) ?? null;
   const { articles, loading, reload, subchannelCounts, totalUnread } = useChannelArticles(
@@ -94,9 +124,25 @@ export function ChannelPage() {
   if (!channel) return null;
 
   const handleRefresh = async () => {
+    const requestedChannelId = channel.id;
     setRefreshing(true);
     setRefreshNote(null);
-    const result = await api.refreshChannel(channel.id);
+    setRefreshSlow(false);
+    // A real refresh checks the topic AND every one of its subchannels, each against several news
+    // sources in turn — genuinely a few seconds at best, longer with more subchannels, and longer
+    // still if the free-tier server has gone to sleep and needs to wake up first. Rather than
+    // pretend that's instant, only say something once it's actually taking a while — 2.5s is
+    // roughly "longer than a normal refresh," so quick refreshes stay quiet.
+    refreshSlowTimerRef.current = setTimeout(() => {
+      if (channelIdRef.current === requestedChannelId) setRefreshSlow(true);
+    }, 2500);
+    const result = await api.refreshChannel(requestedChannelId);
+    if (refreshSlowTimerRef.current) clearTimeout(refreshSlowTimerRef.current);
+    // Navigated to a different channel while this was in flight — its result no longer belongs on
+    // screen. The channel-change effect above already reset refreshing/refreshSlow/refreshNote and
+    // whatever's now visible has its own reload wired up, so there's nothing left to do here.
+    if (channelIdRef.current !== requestedChannelId) return;
+    setRefreshSlow(false);
     setRefreshing(false);
     // Belt-and-suspenders: the main process also broadcasts a 'articles' event on a successful
     // refresh, which useChannelArticles is already subscribed to — but explicitly reloading here means
@@ -145,16 +191,23 @@ export function ChannelPage() {
     <div className="channel-page">
       <div className="channel-page__header">
         <h1 className="channel-page__title" ref={setTitleNode}>{channel.name}</h1>
-        <div className="channel-page__header-actions">
-          <PauseChannelControl channelId={channel.id} pausedUntil={channel.pausedUntil} />
-          <Button variant="secondary" size="sm" onClick={handleClear} disabled={totalUnread === 0} title="Mark all stories read">
-            <ClearIcon />
-            Clear
-          </Button>
-          <Button variant="secondary" size="sm" onClick={handleRefresh} disabled={refreshing}>
-            <RefreshIcon spinning={refreshing} />
-            {refreshing ? 'Refreshing…' : 'Refresh'}
-          </Button>
+        <div className="channel-page__actions-column">
+          {refreshSlow && (
+            <p className="channel-page__refresh-slow" role="status">
+              Checking multiple news sources, this can take a little while.
+            </p>
+          )}
+          <div className="channel-page__header-actions">
+            <PauseChannelControl channelId={channel.id} pausedUntil={channel.pausedUntil} />
+            <Button variant="secondary" size="sm" onClick={handleClear} disabled={totalUnread === 0} title="Mark all stories read">
+              <ClearIcon />
+              Clear
+            </Button>
+            <Button variant="secondary" size="sm" onClick={handleRefresh} disabled={refreshing}>
+              <RefreshIcon spinning={refreshing} />
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </Button>
+          </div>
         </div>
       </div>
       {refreshNote && <p className="channel-page__refresh">{refreshNote}</p>}

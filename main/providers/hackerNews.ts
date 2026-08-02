@@ -1,5 +1,6 @@
 import type { NewsProvider, ProviderArticle, ProviderQuery } from './types';
 import { isCoolingDown, isHardFailureStatus, startCooldown, RATE_LIMIT_COOLDOWN_MS } from './cooldown';
+import { fetchWithTimeout } from './fetchWithTimeout';
 
 interface HnHit {
   objectID: string;
@@ -27,7 +28,7 @@ export const hackerNewsProvider: NewsProvider = {
     // channel/subchannel's results at once. This keeps Hacker News a supplement, not a flood.
     const url = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query.topic)}&tags=story&hitsPerPage=6`;
     try {
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url);
       if (!res.ok) {
         if (isHardFailureStatus(res.status)) startCooldown(PROVIDER_ID, RATE_LIMIT_COOLDOWN_MS);
         return [];

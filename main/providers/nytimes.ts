@@ -1,5 +1,6 @@
 import type { NewsProvider, ProviderArticle, ProviderQuery } from './types';
 import { isCoolingDown, isHardFailureStatus, startCooldown, RATE_LIMIT_COOLDOWN_MS } from './cooldown';
+import { fetchWithTimeout } from './fetchWithTimeout';
 import { throttle } from './pacing';
 
 // NYT's free tier allows 5 requests/minute — far stricter than every other provider here, and
@@ -37,7 +38,7 @@ export const nytimesProvider: NewsProvider = {
 
     const url = `https://api.nytimes.com/svc/search/v2/articlesearch.json?q=${encodeURIComponent(query.topic)}&api-key=${key}`;
     try {
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url);
       if (!res.ok) {
         if (isHardFailureStatus(res.status)) startCooldown(PROVIDER_ID, RATE_LIMIT_COOLDOWN_MS);
         return [];

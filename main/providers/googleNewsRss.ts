@@ -1,6 +1,7 @@
 import Parser from 'rss-parser';
 import type { NewsProvider, ProviderArticle, ProviderQuery } from './types';
 import { isCoolingDown, isHardFailureStatus, startCooldown, RATE_LIMIT_COOLDOWN_MS } from './cooldown';
+import { fetchWithTimeout } from './fetchWithTimeout';
 
 const PROVIDER_ID = 'googlenewsrss';
 const parser = new Parser();
@@ -21,7 +22,7 @@ export const googleNewsRssProvider: NewsProvider = {
 
     const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query.topic)}&hl=en-US&gl=US&ceid=US:en`;
     try {
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url);
       if (!res.ok) {
         // Unofficial endpoint — a sustained block reads the same as a hard failure elsewhere.
         if (isHardFailureStatus(res.status)) startCooldown(PROVIDER_ID, RATE_LIMIT_COOLDOWN_MS);

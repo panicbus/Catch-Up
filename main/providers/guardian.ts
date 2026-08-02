@@ -1,6 +1,7 @@
 import type { NewsProvider, ProviderArticle, ProviderQuery } from './types';
 import { PROVIDER_CATEGORY } from './channelProfiles';
 import { isCoolingDown, isHardFailureStatus, startCooldown, RATE_LIMIT_COOLDOWN_MS } from './cooldown';
+import { fetchWithTimeout } from './fetchWithTimeout';
 
 interface GuardianResult {
   webUrl?: string;
@@ -27,7 +28,7 @@ export const guardianProvider: NewsProvider = {
     const sectionParam = section ? `&section=${section}` : '';
     const url = `https://content.guardianapis.com/search?q=${encodeURIComponent(query.topic)}&api-key=${key}&show-fields=trailText,thumbnail&show-tags=keyword${sectionParam}`;
     try {
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url);
       if (!res.ok) {
         // Expected/routine on a free tier — quotas and occasional hiccups aren't developer-actionable
         // noise. Rate-limit state surfaces to the user instead, via the Settings provider panel and
