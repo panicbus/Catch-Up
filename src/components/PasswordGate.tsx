@@ -5,10 +5,28 @@ import './PasswordGate.css';
 
 const API_BASE = `${import.meta.env.VITE_API_BASE_URL ?? ''}/api`;
 
-async function validate(password: string): Promise<boolean> {
-  const res = await fetch(`${API_BASE}/ping`, { headers: { 'X-Site-Password': password } });
-  return res.ok;
+type ValidateResult = 'ok' | 'incorrect' | 'rate-limited' | 'unavailable';
+
+async function validate(password: string): Promise<ValidateResult> {
+  try {
+    const res = await fetch(`${API_BASE}/ping`, { headers: { 'X-Site-Password': password } });
+    if (res.ok) return 'ok';
+    // 429 must NOT be reported as a wrong password — after too many failed attempts the gate
+    // blocks even the correct one for a while, and saying "incorrect" there sends someone hunting
+    // for a password problem that doesn't exist.
+    if (res.status === 429) return 'rate-limited';
+    if (res.status === 401) return 'incorrect';
+    return 'unavailable';
+  } catch {
+    return 'unavailable'; // offline, or the server is still waking from idle
+  }
 }
+
+const MESSAGES: Record<Exclude<ValidateResult, 'ok'>, string> = {
+  incorrect: 'That password is incorrect.',
+  'rate-limited': 'Too many incorrect attempts. Please wait a few minutes and try again.',
+  unavailable: 'Can’t reach the server right now. It may be waking up — try again in a moment.',
+};
 
 /** Gates the whole web build behind one shared password (see server/passwordGate.ts) — there's no
  * real sign-in yet, so this is a simple lock on the door rather than leaving a fully-working,
@@ -27,8 +45,11 @@ export function PasswordGate({ children }: { children: ReactNode }) {
       setChecking(false);
       return;
     }
-    void validate(stored).then((ok) => {
-      setUnlocked(ok);
+    void validate(stored).then((result) => {
+      // Only a genuinely wrong password should send someone back to the lock screen. A server
+      // that's asleep or rate-limiting shouldn't discard a password that was working a minute ago.
+      if (result === 'ok') setUnlocked(true);
+      else if (result !== 'incorrect') setError(MESSAGES[result]);
       setChecking(false);
     });
   }, []);
@@ -37,13 +58,13 @@ export function PasswordGate({ children }: { children: ReactNode }) {
     if (submitting || !input.trim()) return;
     setSubmitting(true);
     setError(null);
-    const ok = await validate(input.trim());
+    const result = await validate(input.trim());
     setSubmitting(false);
-    if (ok) {
+    if (result === 'ok') {
       setSitePassword(input.trim());
       setUnlocked(true);
     } else {
-      setError('That password is incorrect.');
+      setError(MESSAGES[result]);
     }
   };
 

@@ -57,7 +57,11 @@ router.post(
   '/channels',
   handle(async (userId, req) => {
     const channel = await dataStore.createChannel(userId, req.body.name);
-    void runChannel(userId, channel.id); // fire-and-forget first fetch, same as the desktop app
+    // Fire-and-forget first fetch, same as the desktop app — but the .catch() is NOT optional:
+    // runChannel's own try/catch only wraps its per-target loop, so a database error in its
+    // setup (getChannels/getSettings/...) rejects here. An unhandled rejection terminates the
+    // whole Node process by default, i.e. one transient DB blip would take the site down.
+    void runChannel(userId, channel.id).catch((err) => console.error('[routes] background refresh failed', err));
     return channel;
   })
 );
@@ -84,7 +88,8 @@ router.post(
   handle(async (userId, req) => {
     const channelId = param(req, 'channelId');
     const sub = await dataStore.addSubchannel(userId, channelId, req.body.name);
-    void runChannel(userId, channelId); // fire-and-forget first fetch for the new subchannel
+    // Fire-and-forget first fetch for the new subchannel — see the .catch() note in POST /channels.
+    void runChannel(userId, channelId).catch((err) => console.error('[routes] background refresh failed', err));
     return sub;
   })
 );
