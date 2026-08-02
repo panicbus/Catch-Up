@@ -14,6 +14,15 @@
   opacity: 0.4;
 }
 
+/* dragenter bubbles from every descendant (the Link's inner divs, the grip button, the controls
+   div) — without this, crossing one tile fires the wrapper's onDragEnter 2-5 times per tile instead
+   of once. Harmless once the preview math is idempotent (see ChannelTabGrid.tsx), but this still
+   collapses the redundant handler calls and keeps a drop from ever landing on the Link itself. Only
+   the wrapper stays hit-testable, so it's the sole drag/drop target throughout the whole gesture. */
+.channel-grid--dragging .channel-tile-wrap > * {
+  pointer-events: none;
+}
+
 .channel-tile {
   flex: 1;
   display: flex;

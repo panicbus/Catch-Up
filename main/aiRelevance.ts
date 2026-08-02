@@ -42,10 +42,14 @@ export async function filterRelevant(
     return { article: a, id, cacheKey: `${channelId}:${id}` };
   });
 
+  // One batched lookup, then a synchronous partition. Deliberately not a per-article await in a
+  // loop: on the hosted (database-backed) store that shape cost one network round-trip per story.
+  const cachedVerdicts = await store.getVerdicts(entries.map((e) => e.cacheKey));
+
   const kept: FetchedArticle[] = [];
   const toClassify: typeof entries = [];
   for (const e of entries) {
-    const cached = await store.getVerdict(e.cacheKey);
+    const cached = cachedVerdicts.get(e.cacheKey);
     if (cached === true) kept.push(e.article);
     else if (cached === false) continue; // previously judged off-topic for this channel — stays dropped
     else toClassify.push(e); // never seen — needs the model

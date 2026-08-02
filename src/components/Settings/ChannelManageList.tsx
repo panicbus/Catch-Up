@@ -1,10 +1,12 @@
 import { useState, type KeyboardEvent } from 'react';
-import { api } from '../../services/api';
+import { api, revalidateNow } from '../../services/api';
+import * as channelsStore from '../../services/channelsStore';
 import { useChannels } from '../../hooks/useChannels';
 import { useDeleteChannelFlow } from '../../hooks/useDeleteChannelFlow';
 import { SubchannelManagePanel } from '../common/SubchannelManagePanel';
 import { DeleteChannelModal } from '../common/DeleteChannelModal';
 import { Button } from '../common/Button';
+import { capitalizeWords, slugifyChannelName } from '../../../channelName';
 import './ChannelManageList.css';
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -37,7 +39,36 @@ export function ChannelManageList() {
   const addChannel = () => {
     const trimmed = draft.trim();
     if (!trimmed) return;
-    void api.createChannel(trimmed);
+    // Optimistic: a temporary placeholder row appears immediately (matching the server's own name
+    // capitalization/slugging, so nothing visibly changes when the real record lands), then gets
+    // swapped for the server's real record as soon as the create call resolves — not on the next
+    // poll tick, since the caller (here) already has the real object in hand.
+    const name = capitalizeWords(trimmed);
+    const tempId = `temp-${Date.now()}`;
+    channelsStore
+      .mutate(
+        (prev) => [
+          ...prev,
+          {
+            id: tempId,
+            name,
+            slug: slugifyChannelName(name),
+            createdAt: new Date().toISOString(),
+            sortOrder: prev.length,
+            subchannels: [],
+            pausedUntil: null,
+            pausedLabel: null,
+          },
+        ],
+        async () => {
+          const real = await api.createChannel(trimmed);
+          const current = channelsStore.getSnapshot() ?? [];
+          channelsStore.ingest(current.map((c) => (c.id === tempId ? real : c)));
+          return real;
+        }
+      )
+      .then(() => revalidateNow())
+      .catch(() => {});
     setDraft('');
   };
 
@@ -55,7 +86,15 @@ export function ChannelManageList() {
 
   const commitEdit = () => {
     if (editingId && editValue.trim()) {
-      void api.renameChannel(editingId, editValue.trim());
+      const id = editingId;
+      const name = capitalizeWords(editValue.trim());
+      channelsStore
+        .mutate(
+          (prev) => prev.map((c) => (c.id === id ? { ...c, name, slug: slugifyChannelName(name) } : c)),
+          () => api.renameChannel(id, editValue.trim())
+        )
+        .then(() => revalidateNow())
+        .catch(() => {});
     }
     setEditingId(null);
   };

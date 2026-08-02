@@ -29,8 +29,10 @@ export function HomePage() {
           <div className="home-page__heading">
             <div className="home-page__heading-title">Your channels</div>
             <div className="home-page__heading-subtitle">
-              {channels.length} channel{channels.length === 1 ? '' : 's'} · {totalUnread} stor
-              {totalUnread === 1 ? 'y' : 'ies'} to catch up on
+              {loading
+                ? ' ' // Reserves the line's height without asserting "0 channels" while still loading — that's not
+                  // just wrong, it's a claim: it's asserting a real answer to "how many do I have" before there is one.
+                : `${channels.length} channel${channels.length === 1 ? '' : 's'} · ${totalUnread} stor${totalUnread === 1 ? 'y' : 'ies'} to catch up on`}
             </div>
           </div>
           <div className="home-page__dice-row">

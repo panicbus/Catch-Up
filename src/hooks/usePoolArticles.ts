@@ -55,7 +55,12 @@ export function usePoolArticles(channels: Channel[]) {
     });
   }, [channels]);
 
-  useReloadOnDataChange(reload, { includeBookmarks: true });
+  // Debounced for the same reason useChannelCounts is: this reload fans out one getArticles call
+  // PER CHANNEL. Undebounced, a single poll tick's articles + readState + bookmarks events (the web
+  // build fires all three every ~20s) triggered three full re-fans-out back to back — with 9
+  // channels that's ~27 requests every tick just from this one hook, on top of nudging the site
+  // toward its own rate limit.
+  useReloadOnDataChange(reload, { includeBookmarks: true, debounceMs: 150 });
 
   return { articles, loading, reload };
 }

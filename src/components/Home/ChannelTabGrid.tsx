@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getTileColor } from '../../utils/channelColor';
-import { api } from '../../services/api';
+import { api, revalidateNow } from '../../services/api';
+import * as channelsStore from '../../services/channelsStore';
 import { PauseChannelControl, isChannelPaused } from '../common/PauseChannelControl';
 import type { ChannelCount } from '../../hooks/useChannelCounts';
 import type { Channel } from '../../../ipc-contract';
@@ -29,36 +30,46 @@ interface ChannelTabGridProps {
   counts: Record<string, ChannelCount>;
 }
 
+interface DragState {
+  draggingId: string;
+  /** The tile last entered — null until the pointer actually crosses another tile. */
+  overId: string | null;
+  /** The order at the moment this drag started — fixed for the whole gesture, so every preview
+   * recompute starts from the same base instead of the previous preview (see `preview` below). */
+  baseOrder: string[];
+}
+
+function sameOrder(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
 export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
-  // Local display order for live drag preview; re-synced from props whenever channels change and no
-  // drag is in progress (a server broadcast after a reorder lands here).
-  const [orderIds, setOrderIds] = useState<string[]>(channels.map((c) => c.id));
-  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
   const [armedId, setArmedId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!draggingId) setOrderIds(channels.map((c) => c.id));
-  }, [channels, draggingId]);
+  // Derived, not accumulated. The previous version recomputed `to = prev.indexOf(targetId)`
+  // against its OWN last output, so re-entering the same tile (which `dragenter` does 2-5 times per
+  // tile — it bubbles from every child element inside it) flipped the order back and forth: the
+  // drag "took" or didn't depending on the parity of how many child boundaries the cursor crossed.
+  // A pure function of (baseOrder, draggingId, overId) can't oscillate — the same overId always
+  // produces the same array, however many times it's recomputed.
+  const preview = useMemo(() => {
+    if (!drag) return null;
+    const { draggingId, overId, baseOrder } = drag;
+    if (!overId || overId === draggingId) return baseOrder;
+    const without = baseOrder.filter((id) => id !== draggingId);
+    const idx = without.indexOf(overId);
+    if (idx === -1) return baseOrder;
+    // Dragging forward (toward a later tile) drops AFTER the target; dragging backward drops
+    // BEFORE it — this is what makes the preview land where it visually looks like it should
+    // regardless of which direction the tile is moving.
+    const insertAt = baseOrder.indexOf(draggingId) < baseOrder.indexOf(overId) ? idx + 1 : idx;
+    return [...without.slice(0, insertAt), draggingId, ...without.slice(insertAt)];
+  }, [drag]);
 
+  const displayOrderIds = preview ?? channels.map((c) => c.id);
   const byId = new Map(channels.map((c) => [c.id, c]));
-  const ordered = orderIds.map((id) => byId.get(id)).filter((c): c is Channel => !!c);
-
-  const reorderTo = (targetId: string) => {
-    if (!draggingId || draggingId === targetId) return;
-    setOrderIds((prev) => {
-      const from = prev.indexOf(draggingId);
-      const to = prev.indexOf(targetId);
-      if (from === -1 || to === -1 || from === to) return prev;
-      const next = [...prev];
-      next.splice(from, 1);
-      next.splice(to, 0, draggingId);
-      return next;
-    });
-  };
-
-  const persistOrder = () => {
-    void api.setChannelOrder(orderIds);
-  };
+  const ordered = displayOrderIds.map((id) => byId.get(id)).filter((c): c is Channel => !!c);
 
   const clear = (e: React.MouseEvent, channelId: string) => {
     e.preventDefault();
@@ -67,7 +78,7 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
   };
 
   return (
-    <div className="channel-grid">
+    <div className={`channel-grid ${drag ? 'channel-grid--dragging' : ''}`}>
       {ordered.map((channel) => {
         const count = counts[channel.id];
         const unread = count?.unread ?? 0;
@@ -81,22 +92,46 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
         return (
           <div
             key={channel.id}
-            className={`channel-tile-wrap ${draggingId === channel.id ? 'channel-tile-wrap--dragging' : ''}`}
+            className={`channel-tile-wrap ${drag?.draggingId === channel.id ? 'channel-tile-wrap--dragging' : ''}`}
             draggable={armedId === channel.id}
             onDragStart={(e) => {
-              setDraggingId(channel.id);
+              setDrag({ draggingId: channel.id, overId: null, baseOrder: channels.map((c) => c.id) });
               e.dataTransfer.effectAllowed = 'move';
               e.dataTransfer.setData('text/plain', channel.id);
             }}
-            onDragEnter={() => reorderTo(channel.id)}
+            onDragEnter={() => setDrag((d) => (d ? { ...d, overId: channel.id } : d))}
             onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              persistOrder();
-            }}
+            onDrop={(e) => e.preventDefault()}
             onDragEnd={() => {
-              persistOrder();
-              setDraggingId(null);
+              // dragend, not drop, is the one commit point: it ALWAYS fires exactly once when a
+              // drag ends — after a valid drop, after a drop in the 14px grid gap (which never
+              // fires `drop` at all), and after an Escape cancel. Committing here means exactly one
+              // setChannelOrder call per gesture, instead of the old code's two (drop AND dragend
+              // both called persistOrder).
+              const finalOrder = preview;
+              if (finalOrder && !sameOrder(finalOrder, channels.map((c) => c.id))) {
+                channelsStore
+                  .mutate(
+                    (prev) => {
+                      const prevById = new Map(prev.map((c) => [c.id, c]));
+                      return finalOrder
+                        .map((id, i) => {
+                          const c = prevById.get(id);
+                          return c ? { ...c, sortOrder: i } : null;
+                        })
+                        .filter((c): c is Channel => !!c);
+                    },
+                    () => api.setChannelOrder(finalOrder)
+                  )
+                  .then(() => revalidateNow())
+                  .catch(() => {});
+              }
+              // Applying the reorder through channelsStore.mutate() (above) BEFORE clearing drag
+              // state means the next render already shows the new order via the live `channels`
+              // prop — there's no frame where `drag` is gone but the order hasn't caught up yet,
+              // which is what used to make tiles visibly snap back to the old order (worse on the
+              // web build, where there's no push and the snap-back used to stick for up to 20s).
+              setDrag(null);
               setArmedId(null);
             }}
           >
@@ -126,6 +161,11 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                // `click` fires only when mousedown/up happened without an intervening drag — the
+                // exact case a plain press-and-release on the grip needs to disarm. Without this, a
+                // click here left the tile `draggable` indefinitely (armedId only ever cleared in
+                // onDragEnd, which a non-drag click never reaches).
+                setArmedId(null);
               }}
             >
               <GripIcon />

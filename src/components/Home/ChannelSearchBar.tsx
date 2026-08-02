@@ -1,8 +1,9 @@
 import { useMemo, useState, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../../services/api';
+import { api, revalidateNow } from '../../services/api';
+import * as channelsStore from '../../services/channelsStore';
 import { useChannels } from '../../hooks/useChannels';
-import { slugifyChannelName } from '../../../channelName';
+import { capitalizeWords, slugifyChannelName } from '../../../channelName';
 import './ChannelSearchBar.css';
 
 export function ChannelSearchBar() {
@@ -37,8 +38,33 @@ export function ChannelSearchBar() {
       goToChannel(exact.id);
       return;
     }
+    // Optimistic so the sidebar/Home tile shows up right away, but navigation still waits for the
+    // real record — the URL needs the server's real id, not a placeholder that would 404 the page.
+    const name = capitalizeWords(trimmed);
+    const tempId = `temp-${Date.now()}`;
     try {
-      const channel = await api.createChannel(trimmed);
+      const channel = await channelsStore.mutate(
+        (prev) => [
+          ...prev,
+          {
+            id: tempId,
+            name,
+            slug: slugifyChannelName(name),
+            createdAt: new Date().toISOString(),
+            sortOrder: prev.length,
+            subchannels: [],
+            pausedUntil: null,
+            pausedLabel: null,
+          },
+        ],
+        async () => {
+          const real = await api.createChannel(trimmed);
+          const current = channelsStore.getSnapshot() ?? [];
+          channelsStore.ingest(current.map((c) => (c.id === tempId ? real : c)));
+          return real;
+        }
+      );
+      revalidateNow();
       goToChannel(channel.id);
     } catch (e) {
       setError('Could not create that channel — try again.');

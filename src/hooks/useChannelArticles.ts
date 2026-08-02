@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { api } from '../services/api';
 import { useReloadOnDataChange } from './useReloadOnDataChange';
 import type { Article } from '../../ipc-contract';
@@ -34,15 +34,28 @@ export function useChannelArticles(channelId: string | null, activeSubchannelId:
     articles: [],
   });
   const [loading, setLoading] = useState(true);
+  // Mirrors loaded.channelId, but as a ref — read inside reload() without being one of its
+  // dependencies. reload's identity is itself a dependency of useReloadOnDataChange's effect below
+  // (which re-fires reload() on every identity change), so making reload depend on `loaded` would
+  // mean every successful fetch changes reload's identity, which re-triggers one more fetch, which
+  // changes loaded again — the same reload-identity churn fixed elsewhere in this batch
+  // (useChannelCounts, usePoolArticles), just reintroduced locally.
+  const loadedChannelIdRef = useRef<string | null>(null);
 
   const reload = useCallback(() => {
     if (!channelId) {
+      loadedChannelIdRef.current = null;
       setLoaded({ channelId: null, articles: [] });
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // Only flip into "loading" when there's genuinely nothing on screen for THIS channel yet — a
+    // background poll (web build fires one every ~20s) or a manual refresh reloading already-shown
+    // data shouldn't drop the feed into a skeleton every time; that's for a channel switch or first
+    // load, not routine revalidation.
+    if (loadedChannelIdRef.current !== channelId) setLoading(true);
     void api.getArticles({ channelId, subchannelId: null }).then((r) => {
+      loadedChannelIdRef.current = channelId;
       setLoaded({ channelId, articles: r.articles });
       setLoading(false);
     });

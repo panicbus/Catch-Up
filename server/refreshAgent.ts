@@ -95,7 +95,8 @@ export async function runChannel(
 
   let added = 0;
   const errors: string[] = [];
-  for (const target of targets) {
+  for (let i = 0; i < targets.length; i++) {
+    const target = targets[i];
     try {
       const fetched = await runProviders({
         topic: target.topic,
@@ -119,7 +120,8 @@ export async function runChannel(
     } catch (e) {
       errors.push(String(e));
     }
-    await sleep(PROVIDER_PACING_MS);
+    // Between targets only, never after the last — see the matching comment in main/refreshAgent.ts.
+    if (i < targets.length - 1) await sleep(PROVIDER_PACING_MS);
   }
 
   const rateLimitedProviders = getProviderStatus()

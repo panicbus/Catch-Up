@@ -1,6 +1,8 @@
 import { useState, type KeyboardEvent } from 'react';
-import { api } from '../../services/api';
+import { api, revalidateNow } from '../../services/api';
+import * as channelsStore from '../../services/channelsStore';
 import { suggestSubchannels } from '../../utils/subchannelSuggestions';
+import { capitalizeWords } from '../../../channelName';
 import type { Channel } from '../../../ipc-contract';
 import './SubchannelManagePanel.css';
 
@@ -21,7 +23,31 @@ export function SubchannelManagePanel({ channel, onClose }: SubchannelManagePane
   const addSubchannel = (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    void api.addSubchannel(channel.id, trimmed);
+    const label = capitalizeWords(trimmed);
+    const tempId = `temp-${Date.now()}`;
+    channelsStore
+      .mutate(
+        (prev) =>
+          prev.map((c) =>
+            c.id === channel.id
+              ? { ...c, subchannels: [...c.subchannels, { id: tempId, name: label, createdAt: new Date().toISOString() }] }
+              : c
+          ),
+        async () => {
+          const real = await api.addSubchannel(channel.id, trimmed);
+          const current = channelsStore.getSnapshot() ?? [];
+          channelsStore.ingest(
+            current.map((c) =>
+              c.id === channel.id
+                ? { ...c, subchannels: c.subchannels.map((sc) => (sc.id === tempId ? real : sc)) }
+                : c
+            )
+          );
+          return real;
+        }
+      )
+      .then(() => revalidateNow())
+      .catch(() => {});
     setDraft('');
   };
 
@@ -39,7 +65,21 @@ export function SubchannelManagePanel({ channel, onClose }: SubchannelManagePane
 
   const commitEdit = () => {
     if (editingId && editValue.trim()) {
-      void api.renameSubchannel(channel.id, editingId, editValue.trim());
+      const subId = editingId;
+      const trimmed = editValue.trim();
+      const label = capitalizeWords(trimmed);
+      channelsStore
+        .mutate(
+          (prev) =>
+            prev.map((c) =>
+              c.id === channel.id
+                ? { ...c, subchannels: c.subchannels.map((sc) => (sc.id === subId ? { ...sc, name: label } : sc)) }
+                : c
+            ),
+          () => api.renameSubchannel(channel.id, subId, trimmed)
+        )
+        .then(() => revalidateNow())
+        .catch(() => {});
     }
     setEditingId(null);
   };
@@ -105,7 +145,20 @@ export function SubchannelManagePanel({ channel, onClose }: SubchannelManagePane
             <button
               type="button"
               className="subchannel-panel__row-delete"
-              onClick={() => void api.deleteSubchannel(channel.id, sub.id)}
+              onClick={() =>
+                channelsStore
+                  .mutate(
+                    (prev) =>
+                      prev.map((c) =>
+                        c.id === channel.id
+                          ? { ...c, subchannels: c.subchannels.filter((sc) => sc.id !== sub.id) }
+                          : c
+                      ),
+                    () => api.deleteSubchannel(channel.id, sub.id)
+                  )
+                  .then(() => revalidateNow())
+                  .catch(() => {})
+              }
               aria-label={`Delete ${sub.name}`}
             >
               Delete

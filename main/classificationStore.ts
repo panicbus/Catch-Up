@@ -43,7 +43,11 @@ function emptyFile(): StoreFile {
  * Async throughout (even though this file-based implementation completes synchronously) because a
  * database-backed implementation genuinely can't — aiRelevance.ts awaits every call. */
 export interface ClassificationStoreLike {
-  getVerdict(id: string): Promise<boolean | undefined>;
+  /** Verdicts for many ids at once. Batched rather than one-at-a-time because a database-backed
+   * implementation pays a network round-trip per call — looking up a batch of 60 articles serially
+   * cost seconds per search, which is invisible on this file-based store and very much not on the
+   * hosted one. Ids with no cached verdict are simply absent from the returned map. */
+  getVerdicts(ids: string[]): Promise<Map<string, boolean>>;
   remainingDailyBudget(): Promise<number>;
   recordClassifications(entries: { id: string; keep: boolean }[]): Promise<void>;
 }
@@ -89,9 +93,15 @@ export class ClassificationStore {
     if (changed) this.write();
   }
 
-  /** A cached verdict for this article, or undefined if it's never been classified. */
-  async getVerdict(id: string): Promise<boolean | undefined> {
-    return this.data.verdicts[id]?.keep;
+  /** Cached verdicts for these articles. Ids never classified are absent from the map (which is
+   * distinct from a cached `false` — "never seen, ask the model" vs "already judged off-topic"). */
+  async getVerdicts(ids: string[]): Promise<Map<string, boolean>> {
+    const out = new Map<string, boolean>();
+    for (const id of ids) {
+      const v = this.data.verdicts[id];
+      if (v) out.set(id, v.keep);
+    }
+    return out;
   }
 
   /** How many NEW articles may still be classified today (0 once the cap is hit). Resets at UTC

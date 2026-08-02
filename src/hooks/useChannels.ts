@@ -1,16 +1,19 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { api } from '../services/api';
-import type { Channel } from '../../ipc-contract';
+import * as channelsStore from '../services/channelsStore';
 
+/** Thin subscriber over the shared channelsStore (src/services/channelsStore.ts) — every one of
+ * this hook's ~10 call sites now reads the SAME cached list instead of holding its own copy and
+ * fetching independently. useSyncExternalStore (not useState+useEffect) so a warm cache renders
+ * correctly on the very first paint, with no synchronous-vs-async tearing between subscribers that
+ * happen to render in the same commit. */
 export function useChannels() {
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [loading, setLoading] = useState(true);
+  const snapshot = useSyncExternalStore(channelsStore.subscribe, channelsStore.getSnapshot);
+  const channels = snapshot ?? [];
+  const loading = snapshot === null;
 
   const reload = useCallback(() => {
-    void api.getChannels().then((c) => {
-      setChannels(c);
-      setLoading(false);
-    });
+    void channelsStore.refresh();
   }, []);
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../../services/api';
+import { api, revalidateNow } from '../../services/api';
+import * as channelsStore from '../../services/channelsStore';
 import './PauseChannelControl.css';
 
 const OPTIONS: { label: string; value: number | 'forever' }[] = [
@@ -8,6 +9,24 @@ const OPTIONS: { label: string; value: number | 'forever' }[] = [
   { label: '1 week', value: 168 },
   { label: 'Until I say so', value: 'forever' },
 ];
+
+// Mirrors server/stores/dataStore.ts's setChannelPause exactly (PAUSE_FOREVER_UNTIL and
+// pauseLabelForHours) — the optimistic patch has to match the server's actual output byte-for-byte
+// (note pausedLabel is lowercase 'until I say so', not the capitalized menu label above) or the
+// paused badge visibly changes text the moment revalidation lands.
+const PAUSE_FOREVER_UNTIL = '9999-12-31T00:00:00.000Z';
+function pauseLabelForHours(hours: number): string {
+  if (hours === 24) return '24 hours';
+  if (hours === 48) return '48 hours';
+  if (hours === 168) return '1 week';
+  return `${hours} hours`;
+}
+
+function optimisticPause(value: number | 'forever' | null): { pausedUntil: string | null; pausedLabel: string | null } {
+  if (value === null) return { pausedUntil: null, pausedLabel: null };
+  if (value === 'forever') return { pausedUntil: PAUSE_FOREVER_UNTIL, pausedLabel: 'until I say so' };
+  return { pausedUntil: new Date(Date.now() + value * 3600_000).toISOString(), pausedLabel: pauseLabelForHours(value) };
+}
 
 export function isChannelPaused(pausedUntil: string | null | undefined): boolean {
   return !!pausedUntil && new Date(pausedUntil).getTime() > Date.now();
@@ -57,14 +76,24 @@ export function PauseChannelControl({ channelId, pausedUntil, variant = 'button'
     e.preventDefault();
     e.stopPropagation();
   };
+  const applyPause = (value: number | 'forever' | null) => {
+    const patch = optimisticPause(value);
+    channelsStore
+      .mutate(
+        (prev) => prev.map((c) => (c.id === channelId ? { ...c, ...patch } : c)),
+        () => api.setChannelPause(channelId, value)
+      )
+      .then(() => revalidateNow())
+      .catch(() => {});
+  };
   const pause = (e: React.MouseEvent, value: number | 'forever') => {
     stop(e);
-    void api.setChannelPause(channelId, value);
+    applyPause(value);
     setOpen(false);
   };
   const resume = (e: React.MouseEvent) => {
     stop(e);
-    void api.setChannelPause(channelId, null);
+    applyPause(null);
     setOpen(false);
   };
 

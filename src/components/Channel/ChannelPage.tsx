@@ -7,11 +7,13 @@ import { SubchannelBar } from './SubchannelBar';
 import { SubchannelManagePanel } from '../common/SubchannelManagePanel';
 import { ViewModeToggle } from './ViewModeToggle';
 import { NewsFeed, type NewsFeedHandle } from './NewsFeed';
+import { FeedSkeleton, ChannelPageSkeleton } from './FeedSkeleton';
 import { EmptyState } from '../common/EmptyState';
 import { Button } from '../common/Button';
 import { PauseChannelControl, isChannelPaused } from '../common/PauseChannelControl';
 import { ChannelPausedScreen } from './ChannelPausedScreen';
-import { api } from '../../services/api';
+import { api, revalidateNow } from '../../services/api';
+import * as channelsStore from '../../services/channelsStore';
 import './ChannelPage.css';
 
 function ArchiveIcon() {
@@ -51,7 +53,7 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
 
 export function ChannelPage() {
   const { channelId } = useParams<{ channelId: string }>();
-  const { channels } = useChannels();
+  const { channels, loading: channelsLoading } = useChannels();
   const { settings, update } = useSettings();
   const [subchannelId, setSubchannelId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,6 +63,10 @@ export function ChannelPage() {
   const [refreshSlow, setRefreshSlow] = useState(false);
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const refreshSlowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Separate from refreshSlowTimerRef: that one ARMS the "still checking" message after a delay;
+  // this one DISMISSES the terminal result message after it's had time to be read. Two different
+  // timers because the two messages have different lifecycles — see handleRefresh below.
+  const noteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // ChannelPage isn't remounted when only the :channelId route param changes (same route element),
   // so this is the one place a still-in-flight refresh can check "is the channel I started against
   // still the one on screen" after an await — without it, navigating away mid-refresh lets a slow
@@ -78,23 +84,35 @@ export function ChannelPage() {
   // the title entirely; a plain useRef effect would run once against that null ref and never retry.
   const [titleNode, setTitleNode] = useState<HTMLHeadingElement | null>(null);
 
-  // Navigating away mid-refresh must not fire the delayed message (or any state update) against
+  // Both refresh timers, cleared together — wired into every site that needs to invalidate one or
+  // both, so the two can't drift (e.g. one site remembering to clear refreshSlowTimerRef but not
+  // the newer noteTimerRef).
+  const clearRefreshTimers = () => {
+    if (refreshSlowTimerRef.current) clearTimeout(refreshSlowTimerRef.current);
+    if (noteTimerRef.current) clearTimeout(noteTimerRef.current);
+    refreshSlowTimerRef.current = null;
+    noteTimerRef.current = null;
+  };
+
+  // Navigating away mid-refresh must not fire a delayed message (or any state update) against
   // an unmounted component.
   useEffect(() => {
-    return () => {
-      if (refreshSlowTimerRef.current) clearTimeout(refreshSlowTimerRef.current);
-    };
+    return () => clearRefreshTimers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Switching channels reuses this same component instance, so refresh UI left over from the
-  // previous channel (a note, a spinner, a pending "this is taking a while" timer) has to be
-  // cleared explicitly here — otherwise it just sits there describing a channel you're no longer on.
+  // previous channel (a note, a spinner, a pending timer of either kind) has to be cleared
+  // explicitly here — otherwise it just sits there describing a channel you're no longer on. This
+  // is a correctness requirement, not hygiene: without it, switching to a new channel and refreshing
+  // it within 4s would let the OLD channel's dismiss timer clear the NEW channel's note early.
   useEffect(() => {
     channelIdRef.current = channelId;
     setRefreshNote(null);
     setRefreshSlow(false);
     setRefreshing(false);
-    if (refreshSlowTimerRef.current) clearTimeout(refreshSlowTimerRef.current);
+    clearRefreshTimers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId]);
 
   const channel = channels.find((c) => c.id === channelId) ?? null;
@@ -121,13 +139,31 @@ export function ChannelPage() {
     return () => observer.disconnect();
   }, [titleNode, channelId]);
 
-  if (!channel) return null;
+  if (!channel) {
+    // Two genuinely different states used to look identical (a blank page): the channel list just
+    // hasn't loaded yet (cold load of a direct channel URL, or a not-yet-warm store), vs. this id
+    // doesn't correspond to any real channel (stale link, a channel deleted from another tab/device).
+    // Only the first is transient — the second would otherwise leave a permanently blank page.
+    return (
+      <div className="channel-page">
+        {channelsLoading ? (
+          <ChannelPageSkeleton />
+        ) : (
+          <EmptyState title="Channel not found" body="This channel may have been deleted." />
+        )}
+      </div>
+    );
+  }
 
   const handleRefresh = async () => {
     const requestedChannelId = channel.id;
     setRefreshing(true);
     setRefreshNote(null);
     setRefreshSlow(false);
+    // A second overlapping click shouldn't inherit the previous click's pending dismiss — e.g.
+    // click Refresh, get a result at 4s, click Refresh again at 2s: without this the FIRST result's
+    // dismiss timer would still fire at the 4s mark and clear whatever note the SECOND click sets.
+    clearRefreshTimers();
     // A real refresh checks the topic AND every one of its subchannels, each against several news
     // sources in turn — genuinely a few seconds at best, longer with more subchannels, and longer
     // still if the free-tier server has gone to sleep and needs to wake up first. Rather than
@@ -159,6 +195,14 @@ export function ChannelPage() {
     } else {
       setRefreshNote(`Found ${result.added} new stor${result.added === 1 ? 'y' : 'ies'}.`);
     }
+    // Unlike "Checking multiple sources…" (a live status tied to the refresh actually being in
+    // flight), this is a terminal result — it doesn't need to keep meaning anything once it's had
+    // time to be read. The channelIdRef guard mirrors the one above; the channel-change effect
+    // already clears this on a switch, but a stale timer landing on the wrong channel would be a
+    // silent, hard-to-notice bug, and the guard costs nothing.
+    noteTimerRef.current = setTimeout(() => {
+      if (channelIdRef.current === requestedChannelId) setRefreshNote(null);
+    }, 4000);
   };
 
   // Manual "clear" (mark all read). Arm the suppress ref first so NewsFeed treats the resulting
@@ -181,7 +225,16 @@ export function ChannelPage() {
         <ChannelPausedScreen
           name={channel.name}
           pausedUntil={channel.pausedUntil}
-          onResume={() => void api.setChannelPause(channel.id, null)}
+          onResume={() => {
+            const id = channel.id;
+            channelsStore
+              .mutate(
+                (prev) => prev.map((c) => (c.id === id ? { ...c, pausedUntil: null, pausedLabel: null } : c)),
+                () => api.setChannelPause(id, null)
+              )
+              .then(() => revalidateNow())
+              .catch(() => {});
+          }}
         />
       </div>
     );
@@ -255,7 +308,14 @@ export function ChannelPage() {
         )}
       </div>
 
-      {!loading && articles.length === 0 ? (
+      {loading && articles.length === 0 ? (
+        // Genuinely still waiting on the network for THIS channel's articles — not "loading" in the
+        // looser sense useChannelArticles used to use it, which also covered routine background
+        // revalidation of data already on screen (see its own loading-gate fix). Without this branch,
+        // this exact state fell through to NewsFeed with an empty array, which read as "All caught
+        // up!" for however long the fetch took — a real, if brief, false claim on every fresh load.
+        <FeedSkeleton />
+      ) : articles.length === 0 ? (
         <EmptyState
           title="No stories yet"
           body="Catch Up checks for new stories every 30 minutes. Hit Refresh to check now."

@@ -132,7 +132,8 @@ export async function runChannel(
 
   let added = 0;
   const errors: string[] = [];
-  for (const target of targets) {
+  for (let i = 0; i < targets.length; i++) {
+    const target = targets[i];
     try {
       const fetched = await runProviders({
         topic: target.topic,
@@ -158,7 +159,10 @@ export async function runChannel(
     } catch (e) {
       errors.push(String(e));
     }
-    await sleep(PROVIDER_PACING_MS);
+    // Spacing goes BETWEEN targets, not after the last one — a trailing pause delays the result the
+    // caller is waiting on without smoothing anything, since there's no following request to space
+    // away from.
+    if (i < targets.length - 1) await sleep(PROVIDER_PACING_MS);
   }
 
   if (added > 0) deps.broadcast({ type: 'articles', channelId });

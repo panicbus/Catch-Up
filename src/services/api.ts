@@ -6,6 +6,7 @@ import type {
   DataChangeEvent,
 } from '../../ipc-contract';
 import { clearSitePassword, getSitePassword } from './sitePassword';
+import * as channelsStore from './channelsStore';
 
 // --- Desktop build: talk to the Electron bridge exactly as before ------------------------------
 
@@ -105,20 +106,37 @@ function localDateString(): string {
 const POLL_INTERVAL_MS = 20_000;
 const listeners = new Set<(event: DataChangeEvent) => void>();
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let pollInFlight: Promise<void> | null = null;
 
 async function poll(): Promise<void> {
+  // Coalesce: revalidateNow() and the interval can both call this in close succession (e.g. a
+  // mutation completes right as a tick fires) — share one in-flight request instead of firing two.
+  if (pollInFlight) return pollInFlight;
+  pollInFlight = doPoll();
+  try {
+    await pollInFlight;
+  } finally {
+    pollInFlight = null;
+  }
+}
+
+async function doPoll(): Promise<void> {
   try {
     const channels = await request<Channel[]>('/channels');
+    // Feed the shared channel store the same payload this call already fetched, rather than firing
+    // a 'channels changed' event that would make every one of channelsStore's subscribers (there
+    // used to be ~10 independent fetches) go fetch the exact same thing again. `changed` also gates
+    // whether channels/subchannels events fire below — a poll where nothing actually changed
+    // shouldn't make every channel-scoped listener reload for no reason.
+    const changed = channelsStore.ingest(channels);
     const events: DataChangeEvent[] = [
-      { type: 'channels' },
+      ...(changed ? [{ type: 'channels' } as const] : []),
+      ...(changed ? channels.map((c): DataChangeEvent => ({ type: 'subchannels', channelId: c.id })) : []),
       { type: 'settings' },
       { type: 'streak' },
       { type: 'bookmarks' },
       { type: 'readState' },
-      ...channels.flatMap((c): DataChangeEvent[] => [
-        { type: 'articles', channelId: c.id },
-        { type: 'subchannels', channelId: c.id },
-      ]),
+      ...channels.map((c): DataChangeEvent => ({ type: 'articles', channelId: c.id })),
     ];
     for (const event of events) for (const listener of listeners) listener(event);
   } catch {
@@ -137,6 +155,29 @@ function webOnDataChanged(listener: (event: DataChangeEvent) => void): () => voi
       pollTimer = null;
     }
   };
+}
+
+/** Ask for a poll right now instead of waiting for the next interval tick — for a web mutation that
+ * just succeeded and shouldn't sit behind up to 20s of staleness before its effects (articles,
+ * streak, bookmarks, etc. beyond what the mutation's own optimistic update already covers) show up.
+ * A no-op on desktop, which gets real push notifications instead (main/ipcHandlers.ts's broadcast())
+ * and has no poll loop to restart — so call sites never need to branch on which build they're in.
+ * Restarts the interval so this doesn't leave a redundant tick moments later. */
+export function revalidateNow(): void {
+  if (typeof window !== 'undefined' && window.api) return;
+  void poll();
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(poll, POLL_INTERVAL_MS);
+  }
+}
+
+if (typeof document !== 'undefined') {
+  // Coming back to a backgrounded tab shouldn't wait up to 20s to feel fresh — this is the
+  // cheapest possible "did anything happen while I was away" check.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') revalidateNow();
+  });
 }
 
 function articlesQuery(params: ArticleListParams): string {

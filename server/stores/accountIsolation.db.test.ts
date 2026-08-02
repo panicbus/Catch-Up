@@ -109,10 +109,11 @@ describe('reads are scoped to the acting account', () => {
   it('AI classification verdicts do not cross accounts', async () => {
     const storeA = new ServerClassificationStore(userA);
     const storeB = new ServerClassificationStore(userB);
-    await storeA.recordClassifications([{ id: `${channelA}:shared-article-id`, keep: true }]);
-    expect(await storeA.getVerdict(`${channelA}:shared-article-id`)).toBe(true);
+    const key = `${channelA}:shared-article-id`;
+    await storeA.recordClassifications([{ id: key, keep: true }]);
+    expect((await storeA.getVerdicts([key])).get(key)).toBe(true);
     // B has its own budget and its own verdicts — A's classification must not appear or be billed.
-    expect(await storeB.getVerdict(`${channelA}:shared-article-id`)).toBeUndefined();
+    expect((await storeB.getVerdicts([key])).get(key)).toBeUndefined();
     expect(await storeB.remainingDailyBudget()).toBe(Number(process.env.AI_DAILY_CAP) || 3000);
   });
 });
