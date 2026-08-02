@@ -26,6 +26,9 @@ export interface ChannelProfile {
   include: string[];
   /** Anti-topic keywords that disqualify a story. */
   exclude: string[];
+  /** Keywords meaning the channel's OWN name is being used in a completely different sense — see
+   * TOPIC_WRONG_SENSE. Empty for everything except the curated ambiguous topic channels. */
+  wrongSense: string[];
 }
 
 /** Per-category keyword rules + the section names each provider uses for that category. All keyword
@@ -101,6 +104,34 @@ const CATEGORY_RULES: Record<NewsCategory, CategoryRule> = {
   },
 };
 
+/** Topic/entity channels whose NAME is also a common word in a completely unrelated domain — the
+ * entity is real and specific, but the identical string means something else entirely elsewhere:
+ * "Phish" the band vs. a "phish" (a phishing attack).
+ *
+ * Whole-word matching already handles the easy half of this — "phishing" never matches "phish", so
+ * those stories are dropped before they get here. What leaks through is the BARE word used in the
+ * other sense ("Anatomy of a phish", "This phish targets Microsoft 365 users"). The keywords below
+ * are what that other sense reads like, and they're scored as a strong negative (see
+ * W.wrongSenseHit in relevance.ts).
+ *
+ * Deliberately tuned for precision over recall: a word only belongs here if it would be genuinely
+ * surprising in real coverage of the entity. "security" and "scam" are left out on purpose —
+ * venue security and ticket scams are real band stories someone would want to see.
+ *
+ * Keyed by a single lowercase token, and a channel matches if ANY of its name tokens has an entry,
+ * so both "Phish" and "Phish Setlists" pick this up. */
+const TOPIC_WRONG_SENSE: Record<string, string[]> = {
+  phish: [
+    'phishing', 'smishing', 'vishing', 'malware', 'ransomware', 'spyware',
+    'attacker', 'attackers', 'credential', 'credentials', 'hacker', 'hackers',
+    'cyberattack', 'cyberattacks', 'cybersecurity', 'cybercrime', 'cybercriminals',
+    'spoofed', 'spoofing', 'inbox', 'mfa', 'okta',
+    'data breach', 'threat actor', 'threat actors', 'social engineering',
+    'login page', 'fake login', 'email scam', 'security researchers',
+    'multi-factor', 'two-factor', 'microsoft 365', 'password manager',
+  ],
+};
+
 /** Tokenize a channel/topic name into meaningful words (reuses the title normalizer). */
 function tokens(name: string): string[] {
   return normalizeTitle(name).split(' ').filter(Boolean);
@@ -127,10 +158,12 @@ export function channelProfile(name: string): ChannelProfile {
   const category = matchCategory(name);
   if (category) {
     const rule = CATEGORY_RULES[category];
-    return { type: 'category', category, include: rule.include, exclude: rule.exclude };
+    return { type: 'category', category, include: rule.include, exclude: rule.exclude, wrongSense: [] };
   }
   // Topic/entity channel — the name itself is what must appear.
-  return { type: 'topic', category: null, include: tokens(name), exclude: [] };
+  const nameTokens = tokens(name);
+  const wrongSense = [...new Set(nameTokens.flatMap((t) => TOPIC_WRONG_SENSE[t] ?? []))];
+  return { type: 'topic', category: null, include: nameTokens, exclude: [], wrongSense };
 }
 
 /** Does a provider-reported section belong to this category? (substring match, lowercased) */

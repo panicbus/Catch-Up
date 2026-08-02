@@ -55,6 +55,12 @@ const W = {
   excludeHit: -4, // an anti-topic keyword — a clear negative
   foreignSection: -4, // section belongs to a DIFFERENT category — a clear negative
   urlPathForeign: -2, // URL path belongs to a different category — a weaker negative
+  // The channel's own name used in a completely different sense (see TOPIC_WRONG_SENSE in
+  // channelProfiles.ts — "a phish" the attack vs. Phish the band). Sized to beat a topic channel's
+  // OWN maximum positive: such a channel scores its name twice over (termTitle 3 + includeTitle 2
+  // = 5, since include IS the name for topic channels), so anything weaker than -6 leaves a
+  // wrong-sense story net-positive and it survives. Verified, not assumed.
+  wrongSenseHit: -6,
   // Topic/entity channels only (see GateContext.locality) — a nearby mentioned place is a mild
   // positive, a distant one a clear negative. For a topic channel's own main feed the channel's
   // term is scored twice over (once as a specificTerm, once as profile.include — same word, both
@@ -111,6 +117,20 @@ function hasAnyWord(haystack: string, terms: string[]): boolean {
   return terms.some((t) => hasWord(haystack, t));
 }
 
+/** Does `term` appear as a whole word with a CAPITAL first letter anywhere in the raw (un-lowercased)
+ * text? Used only for the curated ambiguous topic channels (see TOPIC_WRONG_SENSE): those names are
+ * proper nouns, so real coverage always capitalizes them ("Phish announce a tour") while the other
+ * sense usually doesn't ("how to spot a phish"). Deliberately returns true if ANY occurrence is
+ * capitalized — a Title Case headline capitalizes everything, which makes this signal miss rather
+ * than misfire, exactly the direction we want. */
+function appearsCapitalized(raw: string, term: string): boolean {
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  for (const match of raw.matchAll(new RegExp(`\\b${escaped}\\b`, 'gi'))) {
+    if (/^[A-Z]/.test(match[0])) return true;
+  }
+  return false;
+}
+
 /** Category signal from a URL path, used only when the provider gave us no section field. Considers
  * only clean single-word, all-alpha path segments (`/politics/`, `/technology/`, `/arts/music/`) so
  * date parts (2024, 05) and multi-word slugs ("the-politics-of-fashion") can't produce false signals. */
@@ -143,6 +163,8 @@ interface GateContext {
   specificTerms: string[];
   include: string[];
   exclude: string[];
+  /** Keywords meaning the channel's own name is being used in a different sense entirely. */
+  wrongSense: string[];
   category: NewsCategory | null;
   /** When true, a story must NAME a specific term to be kept (the strict tier). True for every
    * subchannel, AND for a topic/entity channel's own main feed — a specific entity (a band, a person)
@@ -170,6 +192,7 @@ function buildGateContext(ctx: RelevanceContext): GateContext {
     specificTerms,
     include: ctx.profile.include,
     exclude: ctx.profile.exclude,
+    wrongSense: ctx.profile.wrongSense,
     category: ctx.profile.category,
     requireSpecificTerm: ctx.subchannelName != null || ctx.profile.type === 'topic',
     locality: localityEligible ? ctx.homeLocation : null,
@@ -218,6 +241,26 @@ function scoreArticle(article: FetchedArticle, gate: GateContext): ScoredSignals
   // Anti-topic keywords — a clear negative, in the title, a tag, or the snippet.
   if (hasAnyWord(title, gate.exclude) || hasAnyWord(tags, gate.exclude) || hasAnyWord(snippet, gate.exclude)) {
     score += W.excludeHit;
+  }
+
+  // The channel's name used in a wholly different sense (a "phish" the attack, in a channel about
+  // Phish the band). Separate from exclude above because it must outweigh the channel's own name
+  // scoring twice — see W.wrongSenseHit.
+  if (gate.wrongSense.length > 0) {
+    if (
+      hasAnyWord(title, gate.wrongSense) ||
+      hasAnyWord(tags, gate.wrongSense) ||
+      hasAnyWord(snippet, gate.wrongSense)
+    ) {
+      score += W.wrongSenseHit;
+    } else if (hasSpecificTerm) {
+      // No wrong-sense vocabulary, but the name never appears capitalized in the real text — for a
+      // proper-noun channel that alone is the wrong sense ("how to spot a phish before you click").
+      // Tags are excluded from this check: providers often lowercase their own labels, which would
+      // make a perfectly good story look lowercase-only.
+      const raw = `${article.title} ${article.snippet ?? ''}`;
+      if (!gate.specificTerms.some((t) => appearsCapitalized(raw, t))) score += W.wrongSenseHit;
+    }
   }
 
   // Section evidence (category channels only). Prefer the provider's real section field; only if it's

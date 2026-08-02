@@ -7,7 +7,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['server/**/*.isolation.test.ts'],
+    include: ['server/**/*.db.test.ts'],
     // Loads .env so DATABASE_URL is available — the normal suite is pure logic and never needed it.
     setupFiles: ['dotenv/config'],
     // Real network round-trips to a serverless Postgres that may need to wake from idle.

@@ -89,6 +89,49 @@ describe('baseline relevance gate (pre-existing, no locality involved)', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
+// Wrong-sense filtering — a topic channel whose NAME means something else entirely in another
+// domain ("Phish" the band vs. "a phish", the attack). Two signals combine: curated wrong-sense
+// vocabulary, and the fact that a proper-noun channel name is always capitalized in real coverage.
+// ---------------------------------------------------------------------------------------------
+describe('wrong-sense filtering (Phish the band vs. a phishing attack)', () => {
+  const profile = channelProfile('Phish');
+  const ctx: RelevanceContext = {
+    topic: 'Phish', channelName: 'Phish', subchannelName: null, profile, homeLocation: noHome,
+  };
+
+  it.each([
+    'Anatomy of a phish: how attackers steal credentials', // caught by wrong-sense vocabulary
+    'This phish targets Microsoft 365 users',
+    'How to spot a phish before you click',                // no security words — caught by lowercase
+    'Employees keep falling for the same phish',
+    'New phishing campaign hits banks',                    // never matched "phish" to begin with
+  ])('drops the security-sense story: %s', (title) => {
+    expect(keeps(article({ title }), ctx)).toBe(false);
+  });
+
+  it.each([
+    'Phish announce summer tour dates',
+    'Phish debut new song at Madison Square Garden',
+    'Phish add second night at the Sphere after selling out',
+    'Phish fans report ticket scam ahead of summer tour', // "scam" is deliberately NOT wrong-sense
+    'Review: Phish close out a triumphant three-night run',
+  ])('keeps the real band story: %s', (title) => {
+    expect(keeps(article({ title }), ctx)).toBe(true);
+  });
+
+  it('leaves channels without a curated wrong-sense list completely untouched', () => {
+    // The capitalization rule must never apply to ordinary topic channels — a lowercase mention
+    // in a legitimate story would otherwise start getting penalized everywhere.
+    const wildfires = channelProfile('Wildfires');
+    expect(wildfires.wrongSense).toEqual([]);
+    const wildfireCtx: RelevanceContext = {
+      topic: 'Wildfires', channelName: 'Wildfires', subchannelName: null, profile: wildfires, homeLocation: noHome,
+    };
+    expect(keeps(article({ title: 'Officials warn that wildfires may spread overnight' }), wildfireCtx)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
 // Locality signal — the feature added to deprioritize distant local stories in topic/entity
 // channels. All scenarios below are the ones manually verified during development; formalized
 // here so a future change to the W table or channelProfiles can't silently regress them.
