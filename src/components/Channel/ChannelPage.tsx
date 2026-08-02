@@ -191,26 +191,27 @@ export function ChannelPage() {
     <div className="channel-page">
       <div className="channel-page__header">
         <h1 className="channel-page__title" ref={setTitleNode}>{channel.name}</h1>
-        <div className="channel-page__actions-column">
-          {refreshSlow && (
-            <p className="channel-page__refresh-slow" role="status">
-              Checking multiple news sources, this can take a little while.
-            </p>
-          )}
-          <div className="channel-page__header-actions">
-            <PauseChannelControl channelId={channel.id} pausedUntil={channel.pausedUntil} />
-            <Button variant="secondary" size="sm" onClick={handleClear} disabled={totalUnread === 0} title="Mark all stories read">
-              <ClearIcon />
-              Clear
-            </Button>
-            <Button variant="secondary" size="sm" onClick={handleRefresh} disabled={refreshing}>
-              <RefreshIcon spinning={refreshing} />
-              {refreshing ? 'Refreshing…' : 'Refresh'}
-            </Button>
-          </div>
+        <div className="channel-page__header-actions">
+          <PauseChannelControl channelId={channel.id} pausedUntil={channel.pausedUntil} />
+          <Button variant="secondary" size="sm" onClick={handleClear} disabled={totalUnread === 0} title="Mark all stories read">
+            <ClearIcon />
+            Clear
+          </Button>
+          <Button variant="secondary" size="sm" onClick={handleRefresh} disabled={refreshing}>
+            <RefreshIcon spinning={refreshing} />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </Button>
         </div>
       </div>
-      {refreshNote && <p className="channel-page__refresh">{refreshNote}</p>}
+
+      {/* One shared eyebrow slot for both refresh states — "still checking" while in flight, then
+          whatever the result was once it resolves — so the message never jumps position or style
+          between the two. */}
+      {(refreshSlow || refreshNote) && (
+        <p className="channel-page__refresh-status" role="status">
+          {refreshSlow ? 'Checking multiple news sources, this can take a little while.' : refreshNote}
+        </p>
+      )}
 
       {/* The whole toolbar — controls row plus (when open) the subchannel manage panel — is one
           sticky unit, so the manage panel stays put with the nav instead of scrolling away. Tagged

@@ -1,11 +1,9 @@
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
 import { StreakCard } from './StreakCard';
-import { DeleteChannelModal } from '../common/DeleteChannelModal';
 import { useChannels } from '../../hooks/useChannels';
 import { useStreak } from '../../hooks/useStreak';
-import { useDeleteChannelFlow } from '../../hooks/useDeleteChannelFlow';
 import './Sidebar.css';
 
 function HomeIcon() {
@@ -54,25 +52,11 @@ function AboutIcon() {
   );
 }
 
-function RemoveIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-      <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 export function Sidebar() {
   const { channels } = useChannels();
   const streak = useStreak();
-  const navigate = useNavigate();
-  const location = useLocation();
   const navClass = ({ isActive }: { isActive: boolean }) =>
     `sidebar__link${isActive ? ' sidebar__link--active' : ''}`;
-
-  const { pendingChannel, requestDelete, cancel, confirm } = useDeleteChannelFlow(channels, (channelId) => {
-    if (location.pathname === `/channel/${channelId}`) navigate('/');
-  });
 
   return (
     <aside className="sidebar">
@@ -118,23 +102,9 @@ export function Sidebar() {
         <div className="sidebar__section-label">Channels</div>
         <div className="sidebar__channels">
           {channels.map((channel) => (
-            <div key={channel.id} className="sidebar__channel-row">
-              <NavLink to={`/channel/${channel.id}`} className={navClass}>
-                <span>{channel.name}</span>
-              </NavLink>
-              <button
-                type="button"
-                className="sidebar__channel-remove"
-                aria-label={`Delete ${channel.name}`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  requestDelete(channel.id);
-                }}
-              >
-                <RemoveIcon />
-              </button>
-            </div>
+            <NavLink key={channel.id} to={`/channel/${channel.id}`} className={navClass}>
+              <span>{channel.name}</span>
+            </NavLink>
           ))}
         </div>
       </div>
@@ -143,8 +113,6 @@ export function Sidebar() {
         <ThemeToggle />
         <span className="sidebar__version">v{__APP_VERSION__}</span>
       </div>
-
-      <DeleteChannelModal channel={pendingChannel} onCancel={cancel} onConfirm={confirm} />
     </aside>
   );
 }
