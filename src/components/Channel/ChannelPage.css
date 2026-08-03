@@ -19,9 +19,11 @@
 
 /* Fixed (not in-flow) so it can't shift the header/toolbar/feed underneath it as it appears and
    disappears, and so it's immune to .app-shell__main's own scrolling — it stays put at the top of
-   the content pane regardless of where you've scrolled to. Centered over the CONTENT pane, not the
-   whole window: the sidebar is a fixed width with no responsive breakpoints anywhere in this
-   stylesheet, so offsetting by half of it is a safe, static calculation, not a guess. */
+   the content pane regardless of where you've scrolled to. Bare text, deliberately — no pill
+   background/border, per explicit direction against the earlier boxed version. Centered over the
+   CONTENT pane, not the whole window: the sidebar is a fixed width with no responsive breakpoints
+   above 767px, so offsetting by half of it is a safe, static calculation there. Below 767px the
+   sidebar is hidden (see AppShell.css), so the mobile breakpoint resets this to true center. */
 .channel-page__refresh-status {
   position: fixed;
   top: 44px; /* clears .app-shell__drag-bar's 34px with a little room to spare */
@@ -29,11 +31,6 @@
   transform: translateX(-50%);
   z-index: 60; /* above the sticky toolbar (3) and the pause menu (40); below Modal (100) */
   margin: 0;
-  padding: 7px 16px;
-  border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-card);
   font-size: 12px;
   font-weight: 400;
   color: var(--accent-strong);
@@ -42,6 +39,20 @@
   /* It floats directly over the Refresh button and the subchannel pills — must never intercept a
      click meant for whatever's actually underneath it. */
   pointer-events: none;
+}
+
+/* --accent-strong (#c23b2e) is tuned for text-on-white and reads at only ~2.6:1 on the dark theme's
+   background — fine as a small UI accent, not as a bare-text status message. Scoped to this one
+   rule rather than changing --accent-strong itself, which also drives sidebar active-link and hover
+   states that already work fine as-is. */
+:root[data-theme='dark'] .channel-page__refresh-status {
+  color: #ff6b5a;
+}
+
+@media (max-width: 767px) {
+  .channel-page__refresh-status {
+    left: 50%;
+  }
 }
 
 .channel-page__title {
@@ -146,5 +157,61 @@
 @keyframes channel-page-refresh-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 767px) {
+  /* Matches BottomNav clearance already added to .app-shell__main — this is the page's own side
+     padding, unrelated to that, but both exist for the same reason: desktop's spacing doesn't fit
+     a phone. */
+  .channel-page {
+    padding: 8px 16px 24px;
+  }
+
+  .channel-page__header--mobile {
+    align-items: center;
+    gap: 10px;
+  }
+
+  .channel-page__title--mobile {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 20px;
+  }
+
+  .channel-page__icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 50%;
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+  .channel-page__icon-btn:disabled {
+    opacity: 0.4;
+  }
+
+  /* .channel-page's side padding just changed above, so the sticky bar's full-bleed negative
+     margin (tuned for desktop's 40px) has to match it here or the toolbar's background stops
+     reaching the screen edges. */
+  .channel-page__sticky {
+    margin: 0 -16px 8px;
+    padding: 12px 16px;
+  }
+
+  /* No second-row echo of the title on mobile — the header's own title never scrolls under the
+     sticky bar the way desktop's does (the mobile header isn't part of the scrolling content in
+     the same visual sense), and there's little enough width here without a duplicate label. The
+     underlying IntersectionObserver keeps running either way; this only hides its output. */
+  .channel-page__sticky-title {
+    display: none;
   }
 }

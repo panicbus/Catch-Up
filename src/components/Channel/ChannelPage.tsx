@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useChannels } from '../../hooks/useChannels';
 import { useChannelArticles } from '../../hooks/useChannelArticles';
 import { useSettings } from '../../hooks/useSettings';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { SubchannelBar } from './SubchannelBar';
+import { SubchannelPicker } from './SubchannelPicker';
 import { SubchannelManagePanel } from '../common/SubchannelManagePanel';
 import { ViewModeToggle } from './ViewModeToggle';
 import { NewsFeed, type NewsFeedHandle } from './NewsFeed';
@@ -11,6 +13,7 @@ import { FeedSkeleton, ChannelPageSkeleton } from './FeedSkeleton';
 import { EmptyState } from '../common/EmptyState';
 import { Button } from '../common/Button';
 import { PauseChannelControl, isChannelPaused } from '../common/PauseChannelControl';
+import { OverflowMenu } from '../common/OverflowMenu';
 import { ChannelPausedScreen } from './ChannelPausedScreen';
 import { api, revalidateNow } from '../../services/api';
 import * as channelsStore from '../../services/channelsStore';
@@ -28,6 +31,14 @@ function ClearIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M5 13l4 4L19 7" />
+    </svg>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M15 18l-6-6 6-6" />
     </svg>
   );
 }
@@ -53,6 +64,8 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
 
 export function ChannelPage() {
   const { channelId } = useParams<{ channelId: string }>();
+  const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { channels, loading: channelsLoading } = useChannels();
   const { settings, update } = useSettings();
   const [subchannelId, setSubchannelId] = useState<string | null>(null);
@@ -242,20 +255,47 @@ export function ChannelPage() {
 
   return (
     <div className="channel-page">
-      <div className="channel-page__header">
-        <h1 className="channel-page__title" ref={setTitleNode}>{channel.name}</h1>
-        <div className="channel-page__header-actions">
-          <PauseChannelControl channelId={channel.id} pausedUntil={channel.pausedUntil} />
-          <Button variant="secondary" size="sm" onClick={handleClear} disabled={totalUnread === 0} title="Mark all stories read">
-            <ClearIcon />
-            Clear
-          </Button>
-          <Button variant="secondary" size="sm" onClick={handleRefresh} disabled={refreshing}>
-            <RefreshIcon spinning={refreshing} />
-            {refreshing ? 'Refreshing…' : 'Refresh'}
-          </Button>
+      {isMobile ? (
+        // Structurally different enough from the desktop header (a back button in place of the
+        // sidebar's implicit "away from this page", icon-only actions instead of labelled buttons,
+        // Pause/Clear folded into one menu) that branching the whole row reads clearer than
+        // threading conditionals through a single shared block.
+        <div className="channel-page__header channel-page__header--mobile">
+          <button type="button" className="channel-page__icon-btn" onClick={() => navigate(-1)} aria-label="Back">
+            <BackIcon />
+          </button>
+          <h1 className="channel-page__title channel-page__title--mobile" ref={setTitleNode}>
+            {channel.name}
+          </h1>
+          <div className="channel-page__header-actions">
+            <button
+              type="button"
+              className="channel-page__icon-btn"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              aria-label={refreshing ? 'Refreshing' : 'Refresh'}
+            >
+              <RefreshIcon spinning={refreshing} />
+            </button>
+            <OverflowMenu channelId={channel.id} onMarkAllRead={handleClear} markAllReadDisabled={totalUnread === 0} />
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="channel-page__header">
+          <h1 className="channel-page__title" ref={setTitleNode}>{channel.name}</h1>
+          <div className="channel-page__header-actions">
+            <PauseChannelControl channelId={channel.id} pausedUntil={channel.pausedUntil} />
+            <Button variant="secondary" size="sm" onClick={handleClear} disabled={totalUnread === 0} title="Mark all stories read">
+              <ClearIcon />
+              Clear
+            </Button>
+            <Button variant="secondary" size="sm" onClick={handleRefresh} disabled={refreshing}>
+              <RefreshIcon spinning={refreshing} />
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* One shared eyebrow slot for both refresh states — "still checking" while in flight, then
           whatever the result was once it resolves — so the message never jumps position or style
@@ -287,6 +327,19 @@ export function ChannelPage() {
               counts={subchannelCounts}
               totalUnread={totalUnread}
             />
+            {/* Desktop's pill row (SubchannelBar's chips, hidden on mobile — see its CSS) uses
+                flex-wrap, which stacks badly at phone width. This dropdown is the mobile stand-in,
+                sharing the exact same counts/selection state; SubchannelBar's manage toggle (the
+                "+Add subchannels" / "Manage subchannels" pill) stays visible on both. */}
+            {isMobile && (
+              <SubchannelPicker
+                subchannels={channel.subchannels}
+                activeId={subchannelId}
+                onSelect={setSubchannelId}
+                counts={subchannelCounts}
+                totalUnread={totalUnread}
+              />
+            )}
           </div>
           <div className="channel-page__controls-right">
             <button
@@ -299,7 +352,12 @@ export function ChannelPage() {
               <ArchiveIcon />
               Archive read{readInPlaceCount > 0 ? ` (${readInPlaceCount})` : ''}
             </button>
-            <ViewModeToggle value={settings.defaultViewMode} onChange={(mode) => update({ defaultViewMode: mode })} />
+            {/* A grid view makes no sense at phone width — hidden rather than shown-disabled, since
+                there's nothing to toggle to. Forces the rendered feed to list mode below WITHOUT
+                writing to settings.defaultViewMode, which desktop shares. */}
+            {!isMobile && (
+              <ViewModeToggle value={settings.defaultViewMode} onChange={(mode) => update({ defaultViewMode: mode })} />
+            )}
           </div>
         </div>
 
@@ -325,7 +383,7 @@ export function ChannelPage() {
           ref={feedRef}
           articles={articles.map((a) => ({ ...a, channelName: channel.name }))}
           channelName={caughtUpName}
-          viewMode={settings.defaultViewMode}
+          viewMode={isMobile ? 'list' : settings.defaultViewMode}
           maxUnreadStories={settings.maxStoriesShown}
           onReadInPlaceCountChange={setReadInPlaceCount}
           suppressCelebrationRef={clearSuppressRef}

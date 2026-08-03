@@ -3,7 +3,10 @@ import { api, revalidateNow } from '../../services/api';
 import * as channelsStore from '../../services/channelsStore';
 import './PauseChannelControl.css';
 
-const OPTIONS: { label: string; value: number | 'forever' }[] = [
+/** Exported for the mobile channel-page overflow menu (OverflowMenu.tsx), which offers the same
+ * pause durations inline rather than through this component's own dropdown — one definition either
+ * way, so the two entry points can't drift on labels or values. */
+export const PAUSE_OPTIONS: { label: string; value: number | 'forever' }[] = [
   { label: '24 hours', value: 24 },
   { label: '48 hours', value: 48 },
   { label: '1 week', value: 168 },
@@ -26,6 +29,20 @@ function optimisticPause(value: number | 'forever' | null): { pausedUntil: strin
   if (value === null) return { pausedUntil: null, pausedLabel: null };
   if (value === 'forever') return { pausedUntil: PAUSE_FOREVER_UNTIL, pausedLabel: 'until I say so' };
   return { pausedUntil: new Date(Date.now() + value * 3600_000).toISOString(), pausedLabel: pauseLabelForHours(value) };
+}
+
+/** The one place a pause/resume actually gets applied — exported so OverflowMenu.tsx's inline
+ * duration list commits through the exact same optimistic-mutate path as this component's own
+ * dropdown, rather than a second copy that could drift. */
+export function applyPauseChannel(channelId: string, value: number | 'forever' | null): void {
+  const patch = optimisticPause(value);
+  channelsStore
+    .mutate(
+      (prev) => prev.map((c) => (c.id === channelId ? { ...c, ...patch } : c)),
+      () => api.setChannelPause(channelId, value)
+    )
+    .then(() => revalidateNow())
+    .catch(() => {});
 }
 
 export function isChannelPaused(pausedUntil: string | null | undefined): boolean {
@@ -76,24 +93,14 @@ export function PauseChannelControl({ channelId, pausedUntil, variant = 'button'
     e.preventDefault();
     e.stopPropagation();
   };
-  const applyPause = (value: number | 'forever' | null) => {
-    const patch = optimisticPause(value);
-    channelsStore
-      .mutate(
-        (prev) => prev.map((c) => (c.id === channelId ? { ...c, ...patch } : c)),
-        () => api.setChannelPause(channelId, value)
-      )
-      .then(() => revalidateNow())
-      .catch(() => {});
-  };
   const pause = (e: React.MouseEvent, value: number | 'forever') => {
     stop(e);
-    applyPause(value);
+    applyPauseChannel(channelId, value);
     setOpen(false);
   };
   const resume = (e: React.MouseEvent) => {
     stop(e);
-    applyPause(null);
+    applyPauseChannel(channelId, null);
     setOpen(false);
   };
 
@@ -132,7 +139,7 @@ export function PauseChannelControl({ channelId, pausedUntil, variant = 'button'
       {open && (
         <div className="pause-control__menu" role="menu">
           <div className="pause-control__menu-label">Pause for…</div>
-          {OPTIONS.map((o) => (
+          {PAUSE_OPTIONS.map((o) => (
             <button
               key={o.value}
               type="button"

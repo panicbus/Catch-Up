@@ -14,6 +14,21 @@
   opacity: 0.4;
 }
 
+/* Touch has no browser-native drag ghost the way HTML5 DnD does (that's what --dragging's opacity
+   dims out of the way of), so the tile itself has to visibly follow the finger — full opacity,
+   elevated, translated by ChannelTabGrid.tsx's tracked touchOffset. pointer-events:none so
+   elementFromPoint (the touch equivalent of dragenter) finds whatever's underneath instead of
+   always finding this tile itself. No transition — it must track 1:1 with the finger, not ease. */
+.channel-tile-wrap--touch-lifted {
+  z-index: 20;
+  pointer-events: none;
+  transition: none;
+}
+.channel-tile-wrap--touch-lifted .channel-tile {
+  box-shadow: 0 14px 30px -8px rgba(0, 0, 0, 0.4);
+  transform: scale(1.03);
+}
+
 /* dragenter bubbles from every descendant (the Link's inner divs, the grip button, the controls
    div) — without this, crossing one tile fires the wrapper's onDragEnter 2-5 times per tile instead
    of once. Harmless once the preview math is idempotent (see ChannelTabGrid.tsx), but this still
@@ -61,6 +76,9 @@
   cursor: grab;
   opacity: 0.8;
   transition: background 0.12s, opacity 0.12s;
+  /* Hands the whole gesture to JS — without this, the browser's own scroll/pan handling competes
+     with the touch-drag Pointer Events logic in ChannelTabGrid.tsx and can swallow it entirely. */
+  touch-action: none;
 }
 .channel-tile__handle:hover {
   background: rgba(255, 255, 255, 0.34);
@@ -120,4 +138,24 @@
   font-weight: 500;
   opacity: 0.8;
   margin-top: 2px;
+}
+
+@media (max-width: 767px) {
+  /* auto-fill with a 220px minimum yields exactly one column at phone width; the mockup wants two. */
+  .channel-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  /* Both are already always-visible (no :hover gate to remove) — this is purely enlarging their hit
+     targets for touch, since 24px/26px falls under the ~44px guidance for a comfortably tappable
+     control. */
+  .channel-tile__handle {
+    width: 34px;
+    height: 34px;
+  }
+  .channel-tile__ctrl {
+    width: 34px;
+    height: 34px;
+  }
 }

@@ -25,3 +25,25 @@
   overflow-y: auto;
   min-width: 0;
 }
+
+/* The one breakpoint that decides desktop vs. mobile shell layout — kept here, not split across
+   Sidebar.css/BottomNav.css, so "which chrome is showing" has a single source of truth. Matches
+   useIsMobile.ts's 767px exactly; that hook and this value can't share a constant across CSS/TS, so
+   if one changes, the other must too. */
+@media (max-width: 767px) {
+  .sidebar,
+  .app-shell__drag-bar {
+    display: none;
+  }
+
+  .bottom-nav {
+    display: flex;
+  }
+
+  /* Generous rather than pixel-exact — clears BottomNav (its own height plus the safe-area inset)
+     on every page, including ones with little bottom padding of their own, without needing this
+     value to track BottomNav's real rendered height. */
+  .app-shell__main {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom));
+  }
+}

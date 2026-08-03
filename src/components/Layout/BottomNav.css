@@ -1,0 +1,34 @@
+/* Hidden by default (desktop) — the one @media block in AppShell.css flips this and the sidebar in
+   lockstep. Kept out of that file, not this one, so the shell's breakpoint logic lives in one place. */
+.bottom-nav {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50; /* above the sticky channel toolbar (3) and PauseChannelControl's menu (40); below the refresh toast (60) and Modal (100) */
+  justify-content: space-around;
+  align-items: stretch;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  /* Clears the iPhone home indicator without adding permanent padding on devices without one. */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.bottom-nav__link {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 4px 6px;
+  color: var(--text-faint);
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.bottom-nav__link--active {
+  color: var(--accent-strong);
+}

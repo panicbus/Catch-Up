@@ -1,0 +1,60 @@
+.overflow-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.overflow-menu__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.overflow-menu__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 160px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.overflow-menu__divider {
+  margin: 6px 4px;
+  border-top: 1px solid var(--border);
+}
+
+.overflow-menu__label {
+  padding: 4px 8px 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+
+.overflow-menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+}
+.overflow-menu__item:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+.overflow-menu__item:disabled {
+  opacity: 0.4;
+}
