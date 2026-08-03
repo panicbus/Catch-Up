@@ -4,7 +4,18 @@ import type { ClassificationStore } from './classificationStore';
 import { runProviders, getProviderStatus } from './providers/registry';
 import { filterRelevant } from './aiRelevance';
 import { channelProfile } from './providers/channelProfiles';
+import type { ProviderConfig } from './providers/classifier';
 import type { DataChangeEvent } from '../ipc-contract';
+
+/** Build the classifier config from the persisted setting, or null (AI off) if none is picked or
+ * the picked provider's credential/setting isn't actually filled in. */
+function buildAiConfig(dataStore: DataStore): ProviderConfig | null {
+  const provider = dataStore.getAiProvider();
+  if (provider === 'gemini') return { provider, apiKey: dataStore.getGeminiApiKey() ?? undefined };
+  if (provider === 'groq') return { provider, apiKey: dataStore.getGroqApiKey() ?? undefined };
+  if (provider === 'ollama') return { provider, ollamaModel: dataStore.getOllamaModel() };
+  return null;
+}
 
 const INTERVAL_MS = 30 * 60 * 1000;
 const PROVIDER_PACING_MS = 300;
@@ -152,7 +163,7 @@ export async function runChannel(
         target.subchannelName,
         profile,
         deps.classificationStore,
-        deps.dataStore.getAiEnabled(),
+        buildAiConfig(deps.dataStore),
         homeLocation
       );
       added += deps.articlesCache.merge(channelId, target.subchannelId, relevant);

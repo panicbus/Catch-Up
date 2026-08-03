@@ -3,12 +3,14 @@ import crypto from 'crypto';
 import { dataFilePath } from './paths';
 import { capitalizeWords, slugifyChannelName } from '../channelName';
 import type {
+  AiProvider,
   AppSettings,
   BookmarkEntry,
   Channel,
   StreakInfo,
   Subchannel,
 } from '../ipc-contract';
+import { OLLAMA_DEFAULT_MODEL } from './providers/classifier';
 
 interface ReadEntry {
   id: string;
@@ -19,15 +21,45 @@ interface ReadEntry {
  * (like Article.read/bookmarked already are), not persisted alongside the bookmark itself. */
 type StoredBookmarkEntry = Omit<BookmarkEntry, 'read'>;
 
+/** AI relevance filtering. Kept OUT of `settings` because `settings` is sent to the renderer wholesale
+ * (getSettings) and the api keys are secrets — the renderer only ever learns whether one is configured
+ * (see ipcHandlers.getAiConfig), never the keys themselves. */
+interface AiState {
+  provider: AiProvider | null;
+  geminiApiKey: string | null;
+  groqApiKey: string | null;
+  ollamaModel: string;
+}
+
+const DEFAULT_AI_STATE: AiState = {
+  provider: null,
+  geminiApiKey: null,
+  groqApiKey: null,
+  ollamaModel: OLLAMA_DEFAULT_MODEL,
+};
+
+/** Reads a persisted `ai` field written by either the current shape or the pre-provider-choice shape
+ * ({enabled, apiKey}) — a stored Gemini key with filtering on implies the provider was Gemini, the
+ * only one that ever existed then. Also fills in any field a file saved before it existed lacks. */
+function migrateAiState(raw: unknown): AiState {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_AI_STATE };
+  const r = raw as Record<string, unknown>;
+  if ('provider' in r) return { ...DEFAULT_AI_STATE, ...(r as Partial<AiState>) };
+  const enabled = r.enabled === true;
+  const apiKey = typeof r.apiKey === 'string' ? r.apiKey : null;
+  return {
+    ...DEFAULT_AI_STATE,
+    provider: enabled && apiKey ? 'gemini' : null,
+    geminiApiKey: apiKey,
+  };
+}
+
 interface DataFile {
   schemaVersion: 1;
   userId: 'local';
   onboarding: { completed: boolean; completedAt: string | null };
   settings: AppSettings;
-  /** AI relevance filtering. Kept OUT of `settings` because `settings` is sent to the renderer wholesale
-   * (getSettings) and the apiKey is a secret — the renderer only ever learns whether one is configured
-   * (see ipcHandlers.getAiConfig), never the key itself. */
-  ai: { enabled: boolean; apiKey: string | null };
+  ai: AiState;
   channels: Channel[];
   bookmarks: StoredBookmarkEntry[];
   readArticleIds: ReadEntry[];
@@ -46,7 +78,7 @@ const DEFAULT_DATA: DataFile = {
     maxStoriesShown: 25,
     homeLocation: null,
   },
-  ai: { enabled: false, apiKey: null },
+  ai: { ...DEFAULT_AI_STATE },
   channels: [],
   bookmarks: [],
   readArticleIds: [],
@@ -142,10 +174,16 @@ export class DataStore {
     try {
       const raw = fs.readFileSync(this.filePath, 'utf-8');
       const parsed = JSON.parse(raw) as DataFile;
-      // `settings` is merged one level deeper than the rest of the file — a plain top-level spread
-      // would let an existing settings object (saved before a new AppSettings field existed, e.g.
-      // maxStoriesShown) wholesale shadow DEFAULT_DATA.settings and leave that field undefined.
-      return { ...DEFAULT_DATA, ...parsed, settings: { ...DEFAULT_DATA.settings, ...parsed.settings } };
+      // `settings` and `ai` are merged one level deeper than the rest of the file — a plain top-level
+      // spread would let an existing object (saved before a new field existed, e.g. maxStoriesShown,
+      // or before the ai field's shape changed at all) wholesale shadow DEFAULT_DATA and leave newer
+      // fields undefined.
+      return {
+        ...DEFAULT_DATA,
+        ...parsed,
+        settings: { ...DEFAULT_DATA.settings, ...parsed.settings },
+        ai: migrateAiState(parsed.ai),
+      };
     } catch {
       return structuredClone(DEFAULT_DATA);
     }
@@ -451,27 +489,49 @@ export class DataStore {
     this.write();
   }
 
-  // AI relevance filtering. The apiKey never leaves the main process except as a boolean via
-  // hasGeminiApiKey() (see ipcHandlers.getAiConfig).
-  getAiEnabled(): boolean {
-    return this.data.ai.enabled;
+  // AI relevance filtering. Keys never leave the main process except as booleans via
+  // hasGeminiApiKey()/hasGroqApiKey() (see ipcHandlers.getAiConfig).
+  getAiProvider(): AiProvider | null {
+    return this.data.ai.provider;
   }
 
-  setAiEnabled(enabled: boolean): void {
-    this.data.ai.enabled = enabled;
+  setAiProvider(provider: AiProvider | null): void {
+    this.data.ai.provider = provider;
     this.write();
   }
 
   getGeminiApiKey(): string | null {
-    return this.data.ai.apiKey;
+    return this.data.ai.geminiApiKey;
   }
 
   hasGeminiApiKey(): boolean {
-    return !!this.data.ai.apiKey;
+    return !!this.data.ai.geminiApiKey;
   }
 
   setGeminiApiKey(key: string | null): void {
-    this.data.ai.apiKey = key && key.trim() ? key.trim() : null;
+    this.data.ai.geminiApiKey = key && key.trim() ? key.trim() : null;
+    this.write();
+  }
+
+  getGroqApiKey(): string | null {
+    return this.data.ai.groqApiKey;
+  }
+
+  hasGroqApiKey(): boolean {
+    return !!this.data.ai.groqApiKey;
+  }
+
+  setGroqApiKey(key: string | null): void {
+    this.data.ai.groqApiKey = key && key.trim() ? key.trim() : null;
+    this.write();
+  }
+
+  getOllamaModel(): string {
+    return this.data.ai.ollamaModel;
+  }
+
+  setOllamaModel(model: string): void {
+    this.data.ai.ollamaModel = model.trim() || OLLAMA_DEFAULT_MODEL;
     this.write();
   }
 

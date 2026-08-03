@@ -55,8 +55,11 @@ const electronApi: CatchUpApi = {
   resolveHomeLocation: (query) => getBridge().resolveHomeLocation(query),
 
   getAiConfig: () => getBridge().getAiConfig(),
-  setAiFilteringEnabled: (enabled) => getBridge().setAiFilteringEnabled(enabled),
+  setAiProvider: (provider) => getBridge().setAiProvider(provider),
   saveGeminiApiKey: (key) => getBridge().saveGeminiApiKey(key),
+  saveGroqApiKey: (key) => getBridge().saveGroqApiKey(key),
+  setOllamaModel: (model) => getBridge().setOllamaModel(model),
+  pingOllama: (model) => getBridge().pingOllama(model),
 
   onDataChanged: (listener) => getBridge().onDataChanged(listener),
 };
@@ -227,8 +230,12 @@ const webApi: CatchUpApi = {
   resolveHomeLocation: (query) => post('/settings/resolve-location', { query }),
 
   getAiConfig: () => request('/ai-config'),
-  setAiFilteringEnabled: (enabled) => post('/ai-config/enabled', { enabled }),
-  saveGeminiApiKey: (key) => post('/ai-config/key', { key }),
+  setAiProvider: (provider) => post('/ai-config/provider', { provider }),
+  saveGeminiApiKey: (key) => post('/ai-config/gemini-key', { key }),
+  saveGroqApiKey: (key) => post('/ai-config/groq-key', { key }),
+  // Ollama is desktop-only — the web Settings UI never offers it, so these are unreachable stubs.
+  setOllamaModel: () => Promise.resolve(),
+  pingOllama: () => Promise.resolve({ ok: false, error: 'Ollama is only available in the desktop app.' }),
 
   onDataChanged: webOnDataChanged,
 };

@@ -7,7 +7,8 @@
 
 import { prisma } from '../db';
 import { capitalizeWords, slugifyChannelName } from '../../channelName';
-import type { AppSettings, BookmarkEntry, Channel, StreakInfo, Subchannel } from '../../ipc-contract';
+import type { AiProvider, AppSettings, BookmarkEntry, Channel, StreakInfo, Subchannel } from '../../ipc-contract';
+import { OLLAMA_DEFAULT_MODEL } from '../../main/providers/classifier';
 import { Prisma } from '../generated/prisma/client';
 import type { Channel as PrismaChannel, Subchannel as PrismaSubchannel, Settings as PrismaSettings } from '../generated/prisma/client';
 
@@ -348,13 +349,16 @@ export async function setSettings(userId: string, partial: Partial<AppSettings>)
 
 // --- AI relevance filtering ---------------------------------------------------------------------
 
-export async function getAiEnabled(userId: string): Promise<boolean> {
+/** null on rows saved before providers existed — falls back to the legacy aiEnabled+aiApiKey pair
+ * (Gemini was the only provider then, so "on" with a key stored unambiguously meant Gemini). */
+export async function getAiProvider(userId: string): Promise<AiProvider | null> {
   const settings = await prisma.settings.findUniqueOrThrow({ where: { userId } });
-  return settings.aiEnabled;
+  if (settings.aiProvider) return settings.aiProvider as AiProvider;
+  return settings.aiEnabled && settings.aiApiKey ? 'gemini' : null;
 }
 
-export async function setAiEnabled(userId: string, enabled: boolean): Promise<void> {
-  await prisma.settings.update({ where: { userId }, data: { aiEnabled: enabled } });
+export async function setAiProvider(userId: string, provider: AiProvider | null): Promise<void> {
+  await prisma.settings.update({ where: { userId }, data: { aiProvider: provider } });
 }
 
 export async function getGeminiApiKey(userId: string): Promise<string | null> {
@@ -371,5 +375,34 @@ export async function setGeminiApiKey(userId: string, key: string | null): Promi
   await prisma.settings.update({
     where: { userId },
     data: { aiApiKey: key && key.trim() ? key.trim() : null },
+  });
+}
+
+export async function getGroqApiKey(userId: string): Promise<string | null> {
+  const settings = await prisma.settings.findUniqueOrThrow({ where: { userId } });
+  return settings.groqApiKey;
+}
+
+export async function hasGroqApiKey(userId: string): Promise<boolean> {
+  const settings = await prisma.settings.findUniqueOrThrow({ where: { userId } });
+  return !!settings.groqApiKey;
+}
+
+export async function setGroqApiKey(userId: string, key: string | null): Promise<void> {
+  await prisma.settings.update({
+    where: { userId },
+    data: { groqApiKey: key && key.trim() ? key.trim() : null },
+  });
+}
+
+export async function getOllamaModel(userId: string): Promise<string> {
+  const settings = await prisma.settings.findUniqueOrThrow({ where: { userId } });
+  return settings.ollamaModel;
+}
+
+export async function setOllamaModel(userId: string, model: string): Promise<void> {
+  await prisma.settings.update({
+    where: { userId },
+    data: { ollamaModel: model.trim() || OLLAMA_DEFAULT_MODEL },
   });
 }

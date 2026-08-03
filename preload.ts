@@ -51,8 +51,11 @@ const api: CatchUpApi = {
   resolveHomeLocation: (query) => ipcRenderer.invoke('resolveHomeLocation', query),
 
   getAiConfig: () => ipcRenderer.invoke('getAiConfig'),
-  setAiFilteringEnabled: (enabled) => ipcRenderer.invoke('setAiFilteringEnabled', enabled),
+  setAiProvider: (provider) => ipcRenderer.invoke('setAiProvider', provider),
   saveGeminiApiKey: (key) => ipcRenderer.invoke('saveGeminiApiKey', key),
+  saveGroqApiKey: (key) => ipcRenderer.invoke('saveGroqApiKey', key),
+  setOllamaModel: (model) => ipcRenderer.invoke('setOllamaModel', model),
+  pingOllama: (model) => ipcRenderer.invoke('pingOllama', model),
 
   onDataChanged: (listener) => {
     const channel = 'catchup:data-changed';

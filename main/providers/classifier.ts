@@ -7,17 +7,34 @@
  * most Pop Culture headlines, is kept). Deliberately conservative: the model only lists the clearly
  * off-topic ids, so anything it omits or is unsure about is kept — recall over precision.
  *
- * PROVIDER-AGNOSTIC BY DESIGN. Ships on Google Gemini's free tier (great for a free app tier); the
- * request shape is the only Gemini-specific part. To move to the paid tier (Claude Haiku) or a local
- * model, swap `callModel()` — nothing else changes. Model/keys come from env:
- *   GEMINI_API_KEY   (required to enable AI filtering; absent ⇒ isAiConfigured() is false ⇒ heuristic)
- *   GEMINI_MODEL     (optional; defaults to a current free-tier Flash model)
+ * PROVIDER-AGNOSTIC BY DESIGN, and genuinely multi-provider today: Gemini (Google's free tier), Groq
+ * (a free-tier cloud API serving open-source models — always-on, so it works from both the desktop
+ * app and the hosted server) and Ollama (a fully local model — desktop-only, since "localhost" means
+ * a different machine on the hosted server). `buildPrompt()` is shared prose, not provider-specific;
+ * only each `callXModel()` differs in wire format. Model/keys come from env, one set per provider:
+ *   GEMINI_API_KEY / GEMINI_MODEL   (Gemini; absent key ⇒ heuristic)
+ *   GROQ_API_KEY / GROQ_MODEL       (Groq; absent key ⇒ heuristic)
+ *   OLLAMA_BASE_URL                 (Ollama; defaults to http://localhost:11434)
  *
  * COST/QUOTA CONTROL lives one layer up (classificationStore.ts): every verdict is cached by article
- * id so a story is classified at most once, and a daily cap bounds spend/quota. See aiRelevance.ts
- * for how the heuristic pre-filter, this call, and the cache are combined. */
+ * id so a story is classified at most once, and a daily cap bounds spend/quota for Gemini/Groq (not
+ * Ollama, which runs on the founder's own hardware — see aiRelevance.ts). See aiRelevance.ts for how
+ * the heuristic pre-filter, this call, and the cache are combined. */
 
 import type { ChannelProfile } from './channelProfiles';
+
+export type AiProvider = 'gemini' | 'groq' | 'ollama';
+
+/** Whichever credential/setting the active provider needs. Gemini/Groq use `apiKey` (falls back to
+ * the matching env var when omitted — the hosted server passes each account's own key explicitly;
+ * the desktop app relies on the env-var fallback). Ollama uses `ollamaModel`/`ollamaBaseUrl` instead
+ * of a key — it has no quota to protect, just a local server that may or may not be running. */
+export interface ProviderConfig {
+  provider: AiProvider;
+  apiKey?: string;
+  ollamaModel?: string;
+  ollamaBaseUrl?: string;
+}
 
 // `gemini-flash-latest` is Google's alias for the current free-tier Flash model — it keeps working
 // as older pinned versions (gemini-2.0-flash, etc.) roll off the free tier. Override with GEMINI_MODEL
@@ -25,6 +42,15 @@ import type { ChannelProfile } from './channelProfiles';
 const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-flash-latest';
 const GEMINI_ENDPOINT = (model: string, key: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+
+const GROQ_MODEL = process.env.GROQ_MODEL?.trim() || 'llama-3.1-8b-instant';
+const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
+
+export const OLLAMA_DEFAULT_MODEL = 'qwen2.5:7b';
+const OLLAMA_DEFAULT_BASE_URL = 'http://localhost:11434';
+// A little past this app's own 30-minute background refresh cadence, so consecutive scheduled runs
+// tend to find the model already warm instead of paying the ~5s cold-load cost every time.
+const OLLAMA_KEEP_ALIVE = '35m';
 
 // Max articles per model call. aiRelevance chunks its work into MAX_BATCH-sized calls; the truncation
 // in classifyOffTopic below is only a last-resort guard so a prompt can never grow unbounded.
@@ -46,18 +72,22 @@ export interface ClassifyInput {
    * to the model as the channel's definition so its judgement matches the heuristic's. Optional so the
    * classifier still works standalone (e.g. tests) without one. */
   profile?: ChannelProfile;
-  /** Explicit key, for a caller whose key doesn't live in this process's env (e.g. the hosted
-   * server, which stores each account's key in the database instead) — falls back to
-   * process.env.GEMINI_API_KEY when omitted, unchanged from before for the desktop app. */
-  apiKey?: string;
+  config: ProviderConfig;
 }
 
-export function isAiConfigured(apiKey?: string): boolean {
-  return !!(apiKey ?? process.env.GEMINI_API_KEY)?.trim();
+function ollamaBaseUrl(baseUrl?: string): string {
+  return (baseUrl?.trim() || process.env.OLLAMA_BASE_URL?.trim() || OLLAMA_DEFAULT_BASE_URL).replace(/\/+$/, '');
 }
 
-/** Validate a candidate key with one tiny request, so the in-app key modal can give real feedback
- * instead of silently falling back. Returns a friendly, status-specific error on failure. */
+export function isAiConfigured(config: ProviderConfig | null | undefined): boolean {
+  if (!config) return false;
+  if (config.provider === 'gemini') return !!(config.apiKey ?? process.env.GEMINI_API_KEY)?.trim();
+  if (config.provider === 'groq') return !!(config.apiKey ?? process.env.GROQ_API_KEY)?.trim();
+  return !!config.ollamaModel?.trim();
+}
+
+/** Validate a candidate Gemini key with one tiny request, so the in-app key modal can give real
+ * feedback instead of silently falling back. Returns a friendly, status-specific error on failure. */
 export async function pingModel(key: string): Promise<{ ok: boolean; error?: string }> {
   const trimmed = key.trim();
   if (!trimmed) return { ok: false, error: 'Please paste your Gemini API key.' };
@@ -87,6 +117,68 @@ export async function pingModel(key: string): Promise<{ ok: boolean; error?: str
     return { ok: false, error: `Gemini returned an error (HTTP ${res.status}). Try again in a moment.` };
   } catch {
     return { ok: false, error: 'Couldn’t reach Gemini. Check your internet connection and try again.' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Validate a candidate Groq key with one tiny request — mirrors pingModel above. */
+export async function pingGroq(key: string): Promise<{ ok: boolean; error?: string }> {
+  const trimmed = key.trim();
+  if (!trimmed) return { ok: false, error: 'Please paste your Groq API key.' };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(GROQ_ENDPOINT, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${trimmed}` },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [{ role: 'user', content: 'Reply with JSON {"ok":true}' }],
+        response_format: { type: 'json_object' },
+        temperature: 0,
+      }),
+    });
+    if (res.ok) return { ok: true };
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, error: 'That key was rejected. Double-check you copied the whole key.' };
+    }
+    if (res.status === 429) {
+      return {
+        ok: false,
+        error: 'That key is over its quota. Check your limits at console.groq.com, then try again.',
+      };
+    }
+    return { ok: false, error: `Groq returned an error (HTTP ${res.status}). Try again in a moment.` };
+  } catch {
+    return { ok: false, error: 'Couldn’t reach Groq. Check your internet connection and try again.' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Check that Ollama is reachable AND the named model is actually pulled — two distinct, common
+ * failure modes that deserve two distinct, friendly errors rather than one generic one. Desktop-only
+ * (the web build never offers Ollama, so never calls this), but lives here alongside the others since
+ * it's just another `fetch`. */
+export async function pingOllama(model: string, baseUrl?: string): Promise<{ ok: boolean; error?: string }> {
+  const trimmed = model.trim();
+  if (!trimmed) return { ok: false, error: 'Enter the name of a model you’ve pulled with Ollama.' };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${ollamaBaseUrl(baseUrl)}/api/tags`, { signal: controller.signal });
+    if (!res.ok) return { ok: false, error: `Ollama returned an error (HTTP ${res.status}).` };
+    const data = (await res.json()) as { models?: { name?: string }[] };
+    const names = (data.models ?? []).map((m) => m.name);
+    if (names.includes(trimmed)) return { ok: true };
+    return {
+      ok: false,
+      error: `Ollama is running, but "${trimmed}" isn’t pulled yet. Run "ollama pull ${trimmed}" and try again.`,
+    };
+  } catch {
+    return { ok: false, error: 'Couldn’t reach Ollama. Make sure "ollama serve" is running on this Mac.' };
   } finally {
     clearTimeout(timer);
   }
@@ -123,9 +215,7 @@ function buildPrompt(input: ClassifyInput): { system: string; user: string } {
   return { system, user };
 }
 
-/** The only provider-specific code. Returns the raw JSON text the model produced, or null on any
- * failure (no key, network error, non-200 incl. 429 rate-limit, timeout). Never throws. */
-async function callModel(system: string, user: string, apiKey?: string): Promise<string | null> {
+async function callGeminiModel(system: string, user: string, apiKey?: string): Promise<string | null> {
   const key = (apiKey ?? process.env.GEMINI_API_KEY)?.trim();
   if (!key) return null;
   const controller = new AbortController();
@@ -153,6 +243,75 @@ async function callModel(system: string, user: string, apiKey?: string): Promise
   }
 }
 
+async function callGroqModel(system: string, user: string, apiKey?: string): Promise<string | null> {
+  const key = (apiKey ?? process.env.GROQ_API_KEY)?.trim();
+  if (!key) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(GROQ_ENDPOINT, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    return data.choices?.[0]?.message?.content ?? null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function callOllamaModel(system: string, user: string, model?: string, baseUrl?: string): Promise<string | null> {
+  const resolvedModel = model?.trim() || OLLAMA_DEFAULT_MODEL;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${ollamaBaseUrl(baseUrl)}/api/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: resolvedModel,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        format: 'json',
+        stream: false, // /api/chat streams newline-delimited JSON by default; we want one full response
+        keep_alive: OLLAMA_KEEP_ALIVE,
+        options: { temperature: 0 },
+      }),
+    });
+    if (!res.ok) return null; // server not running, model not pulled, etc.
+    const data = (await res.json()) as { message?: { content?: string } };
+    return data.message?.content ?? null;
+  } catch {
+    return null; // network/abort/timeout
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** The only provider-specific code. Returns the raw JSON text the model produced, or null on any
+ * failure (no key/model, network error, non-200 incl. 429 rate-limit, timeout). Never throws. */
+async function callModel(system: string, user: string, config: ProviderConfig): Promise<string | null> {
+  if (config.provider === 'gemini') return callGeminiModel(system, user, config.apiKey);
+  if (config.provider === 'groq') return callGroqModel(system, user, config.apiKey);
+  return callOllamaModel(system, user, config.ollamaModel, config.ollamaBaseUrl);
+}
+
 /** Classify one batch. Returns the set of ids the model judged clearly OFF-topic (to drop), or null
  * if the model was unavailable/failed — in which case the caller keeps the batch (heuristic result)
  * and leaves it unclassified to retry next cycle. Only ids from the input are honored, so a
@@ -161,7 +320,7 @@ export async function classifyOffTopic(input: ClassifyInput): Promise<Set<string
   if (input.items.length === 0) return new Set();
   if (input.items.length > MAX_BATCH) input = { ...input, items: input.items.slice(0, MAX_BATCH) };
   const { system, user } = buildPrompt(input);
-  const raw = await callModel(system, user, input.apiKey);
+  const raw = await callModel(system, user, input.config);
   if (raw == null) return null;
   try {
     const parsed = JSON.parse(raw) as { remove?: unknown };

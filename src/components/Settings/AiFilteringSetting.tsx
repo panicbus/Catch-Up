@@ -1,51 +1,56 @@
 import { useState } from 'react';
 import { useAiConfig } from '../../hooks/useAiConfig';
 import { ApiKeyModal } from './ApiKeyModal';
+import { OllamaModal } from './OllamaModal';
+import type { AiProvider } from '../../../ipc-contract';
 import './AiFilteringSetting.css';
 
-/** The AI relevance-filtering toggle. Turning it on without a key configured opens a modal that
- * walks the user through minting a free Gemini key; once saved, filtering turns on automatically.
- * With a key already configured, the toggle just flips on/off. */
+// Ollama only works from the desktop app — the hosted website has no way to reach a model running
+// on the founder's own Mac (see main/providers/classifier.ts's file comment). Same detection as
+// main.tsx's isWeb check, inverted.
+const isDesktop = typeof window !== 'undefined' && !!window.api;
+
+const PROVIDER_LABELS: Record<AiProvider, string> = {
+  gemini: 'Google Gemini',
+  groq: 'Groq',
+  ollama: 'Ollama',
+};
+
+/** The AI relevance-filtering provider picker: off, or one of Gemini / Groq / Ollama (desktop-only).
+ * Picking a cloud provider without a key configured opens a key-collecting modal; picking Ollama
+ * always opens its model/connection modal, since there's no key, just a model name to confirm. */
 export function AiFilteringSetting() {
-  const { config, setEnabled, saveKey } = useAiConfig();
-  const [modalOpen, setModalOpen] = useState(false);
+  const { config, setProvider, saveGeminiKey, saveGroqKey, setOllamaModel, pingOllama } = useAiConfig();
+  const [openModal, setOpenModal] = useState<AiProvider | null>(null);
 
-  const on = config.enabled && config.keyConfigured;
+  const on = config.provider != null;
 
-  const handleToggle = () => {
-    if (on) {
-      setEnabled(false);
+  const choose = (provider: AiProvider | null) => {
+    if (provider === null) {
+      setProvider(null);
       return;
     }
-    // Turning on: need a key first.
-    if (config.keyConfigured) setEnabled(true);
-    else setModalOpen(true);
+    if (provider === 'gemini' && config.geminiKeyConfigured) {
+      setProvider('gemini');
+      return;
+    }
+    if (provider === 'groq' && config.groqKeyConfigured) {
+      setProvider('groq');
+      return;
+    }
+    // No key yet (or Ollama, which always needs its model/connection confirmed) — open the modal.
+    setOpenModal(provider);
   };
 
   return (
     <div className="ai-filtering">
       <div className="ai-filtering__row">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={on}
-          aria-label="AI relevance filtering"
-          className={`ai-filtering__switch ${on ? 'ai-filtering__switch--on' : ''}`}
-          onClick={handleToggle}
-        >
-          <span className="ai-filtering__knob" />
-        </button>
-        <div className="ai-filtering__label">
-          <span className="ai-filtering__label-title">
-            AI relevance filtering
-            <span className={`ai-filtering__badge ${on ? 'ai-filtering__badge--on' : ''}`}>
-              {on ? 'On' : 'Off'}
-            </span>
+        <span className="ai-filtering__label-title">
+          AI relevance filtering
+          <span className={`ai-filtering__badge ${on ? 'ai-filtering__badge--on' : ''}`}>
+            {on ? PROVIDER_LABELS[config.provider as AiProvider] : 'Off'}
           </span>
-          <span className="ai-filtering__label-sub">
-            {on ? 'Powered by Google Gemini' : 'Uses a free Google Gemini key'}
-          </span>
-        </div>
+        </span>
       </div>
 
       <p className="ai-filtering__hint">
@@ -53,17 +58,83 @@ export function AiFilteringSetting() {
         and filters those that aren’t.
       </p>
 
-      {config.keyConfigured && (
-        <button type="button" className="ai-filtering__replace" onClick={() => setModalOpen(true)}>
+      <div className="ai-filtering__options">
+        <button
+          type="button"
+          className={`ai-filtering__option ${config.provider === null ? 'ai-filtering__option--active' : ''}`}
+          onClick={() => choose(null)}
+        >
+          Off
+        </button>
+        <button
+          type="button"
+          className={`ai-filtering__option ${config.provider === 'gemini' ? 'ai-filtering__option--active' : ''}`}
+          onClick={() => choose('gemini')}
+        >
+          Gemini
+        </button>
+        <button
+          type="button"
+          className={`ai-filtering__option ${config.provider === 'groq' ? 'ai-filtering__option--active' : ''}`}
+          onClick={() => choose('groq')}
+        >
+          Groq
+        </button>
+        {isDesktop && (
+          <button
+            type="button"
+            className={`ai-filtering__option ${config.provider === 'ollama' ? 'ai-filtering__option--active' : ''}`}
+            onClick={() => choose('ollama')}
+          >
+            Ollama (local)
+          </button>
+        )}
+      </div>
+
+      {config.provider === 'gemini' && (
+        <button type="button" className="ai-filtering__replace" onClick={() => setOpenModal('gemini')}>
           Replace API key
         </button>
       )}
+      {config.provider === 'groq' && (
+        <button type="button" className="ai-filtering__replace" onClick={() => setOpenModal('groq')}>
+          Replace API key
+        </button>
+      )}
+      {config.provider === 'ollama' && isDesktop && (
+        <button type="button" className="ai-filtering__replace" onClick={() => setOpenModal('ollama')}>
+          Change model
+        </button>
+      )}
 
-      {modalOpen && (
+      {openModal === 'gemini' && (
         <ApiKeyModal
-          onSave={saveKey}
-          onClose={() => setModalOpen(false)}
-          onSaved={() => setModalOpen(false)}
+          providerName="Gemini"
+          lead="AI filtering reads each incoming story and drops the ones that aren’t really about your channel. Gemini has a free tier."
+          keyUrl="https://aistudio.google.com/api-keys"
+          keyUrlLabel="aistudio.google.com/api-keys"
+          onSave={saveGeminiKey}
+          onClose={() => setOpenModal(null)}
+          onSaved={() => setOpenModal(null)}
+        />
+      )}
+      {openModal === 'groq' && (
+        <ApiKeyModal
+          providerName="Groq"
+          lead="AI filtering reads each incoming story and drops the ones that aren’t really about your channel. Groq has a free tier and serves fast open-source models."
+          keyUrl="https://console.groq.com/keys"
+          keyUrlLabel="console.groq.com/keys"
+          onSave={saveGroqKey}
+          onClose={() => setOpenModal(null)}
+          onSaved={() => setOpenModal(null)}
+        />
+      )}
+      {openModal === 'ollama' && isDesktop && (
+        <OllamaModal
+          currentModel={config.ollamaModel}
+          onTest={pingOllama}
+          onSave={setOllamaModel}
+          onClose={() => setOpenModal(null)}
         />
       )}
     </div>

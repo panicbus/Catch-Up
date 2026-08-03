@@ -58,7 +58,7 @@ function fakeDataStore(channel: Channel, homeLocation: AppSettings['homeLocation
       maxStoriesShown: 25,
       homeLocation,
     }),
-    getAiEnabled: () => false,
+    getAiProvider: () => null,
   } as unknown as DataStore;
 }
 

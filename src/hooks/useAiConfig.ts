@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../services/api';
-import type { AiConfig } from '../../ipc-contract';
+import type { AiConfig, AiProvider } from '../../ipc-contract';
 
-/** AI relevance-filtering config for the Settings toggle + key modal. The API key never crosses into
- * the renderer — this only knows whether AI is enabled and whether a key is configured. */
+const DEFAULT_CONFIG: AiConfig = {
+  provider: null,
+  geminiKeyConfigured: false,
+  groqKeyConfigured: false,
+  ollamaModel: '',
+};
+
+/** AI relevance-filtering config for the Settings provider picker + key/model modals. Keys never
+ * cross into the renderer — this only knows the active provider and whether each key is configured. */
 export function useAiConfig() {
-  const [config, setConfig] = useState<AiConfig>({ enabled: false, keyConfigured: false });
+  const [config, setConfig] = useState<AiConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(() => {
@@ -17,19 +24,31 @@ export function useAiConfig() {
 
   useEffect(() => {
     reload();
-    // saveGeminiApiKey / setAiFilteringEnabled broadcast a 'settings' change.
+    // saveGeminiApiKey / saveGroqApiKey / setAiProvider / setOllamaModel all broadcast 'settings'.
     return api.onDataChanged((event) => {
       if (event.type === 'settings') reload();
     });
   }, [reload]);
 
-  const setEnabled = useCallback((enabled: boolean) => {
-    setConfig((prev) => ({ ...prev, enabled })); // optimistic
-    void api.setAiFilteringEnabled(enabled);
+  const setProvider = useCallback((provider: AiProvider | null) => {
+    setConfig((prev) => ({ ...prev, provider })); // optimistic
+    void api.setAiProvider(provider);
   }, []);
 
-  /** Validate + store a key (main turns AI on when it succeeds). Returns the result for the modal. */
-  const saveKey = useCallback((key: string) => api.saveGeminiApiKey(key), []);
+  /** Validate + store a Gemini key (switches to Gemini when it succeeds). Result is for the modal. */
+  const saveGeminiKey = useCallback((key: string) => api.saveGeminiApiKey(key), []);
 
-  return { config, loading, setEnabled, saveKey };
+  /** Validate + store a Groq key (switches to Groq when it succeeds). Result is for the modal. */
+  const saveGroqKey = useCallback((key: string) => api.saveGroqApiKey(key), []);
+
+  /** Save the Ollama model name and switch to Ollama. Desktop-only. */
+  const setOllamaModel = useCallback((model: string) => {
+    setConfig((prev) => ({ ...prev, provider: 'ollama', ollamaModel: model })); // optimistic
+    void api.setOllamaModel(model);
+  }, []);
+
+  /** Check Ollama is reachable and the model is pulled, without saving anything. Desktop-only. */
+  const pingOllama = useCallback((model: string) => api.pingOllama(model), []);
+
+  return { config, loading, setProvider, saveGeminiKey, saveGroqKey, setOllamaModel, pingOllama };
 }

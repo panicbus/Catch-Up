@@ -94,11 +94,20 @@ export interface AppSettings {
   homeLocation: { query: string; label: string; lat: number; lon: number } | null;
 }
 
+/** Ollama is desktop-only (the hosted server can't reach a model on the founder's own Mac) — the web
+ * build never offers it, but the type isn't split in two since the web CatchUpApi implementation
+ * still needs to type the shared surface. */
+export type AiProvider = 'gemini' | 'groq' | 'ollama';
+
 export interface AiConfig {
-  /** Whether AI relevance filtering is turned on. */
-  enabled: boolean;
+  /** null = AI filtering is off. */
+  provider: AiProvider | null;
   /** Whether a Gemini API key is stored (the key itself is never sent to the renderer). */
-  keyConfigured: boolean;
+  geminiKeyConfigured: boolean;
+  /** Whether a Groq API key is stored. */
+  groqKeyConfigured: boolean;
+  /** The configured Ollama model name — meaningful on desktop only. */
+  ollamaModel: string;
 }
 
 export interface SaveKeyResult {
@@ -203,12 +212,22 @@ export interface CatchUpApi {
    * no match is found. */
   resolveHomeLocation: (query: string) => Promise<{ label: string; lat: number; lon: number } | null>;
 
-  // AI relevance filtering. The key itself never crosses to the renderer — getAiConfig reports only
+  // AI relevance filtering. Keys themselves never cross to the renderer — getAiConfig reports only
   // whether one is configured.
   getAiConfig: () => Promise<AiConfig>;
-  setAiFilteringEnabled: (enabled: boolean) => Promise<void>;
-  /** Validate a key (one tiny Gemini call), and on success store it and turn AI filtering on. */
+  /** Switch the active provider (or turn filtering off with null). Does not itself validate — that
+   * only matters for Gemini/Groq, whose key-saving calls already validate before turning things on. */
+  setAiProvider: (provider: AiProvider | null) => Promise<void>;
+  /** Validate a key (one tiny Gemini call), and on success store it and switch to Gemini. */
   saveGeminiApiKey: (key: string) => Promise<SaveKeyResult>;
+  /** Validate a key (one tiny Groq call), and on success store it and switch to Groq. */
+  saveGroqApiKey: (key: string) => Promise<SaveKeyResult>;
+  /** Store the Ollama model name and switch to Ollama. No live validation here (see pingOllama) —
+   * this just saves the setting, matching the "plain editable field" design (not a model-list picker). */
+  setOllamaModel: (model: string) => Promise<void>;
+  /** Desktop-only: check Ollama is reachable and the named model is actually pulled. The web build
+   * never renders anything that calls this (Ollama is never offered there), but the type is shared. */
+  pingOllama: (model: string) => Promise<SaveKeyResult>;
 
   // Change-notification push (main -> renderer). Implemented directly on ipcRenderer in preload,
   // not a request/response invoke.

@@ -137,8 +137,11 @@ model Settings {
   rollTheDiceChannelIds  String[]  @map("roll_the_dice_channel_ids")
   maxStoriesShown        Int       @default(25) @map("max_stories_shown")
   homeLocation           Json?     @map("home_location") // {query,label,lat,lon} or null, same shape as AppSettings today
-  aiEnabled              Boolean   @default(false) @map("ai_enabled")
-  aiApiKey               String?   @map("ai_api_key") // never sent to the frontend; same guarantee as dataStore.ts today
+  aiEnabled              Boolean   @default(false) @map("ai_enabled") // legacy pre-provider-choice flag; see aiProvider
+  aiApiKey               String?   @map("ai_api_key") // Gemini key; never sent to the frontend; same guarantee as dataStore.ts today
+  aiProvider             String?   @map("ai_provider") // 'gemini' | 'groq' | 'ollama' | null (off); null on rows saved before providers existed — getAiProvider() falls back to aiEnabled+aiApiKey for those
+  groqApiKey             String?   @map("groq_api_key") // never sent to the frontend, same guarantee as aiApiKey
+  ollamaModel            String    @default("qwen2.5:7b") @map("ollama_model") // desktop-meaningful only
   onboardingCompleted    Boolean   @default(false) @map("onboarding_completed")
   onboardingCompletedAt  DateTime? @map("onboarding_completed_at")
 

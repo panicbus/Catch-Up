@@ -4,6 +4,13 @@ import { Button } from '../common/Button';
 import './ApiKeyModal.css';
 
 interface ApiKeyModalProps {
+  /** e.g. "Gemini" or "Groq" — used in the title, placeholder and note. */
+  providerName: string;
+  /** Sentence explaining what AI filtering does and why this provider (its free tier, etc). */
+  lead: string;
+  /** Where to mint a free key. */
+  keyUrl: string;
+  keyUrlLabel: string;
   /** Validates + stores the key; resolves ok:false with a message when the key is rejected. */
   onSave: (key: string) => Promise<{ ok: boolean; error?: string }>;
   onClose: () => void;
@@ -11,10 +18,10 @@ interface ApiKeyModalProps {
   onSaved: () => void;
 }
 
-/** Collects a Gemini API key when the user turns on AI filtering without one configured. Links out
- * to Google AI Studio so they can mint their own free key. The key is validated (one tiny live call)
- * before it's stored, so a bad or quota-limited key is caught here rather than silently ignored. */
-export function ApiKeyModal({ onSave, onClose, onSaved }: ApiKeyModalProps) {
+/** Collects an API key for whichever cloud provider (Gemini or Groq) the user just picked, when one
+ * isn't already configured. The key is validated (one tiny live call) before it's stored, so a bad or
+ * quota-limited key is caught here rather than silently ignored. */
+export function ApiKeyModal({ providerName, lead, keyUrl, keyUrlLabel, onSave, onClose, onSaved }: ApiKeyModalProps) {
   const [key, setKey] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -34,27 +41,24 @@ export function ApiKeyModal({ onSave, onClose, onSaved }: ApiKeyModalProps) {
   };
 
   return (
-    <Modal title="Turn on AI filtering" onClose={onClose} contentClassName="api-key-modal">
+    <Modal title={`Use ${providerName} for AI filtering`} onClose={onClose} contentClassName="api-key-modal">
       <div className="modal__body">
-        <p className="api-key-modal__lead">
-          AI filtering reads each incoming story and drops the ones that aren’t really about your
-          channel. It runs on Google Gemini, which has a free tier.
-        </p>
+        <p className="api-key-modal__lead">{lead}</p>
         <ol className="api-key-modal__steps">
           <li>
             Open{' '}
-            <a href="https://aistudio.google.com/api-keys" target="_blank" rel="noreferrer">
-              aistudio.google.com/api-keys
+            <a href={keyUrl} target="_blank" rel="noreferrer">
+              {keyUrlLabel}
             </a>{' '}
-            and sign in with a Google account.
+            and sign in.
           </li>
-          <li>Click <strong>Create API key</strong> and copy it.</li>
+          <li>Create an API key and copy it.</li>
           <li>Paste it below.</li>
         </ol>
         <input
           className="api-key-modal__input"
           type="password"
-          placeholder="Paste your Gemini API key"
+          placeholder={`Paste your ${providerName} API key`}
           value={key}
           onChange={(e) => setKey(e.target.value)}
           onKeyDown={(e) => {

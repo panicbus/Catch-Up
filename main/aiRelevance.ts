@@ -1,6 +1,7 @@
 import { articleId } from './providers/dedupe';
 import { filterByRelevance } from './providers/relevance';
 import { classifyOffTopic, isAiConfigured, MAX_BATCH } from './providers/classifier';
+import type { ProviderConfig } from './providers/classifier';
 import type { ClassificationStoreLike } from './classificationStore';
 import type { ChannelProfile } from './providers/channelProfiles';
 import type { FetchedArticle } from './providers/types';
@@ -24,15 +25,14 @@ export async function filterRelevant(
   subchannelName: string | null,
   profile: ChannelProfile,
   store: ClassificationStoreLike,
-  aiEnabled: boolean,
+  config: ProviderConfig | null,
   homeLocation: { lat: number; lon: number } | null,
-  apiKey?: string,
 ): Promise<FetchedArticle[]> {
   // Stage 1 — free heuristic (the soft additive gate, using the channel's profile). Locality is a
   // heuristic-only signal (see relevance.ts) — deliberately not surfaced to the AI classifier below.
   const heuristic = filterByRelevance(fetched, { topic, channelName, subchannelName, profile, homeLocation });
-  // Stage 2 requires the user to have turned AI filtering on AND a key to be configured.
-  if (!aiEnabled || !isAiConfigured(apiKey) || heuristic.length === 0) return heuristic;
+  // Stage 2 requires a provider to be picked AND configured (key/model present).
+  if (!config || !isAiConfigured(config) || heuristic.length === 0) return heuristic;
 
   // Verdicts are cached per (channel, article), not per article alone: relevance is channel-specific
   // and the same URL legitimately lands in several channels, so a "keep" for one channel must not
@@ -57,8 +57,10 @@ export async function filterRelevant(
 
   // Budget-limit the total for the day, then classify in chunks no larger than MAX_BATCH (so nothing
   // is ever silently truncated). Anything over budget, or in a chunk the model couldn't classify, is
-  // kept as-is (heuristic result) and left unclassified to retry on a future cycle.
-  const budget = await store.remainingDailyBudget();
+  // kept as-is (heuristic result) and left unclassified to retry on a future cycle. The daily cap
+  // protects real external quotas (Gemini/Groq) — Ollama is the founder's own hardware, nothing to
+  // protect against, so it's exempt.
+  const budget = config.provider === 'ollama' ? Infinity : await store.remainingDailyBudget();
   const classifiable = budget > 0 ? toClassify.slice(0, budget) : [];
   for (const e of toClassify.slice(classifiable.length)) kept.push(e.article); // over cap → keep
 
@@ -69,7 +71,7 @@ export async function filterRelevant(
       channelName,
       subchannelName,
       profile,
-      apiKey,
+      config,
     });
     if (offTopic == null) {
       // Model unavailable/failed for this chunk — keep it, do NOT cache (so it retries next cycle).

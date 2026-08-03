@@ -12,7 +12,7 @@ import { Router, type Request, type Response } from 'express';
 import { resolveUser } from './auth';
 import { runChannel, runAll } from './refreshAgent';
 import { getProviderStatus } from '../main/providers/registry';
-import { pingModel } from '../main/providers/classifier';
+import { pingModel, pingGroq } from '../main/providers/classifier';
 import { resolveCity } from '../main/locality/gazetteer';
 import * as dataStore from './stores/dataStore';
 import * as articlesCache from './stores/articlesCache';
@@ -183,21 +183,45 @@ router.post('/settings/resolve-location', handle(async (_userId, req) => resolve
 router.get(
   '/ai-config',
   handle(async (userId) => {
-    const [enabled, hasKey] = await Promise.all([dataStore.getAiEnabled(userId), dataStore.hasGeminiApiKey(userId)]);
+    const [provider, hasGeminiKey, hasGroqKey, ollamaModel] = await Promise.all([
+      dataStore.getAiProvider(userId),
+      dataStore.hasGeminiApiKey(userId),
+      dataStore.hasGroqApiKey(userId),
+      dataStore.getOllamaModel(userId),
+    ]);
     // A key from the server's own env (dev/shared) counts as configured too, same as the desktop
     // app's "don't needlessly prompt the modal" behavior.
-    return { enabled, keyConfigured: hasKey || !!process.env.GEMINI_API_KEY?.trim() };
+    return {
+      provider,
+      geminiKeyConfigured: hasGeminiKey || !!process.env.GEMINI_API_KEY?.trim(),
+      groqKeyConfigured: hasGroqKey || !!process.env.GROQ_API_KEY?.trim(),
+      ollamaModel,
+    };
   })
 );
-router.post('/ai-config/enabled', handle((userId, req) => dataStore.setAiEnabled(userId, req.body.enabled)));
 router.post(
-  '/ai-config/key',
+  '/ai-config/provider',
+  handle((userId, req) => dataStore.setAiProvider(userId, req.body.provider))
+);
+router.post(
+  '/ai-config/gemini-key',
   handle(async (userId, req) => {
     const key: string = req.body.key;
     const result = await pingModel(key);
     if (!result.ok) return result;
     await dataStore.setGeminiApiKey(userId, key);
-    await dataStore.setAiEnabled(userId, true);
+    await dataStore.setAiProvider(userId, 'gemini');
+    return { ok: true };
+  })
+);
+router.post(
+  '/ai-config/groq-key',
+  handle(async (userId, req) => {
+    const key: string = req.body.key;
+    const result = await pingGroq(key);
+    if (!result.ok) return result;
+    await dataStore.setGroqApiKey(userId, key);
+    await dataStore.setAiProvider(userId, 'groq');
     return { ok: true };
   })
 );

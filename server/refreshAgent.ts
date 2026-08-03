@@ -9,9 +9,25 @@
 import { runProviders, getProviderStatus } from '../main/providers/registry';
 import { filterRelevant } from '../main/aiRelevance';
 import { channelProfile } from '../main/providers/channelProfiles';
+import type { ProviderConfig, AiProvider } from '../main/providers/classifier';
 import * as dataStore from './stores/dataStore';
 import * as articlesCache from './stores/articlesCache';
 import { ServerClassificationStore } from './stores/classificationStore';
+
+/** Build the classifier config from the persisted setting, or null (AI off) if none is picked.
+ * Ollama can be persisted here in principle (same Settings row shape as desktop) but is never
+ * actually reachable from the server — isAiConfigured() will report it unconfigured since
+ * `ollamaModel` is never populated server-side, and filterRelevant falls back to the heuristic. */
+function buildAiConfig(
+  provider: AiProvider | null,
+  geminiKey: string | null,
+  groqKey: string | null
+): ProviderConfig | null {
+  if (provider === 'gemini') return { provider, apiKey: geminiKey ?? undefined };
+  if (provider === 'groq') return { provider, apiKey: groqKey ?? undefined };
+  if (provider === 'ollama') return { provider };
+  return null;
+}
 
 const PROVIDER_PACING_MS = 300;
 const STAGGER_FACTOR = 3;
@@ -70,11 +86,13 @@ export async function runChannel(
   }
 
   const profile = channelProfile(channel.name);
-  const [settings, aiEnabled, geminiKey] = await Promise.all([
+  const [settings, provider, geminiKey, groqKey] = await Promise.all([
     dataStore.getSettings(userId),
-    dataStore.getAiEnabled(userId),
+    dataStore.getAiProvider(userId),
     dataStore.getGeminiApiKey(userId),
+    dataStore.getGroqApiKey(userId),
   ]);
+  const aiConfig = buildAiConfig(provider, geminiKey, groqKey);
   const homeLocation = settings.homeLocation;
   const classificationStore = new ServerClassificationStore(userId);
 
@@ -112,9 +130,8 @@ export async function runChannel(
         target.subchannelName,
         profile,
         classificationStore,
-        aiEnabled,
-        homeLocation,
-        geminiKey ?? undefined
+        aiConfig,
+        homeLocation
       );
       added += await articlesCache.merge(userId, channelId, target.subchannelId, relevant);
     } catch (e) {

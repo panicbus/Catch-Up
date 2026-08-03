@@ -4,8 +4,8 @@ import type { ArticlesCache } from './articlesCache';
 import type { ClassificationStore } from './classificationStore';
 import { runAll, runChannel, type RefreshDeps } from './refreshAgent';
 import { getProviderStatus } from './providers/registry';
-import { pingModel } from './providers/classifier';
-import type { Article, ArticleListParams, DataChangeEvent } from '../ipc-contract';
+import { pingModel, pingGroq, pingOllama } from './providers/classifier';
+import type { Article, ArticleListParams, AiProvider, DataChangeEvent } from '../ipc-contract';
 import type { CachedArticle } from './articlesCache';
 import { resolveCity } from './locality/gazetteer';
 
@@ -145,22 +145,39 @@ export function registerIpcHandlers({ dataStore, articlesCache, classificationSt
   ipcMain.handle('resolveHomeLocation', (_e, query: string) => resolveCity(query));
 
   ipcMain.handle('getAiConfig', () => ({
-    enabled: dataStore.getAiEnabled(),
+    provider: dataStore.getAiProvider(),
     // A key from .env (dev) counts as configured too, so it won't needlessly prompt the modal.
-    keyConfigured: dataStore.hasGeminiApiKey() || !!process.env.GEMINI_API_KEY?.trim(),
+    geminiKeyConfigured: dataStore.hasGeminiApiKey() || !!process.env.GEMINI_API_KEY?.trim(),
+    groqKeyConfigured: dataStore.hasGroqApiKey() || !!process.env.GROQ_API_KEY?.trim(),
+    ollamaModel: dataStore.getOllamaModel(),
   }));
-  ipcMain.handle('setAiFilteringEnabled', (_e, enabled: boolean) => {
-    dataStore.setAiEnabled(enabled);
+  ipcMain.handle('setAiProvider', (_e, provider: AiProvider | null) => {
+    dataStore.setAiProvider(provider);
     broadcast({ type: 'settings' });
   });
   ipcMain.handle('saveGeminiApiKey', async (_e, key: string) => {
     const result = await pingModel(key);
     if (!result.ok) return result;
-    // Valid — persist it, apply to the running process so it works without a restart, and turn AI on.
+    // Valid — persist it, apply to the running process so it works without a restart, and switch to it.
     dataStore.setGeminiApiKey(key);
-    dataStore.setAiEnabled(true);
+    dataStore.setAiProvider('gemini');
     process.env.GEMINI_API_KEY = key.trim();
     broadcast({ type: 'settings' });
     return { ok: true };
   });
+  ipcMain.handle('saveGroqApiKey', async (_e, key: string) => {
+    const result = await pingGroq(key);
+    if (!result.ok) return result;
+    dataStore.setGroqApiKey(key);
+    dataStore.setAiProvider('groq');
+    process.env.GROQ_API_KEY = key.trim();
+    broadcast({ type: 'settings' });
+    return { ok: true };
+  });
+  ipcMain.handle('setOllamaModel', (_e, model: string) => {
+    dataStore.setOllamaModel(model);
+    dataStore.setAiProvider('ollama');
+    broadcast({ type: 'settings' });
+  });
+  ipcMain.handle('pingOllama', (_e, model: string) => pingOllama(model));
 }
