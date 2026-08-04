@@ -115,6 +115,7 @@ function GridSection({
   animateReflow = isGrid,
   onArchiveReadInPlace,
   onLocalExit,
+  onSwipeDismissed,
 }: {
   articles: NewsCardData[];
   isGrid: boolean;
@@ -136,6 +137,8 @@ function GridSection({
   /** See NewsCard's onLocalExit — passed straight through so the main (unread) section can drop a
    * dismissed card from the render set the instant its exit fires, without waiting on a reload. */
   onLocalExit?: (articleId: string) => void;
+  /** See NewsCard's onSwipeDismissed — passed straight through so NewsFeed can show its toast. */
+  onSwipeDismissed?: () => void;
 }) {
   const containerClass = isGrid ? 'news-feed__grid' : 'news-feed__list';
 
@@ -159,6 +162,7 @@ function GridSection({
             dimmed={dimmed}
             onArchiveReadInPlace={onArchiveReadInPlace}
             onLocalExit={onLocalExit}
+            onSwipeDismissed={onSwipeDismissed}
             onToggleExpand={() => onToggleExpand(article.id)}
           />
         );
@@ -178,6 +182,7 @@ function DayGroups({
   dimReadCards,
   onArchiveReadInPlace,
   onLocalExit,
+  onSwipeDismissed,
 }: {
   articles: NewsCardData[];
   viewMode: ViewMode;
@@ -189,6 +194,7 @@ function DayGroups({
   dimReadCards?: boolean;
   onArchiveReadInPlace?: (articleId: string) => void;
   onLocalExit?: (articleId: string) => void;
+  onSwipeDismissed?: () => void;
 }) {
   const byDay = groupByDay(articles, 'publishedAt');
 
@@ -208,6 +214,7 @@ function DayGroups({
             dimReadCards={dimReadCards}
             onArchiveReadInPlace={onArchiveReadInPlace}
             onLocalExit={onLocalExit}
+            onSwipeDismissed={onSwipeDismissed}
           />
         </section>
       ))}
@@ -306,6 +313,11 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // long that round trip takes. Never needs clearing: once the real data reloads without them,
   // membership here just stops mattering.
   const [locallyExited, setLocallyExited] = useState<Set<string>>(() => new Set());
+  // Brief confirmation for a swipe-dismissed card — swiping leaves nothing else on screen to say
+  // anything happened once the card itself has flown off, unlike the checkmark button (which has
+  // its own click flourish right before the card leaves).
+  const [swipeToast, setSwipeToast] = useState(false);
+  const swipeToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevUnreadCountRef = useRef<number | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
 
@@ -316,6 +328,18 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
       next.add(articleId);
       return next;
     });
+  }, []);
+
+  const onSwipeDismissed = useCallback(() => {
+    if (swipeToastTimerRef.current) clearTimeout(swipeToastTimerRef.current);
+    setSwipeToast(true);
+    swipeToastTimerRef.current = setTimeout(() => setSwipeToast(false), 1800);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (swipeToastTimerRef.current) clearTimeout(swipeToastTimerRef.current);
+    };
   }, []);
 
   const byId = useMemo(() => new Map(articles.map((a) => [a.id, a])), [articles]);
@@ -506,6 +530,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
             dimReadCards={showReadDimmed}
             onArchiveReadInPlace={catchUpMode && !showReadDimmed ? archiveReadInPlace : undefined}
             onLocalExit={onLocalExit}
+            onSwipeDismissed={onSwipeDismissed}
           />
         </>
       )}
@@ -519,6 +544,8 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
           onToggleExpand={toggleExpand}
         />
       )}
+
+      {swipeToast && <div className="news-feed__toast" role="status">Story archived.</div>}
     </div>
   );
 });

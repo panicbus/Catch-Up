@@ -31,3 +31,30 @@
 .bookmarks-page__sticky .bookmarks-tabs {
   margin-bottom: 0;
 }
+
+@media (max-width: 767px) {
+  .bookmarks-page {
+    padding: 8px 16px 24px;
+  }
+  .bookmarks-page__sticky {
+    margin: 0 -16px 8px;
+    padding: 0 16px;
+  }
+  .bookmarks-page__back {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    margin-right: 4px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+  .bookmarks-page__title {
+    font-size: 22px;
+  }
+}

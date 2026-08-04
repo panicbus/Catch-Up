@@ -22,12 +22,20 @@ export function BottomNav() {
         <span>The Pool</span>
       </NavLink>
       <NavLink to="/bookmarks" className={navClass}>
-        <BookmarkIcon />
-        <span>Bookmarks</span>
+        {({ isActive }) => (
+          <>
+            <BookmarkIcon filled={isActive} />
+            <span>Bookmarks</span>
+          </>
+        )}
       </NavLink>
       <NavLink to="/settings" className={navClass}>
-        <SettingsIcon />
-        <span>Settings</span>
+        {({ isActive }) => (
+          <>
+            <SettingsIcon filled={isActive} />
+            <span>Settings</span>
+          </>
+        )}
       </NavLink>
     </nav>
   );

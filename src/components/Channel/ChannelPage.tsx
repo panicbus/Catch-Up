@@ -5,7 +5,7 @@ import { useChannelArticles } from '../../hooks/useChannelArticles';
 import { useSettings } from '../../hooks/useSettings';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { SubchannelBar } from './SubchannelBar';
-import { SubchannelPicker } from './SubchannelPicker';
+import { SubchannelPickerTrigger, SubchannelPickerPanel } from './SubchannelPicker';
 import { SubchannelManagePanel } from '../common/SubchannelManagePanel';
 import { ViewModeToggle } from './ViewModeToggle';
 import { NewsFeed, type NewsFeedHandle } from './NewsFeed';
@@ -87,6 +87,7 @@ export function ChannelPage() {
   // since switched to.
   const channelIdRef = useRef(channelId);
   const [managingSubchannels, setManagingSubchannels] = useState(false);
+  const [subchannelPickerOpen, setSubchannelPickerOpen] = useState(false);
   const [titleScrolledOut, setTitleScrolledOut] = useState(false);
   const [readInPlaceCount, setReadInPlaceCount] = useState(0);
   const feedRef = useRef<NewsFeedHandle>(null);
@@ -267,6 +268,10 @@ export function ChannelPage() {
           </button>
           <h1 className="channel-page__title channel-page__title--mobile" ref={setTitleNode}>
             {channel.name}
+            {/* Which subchannel you're actually looking at otherwise had no on-screen indication
+                once the picker itself closed back up — the list below looks identical to "All"
+                until you scroll back up to the (closed) trigger to check. */}
+            {activeSubchannel && <span className="channel-page__title-sub"> · {activeSubchannel.name}</span>}
           </h1>
           <div className="channel-page__header-actions">
             <button
@@ -329,16 +334,15 @@ export function ChannelPage() {
               totalUnread={totalUnread}
             />
             {/* Desktop's pill row (SubchannelBar's chips, hidden on mobile — see its CSS) uses
-                flex-wrap, which stacks badly at phone width. This dropdown is the mobile stand-in,
-                sharing the exact same counts/selection state; SubchannelBar's manage toggle (the
-                "+Add subchannels" / "Manage subchannels" pill) stays visible on both. */}
+                flex-wrap, which stacks badly at phone width. This trigger + the full-width panel
+                below are the mobile stand-in, sharing the exact same counts/selection state;
+                SubchannelBar's manage toggle (the "+Add subchannels" / "Manage subchannels" pill)
+                stays visible on both. */}
             {isMobile && (
-              <SubchannelPicker
+              <SubchannelPickerTrigger
                 subchannels={channel.subchannels}
-                activeId={subchannelId}
-                onSelect={setSubchannelId}
-                counts={subchannelCounts}
-                totalUnread={totalUnread}
+                open={subchannelPickerOpen}
+                onToggle={() => setSubchannelPickerOpen((v) => !v)}
                 onManageClick={() => setManagingSubchannels((v) => !v)}
               />
             )}
@@ -362,6 +366,19 @@ export function ChannelPage() {
             )}
           </div>
         </div>
+
+        {isMobile && (
+          <SubchannelPickerPanel
+            subchannels={channel.subchannels}
+            open={subchannelPickerOpen}
+            activeId={subchannelId}
+            onSelect={setSubchannelId}
+            onClose={() => setSubchannelPickerOpen(false)}
+            counts={subchannelCounts}
+            totalUnread={totalUnread}
+            onManageClick={() => setManagingSubchannels((v) => !v)}
+          />
+        )}
 
         {managingSubchannels && (
           <SubchannelManagePanel channel={channel} onClose={() => setManagingSubchannels(false)} />

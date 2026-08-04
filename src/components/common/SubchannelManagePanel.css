@@ -125,3 +125,13 @@
   color: var(--text-faint);
   padding: 4px 8px;
 }
+
+/* iOS Safari auto-zooms the whole page on focusing any input styled under 16px — these are 13px,
+   so tapping "Add a subchannel..." zoomed the screen in. Only these two are ever focusable inputs
+   in this panel. */
+@media (max-width: 767px) {
+  .subchannel-panel__input,
+  .subchannel-panel__row-input {
+    font-size: 16px;
+  }
+}

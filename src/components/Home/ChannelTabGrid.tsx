@@ -273,7 +273,7 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
         : 'No subchannels';
     return (
       <>
-        <div className="channel-tile__count">{unread > 0 ? unread : ''}</div>
+        <div className="channel-tile__count">{!paused && unread > 0 ? unread : ''}</div>
         <div>
           <div className="channel-tile__name">{channel.name}</div>
           <div className="channel-tile__meta">

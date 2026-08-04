@@ -169,6 +169,22 @@
     display: none;
   }
 
+  /* A long press anywhere on the tile is now the drag trigger, and the tile wraps a real <a> —
+     without -webkit-touch-callout/user-select, iOS Safari's own long-press handling on links wins
+     the gesture first: it fires its native haptic + link-preview/callout UI, which visually looks
+     like something responded, but then owns the rest of the touch sequence, so no pointermove ever
+     reaches ChannelTabGrid.tsx and the drag goes nowhere. pan-y (not none) deliberately still lets
+     a normal vertical scroll that happens to start on a tile work natively — a real scroll exceeds
+     the long-press move tolerance well within the 420ms hold, which cancels our own pending-drag
+     timer before it ever arms, so the two never actually fight over the same gesture. Matches
+     NewsCard.css's swipe-to-dismiss tiles, which have the identical tension. */
+  .channel-tile-wrap {
+    touch-action: pan-y;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
   /* The Home-tile "clear" shortcut is redundant with the channel view's own Clear, and on mobile
      its checkmark icon collided with the tile's copy — dropped there; pause stays. */
   .channel-tile__ctrl--clear {

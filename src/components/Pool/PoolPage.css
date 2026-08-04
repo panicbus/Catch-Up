@@ -69,3 +69,82 @@
   background: var(--accent-strong);
   color: #fff;
 }
+
+@media (max-width: 767px) {
+  .pool-page {
+    padding: 8px 16px 24px;
+  }
+  .pool-page__title {
+    font-size: 22px;
+  }
+  .pool-page__back {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  /* Touch has no real ":hover" — leaving it in place reads as a "stuck" highlight after a tap, on
+     any device where the browser latches the hover state onto whatever was last touched. Selected
+     state stays exactly as visible either way (--active still fills solid accent-red). */
+  .subchannel-bar__chip:hover {
+    background: #f3ecdf;
+  }
+  :root[data-theme='dark'] .subchannel-bar__chip:hover {
+    background: var(--surface-hover);
+  }
+  .subchannel-bar__chip--active:hover {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .pool-page__channels-mobile {
+    margin-bottom: 16px;
+  }
+  .pool-page__channels-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .pool-page__channels-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .pool-page__count-pill {
+    margin-left: 0;
+  }
+
+  /* Same grid-rows accordion trick used elsewhere (SubchannelPicker, NewsCard's own expand) — no
+     JS height measuring needed. Normal document flow, not an overlay, so it pushes the feed below
+     it down rather than floating over it. */
+  .pool-page__channels-panel {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.2s ease;
+  }
+  .pool-page__channels-panel--open {
+    grid-template-rows: 1fr;
+  }
+  .pool-page__channels-panel-inner {
+    overflow: hidden;
+  }
+  .pool-page__channels-panel .pool-page__pills {
+    margin: 10px 0 0;
+  }
+}

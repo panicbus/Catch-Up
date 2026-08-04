@@ -183,6 +183,14 @@
     font-size: 23px;
   }
 
+  /* The active subchannel — shown so it stays evident once the picker itself has closed back up.
+     Smaller and muted so the channel name it's attached to still reads as the primary title. */
+  .channel-page__title-sub {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
   .channel-page__icon-btn {
     display: flex;
     align-items: center;

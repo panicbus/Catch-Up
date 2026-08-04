@@ -55,6 +55,30 @@
   animation: streak-tooltip-in 0.15s ease;
 }
 
+/* Mobile: the card spans the full screen width instead of a narrow sidebar, so opening rightward
+   (the desktop default above) pushes the tooltip straight off the right edge. Drops below the
+   info button instead, right-aligned to it so it grows leftward and stays on screen rather than
+   overflowing either edge of a card that's nearly the full viewport width. */
+@media (max-width: 767px) {
+  .streak-card__tooltip {
+    top: calc(100% + 8px);
+    left: auto;
+    right: -8px;
+    animation: streak-tooltip-in-mobile 0.15s ease;
+  }
+}
+
+@keyframes streak-tooltip-in-mobile {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes streak-tooltip-in {
   from {
     opacity: 0;

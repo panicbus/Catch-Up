@@ -108,3 +108,34 @@
 .news-feed__archive-cards .news-card--pane {
   opacity: 1;
 }
+
+/* Brief confirmation after a swipe-dismiss — swiping leaves nothing else on screen to say anything
+   happened once the card itself has flown off. Fixed above the bottom nav (mobile-only gesture),
+   centered, auto-dismissing (see NewsFeed.tsx) rather than needing its own close control. */
+.news-feed__toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(70px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 55; /* above the bottom nav (50), below Modal (100) */
+  padding: 9px 18px;
+  border-radius: 999px;
+  background: #241f1a;
+  color: #f3ede4;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.45);
+  animation: news-feed-toast-in 0.15s ease;
+  pointer-events: none;
+}
+
+@keyframes news-feed-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}

@@ -114,6 +114,10 @@ interface NewsCardProps {
    * instead of waiting on a network round trip. Not fired for the staysInPlace (Bookmarks flip-icon-
    * only) or readInPlace-archive paths, which are already instant/local by their own nature. */
   onLocalExit?: (articleId: string) => void;
+  /** Fires specifically for a swipe-committed dismiss (not the checkmark button) — the parent's cue
+   * to show a brief "Story archived." toast, since a swipe leaves no other confirmation that
+   * anything happened once the card itself has flown off screen. */
+  onSwipeDismissed?: () => void;
 }
 
 type ExitReason = null | 'read' | 'unbookmark';
@@ -136,6 +140,7 @@ function NewsCardComponent({
   dimmed,
   onArchiveReadInPlace,
   onLocalExit,
+  onSwipeDismissed,
 }: NewsCardProps) {
   // "Reads as done" visually — either a channel's in-place read (readInPlace, which also makes the
   // check button archive it) or The Pool's plain dimmed-read (dimmed, check button just un-reads).
@@ -145,14 +150,15 @@ function NewsCardComponent({
   const isMobile = useIsMobile();
 
   const commitDismiss = useCallback(
-    (delayMs: number) => {
+    (delayMs: number, viaSwipe?: boolean) => {
       window.setTimeout(() => {
         onLocalExit?.(article.id);
+        if (viaSwipe) onSwipeDismissed?.();
         void api.markArticleRead(article.id, article.channelId);
         revalidateNow();
       }, delayMs);
     },
-    [article.id, article.channelId, onLocalExit]
+    [article.id, article.channelId, onLocalExit, onSwipeDismissed]
   );
 
   // Nothing to reveal by expanding a card with neither a snippet nor a thumbnail — the "Read full
@@ -163,7 +169,7 @@ function NewsCardComponent({
   const { dragX, phase, swipeHandlers } = useSwipeToDismiss({
     enabled: isMobile && !hideDismiss && !staysInPlace,
     onTap: canExpand ? onToggleExpand : () => {},
-    onCommit: () => commitDismiss(SWIPE_DISMISS_MS),
+    onCommit: () => commitDismiss(SWIPE_DISMISS_MS, true),
   });
 
   // What the check button means for this card right now (drives its icon/animation and the action).

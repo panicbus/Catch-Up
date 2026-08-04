@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useBookmarks } from '../../hooks/useBookmarks';
 import { useChannels } from '../../hooks/useChannels';
 import { useSettings } from '../../hooks/useSettings';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { BookmarksChannelTabs } from './BookmarksChannelTabs';
 import { ViewModeToggle } from '../Channel/ViewModeToggle';
 import { NewsFeed } from '../Channel/NewsFeed';
@@ -9,7 +11,17 @@ import { EmptyState } from '../common/EmptyState';
 import type { NewsCardData } from '../Channel/NewsCard';
 import './BookmarksPage.css';
 
+function BackIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
+  );
+}
+
 export function BookmarksPage() {
+  const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { byChannel } = useBookmarks();
   const { channels } = useChannels();
   const { settings, update } = useSettings();
@@ -58,8 +70,15 @@ export function BookmarksPage() {
     <div className="bookmarks-page">
       <div className="bookmarks-page__sticky">
         <div className="bookmarks-page__header">
+          {isMobile && (
+            <button type="button" className="bookmarks-page__back" onClick={() => navigate('/')} aria-label="Back to Home">
+              <BackIcon />
+            </button>
+          )}
           <h1 className="bookmarks-page__title">Bookmarks</h1>
-          {tabs.length > 0 && (
+          {/* A grid view makes no sense at phone width — hidden rather than shown-disabled, since
+              there's nothing to toggle to (matches ChannelPage's identical reasoning). */}
+          {tabs.length > 0 && !isMobile && (
             <ViewModeToggle value={settings.defaultViewMode} onChange={(mode) => update({ defaultViewMode: mode })} />
           )}
         </div>
@@ -75,7 +94,7 @@ export function BookmarksPage() {
           <NewsFeed
             articles={articles}
             channelName={activeChannelId ? channels.find((c) => c.id === activeChannelId)?.name ?? '' : 'Bookmarks'}
-            viewMode={settings.defaultViewMode}
+            viewMode={isMobile ? 'list' : settings.defaultViewMode}
             partitionByRead={false}
           />
         </>

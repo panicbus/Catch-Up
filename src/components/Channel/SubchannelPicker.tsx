@@ -1,10 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
 import type { Subchannel } from '../../../ipc-contract';
 import './SubchannelPicker.css';
 
-function ChevronIcon() {
+function ChevronIcon({ open }: { open: boolean }) {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}
+    >
       <path d="M6 9l6 6 6-6" />
     </svg>
   );
@@ -18,103 +28,105 @@ function ManageIcon() {
   );
 }
 
-interface SubchannelPickerProps {
+interface SubchannelPickerTriggerProps {
   subchannels: Subchannel[];
+  open: boolean;
+  onToggle: () => void;
+  /** Opens the subchannel manage panel directly — used only when there are no subchannels to pick
+   * between yet (see SubchannelPickerPanel's own doc comment for why that still needs a path in). */
+  onManageClick: () => void;
+}
+
+/** The compact always-visible pill (lives inline in ChannelPage's controls row). Deliberately split
+ * from SubchannelPickerPanel below — the panel needs to render full-width, breaking out of the
+ * narrow flex column this trigger sits in, so ChannelPage places the two in different parts of its
+ * layout while sharing one `open` state. Always reads "Subchannels (N)", not the active selection —
+ * this is the picker itself, not a value display. */
+export function SubchannelPickerTrigger({ subchannels, open, onToggle, onManageClick }: SubchannelPickerTriggerProps) {
+  const hasSubchannels = subchannels.length > 0;
+  return (
+    <button
+      type="button"
+      className="subchannel-picker__trigger"
+      onClick={hasSubchannels ? onToggle : onManageClick}
+      aria-expanded={hasSubchannels && open}
+      aria-label="Subchannels"
+    >
+      Subchannels{hasSubchannels ? ` (${subchannels.length})` : ''}
+      <ChevronIcon open={hasSubchannels && open} />
+    </button>
+  );
+}
+
+interface SubchannelPickerPanelProps {
+  subchannels: Subchannel[];
+  open: boolean;
   activeId: string | null;
   onSelect: (id: string | null) => void;
+  onClose: () => void;
   /** Same shape as SubchannelBar's — this is the mobile stand-in for that horizontal pill row,
    * which uses flex-wrap and stacks badly at phone width. Same underlying data either way. */
   counts?: Record<string, number>;
   totalUnread?: number;
-  /** Opens the subchannel manage panel — rendered as the last item in this dropdown (mobile's only
-   * access to it; desktop's SubchannelBar keeps its own separate always-visible pill for this). */
+  /** Opens the subchannel manage panel — the last item in this accordion (mobile's only access to
+   * it; desktop's SubchannelBar keeps its own separate always-visible pill for this). */
   onManageClick: () => void;
 }
 
-/** The trigger always reads "Subchannels" (not the active selection) — this is the picker itself,
- * not a value display; a bare "All" or a subchannel's name in its place read like a chip that was
- * already chosen rather than a control to open. Still inert (not just visually disabled —
- * genuinely non-interactive) when the channel has no subchannels, e.g. Art in the mockup, since
- * opening it would offer nothing to pick between; the manage-subchannels entry still needs to be
- * reachable, though, so it always opens straight to the manage panel when it has no other content. */
-export function SubchannelPicker({ subchannels, activeId, onSelect, counts, totalUnread = 0, onManageClick }: SubchannelPickerProps) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const hasSubchannels = subchannels.length > 0;
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open]);
-
+/** Full-width inline accordion — a phone-width floating menu left too little room either side for
+ * what's the main way into a channel's subchannels on mobile, and an overlay doesn't actually make
+ * room for itself, it just covers whatever was already there. Rendered by ChannelPage as a full-
+ * width sibling of the controls row (like SubchannelManagePanel already is), not nested inside the
+ * narrow flex column the trigger lives in — nesting it there would need the panel to force a wrap
+ * in an ancestor flex row two levels up, which plain CSS can't do from a descendant. */
+export function SubchannelPickerPanel({ subchannels, open, activeId, onSelect, onClose, counts, totalUnread = 0, onManageClick }: SubchannelPickerPanelProps) {
+  if (subchannels.length === 0) return null;
   return (
-    <div className="subchannel-picker-wrap" ref={wrapRef}>
-      <button
-        type="button"
-        className="subchannel-picker__trigger"
-        onClick={() => {
-          if (hasSubchannels) setOpen((v) => !v);
-          else onManageClick();
-        }}
-        aria-haspopup="listbox"
-        aria-expanded={hasSubchannels && open}
-        aria-label="Subchannels"
-      >
-        Subchannels
-        <ChevronIcon />
-      </button>
-      {hasSubchannels && open && (
-        <div className="subchannel-picker__menu" role="listbox">
-          <button
-            type="button"
-            role="option"
-            aria-selected={activeId === null}
-            className={`subchannel-picker__item ${activeId === null ? 'subchannel-picker__item--active' : ''}`}
-            onClick={() => {
-              onSelect(null);
-              setOpen(false);
-            }}
-          >
-            All
-            {totalUnread > 0 && <span className="subchannel-picker__count">{totalUnread}</span>}
-          </button>
-          {subchannels.map((sub) => {
-            const count = counts?.[sub.id] ?? 0;
-            return (
-              <button
-                key={sub.id}
-                type="button"
-                role="option"
-                aria-selected={activeId === sub.id}
-                className={`subchannel-picker__item ${activeId === sub.id ? 'subchannel-picker__item--active' : ''}`}
-                onClick={() => {
-                  onSelect(sub.id);
-                  setOpen(false);
-                }}
-              >
-                {sub.name}
-                {count > 0 && <span className="subchannel-picker__count">{count}</span>}
-              </button>
-            );
-          })}
-          <div className="subchannel-picker__divider" />
-          <button
-            type="button"
-            className="subchannel-picker__item subchannel-picker__item--manage"
-            onClick={() => {
-              setOpen(false);
-              onManageClick();
-            }}
-          >
-            <ManageIcon />
-            Manage subchannels
-          </button>
-        </div>
-      )}
+    <div className={`subchannel-picker__panel ${open ? 'subchannel-picker__panel--open' : ''}`}>
+      <div className="subchannel-picker__panel-inner">
+        <button
+          type="button"
+          aria-selected={activeId === null}
+          className={`subchannel-picker__item ${activeId === null ? 'subchannel-picker__item--active' : ''}`}
+          onClick={() => {
+            onSelect(null);
+            onClose();
+          }}
+        >
+          All
+          {totalUnread > 0 && <span className="subchannel-picker__count">{totalUnread}</span>}
+        </button>
+        {subchannels.map((sub) => {
+          const count = counts?.[sub.id] ?? 0;
+          return (
+            <button
+              key={sub.id}
+              type="button"
+              aria-selected={activeId === sub.id}
+              className={`subchannel-picker__item ${activeId === sub.id ? 'subchannel-picker__item--active' : ''}`}
+              onClick={() => {
+                onSelect(sub.id);
+                onClose();
+              }}
+            >
+              {sub.name}
+              {count > 0 && <span className="subchannel-picker__count">{count}</span>}
+            </button>
+          );
+        })}
+        <div className="subchannel-picker__divider" />
+        <button
+          type="button"
+          className="subchannel-picker__item subchannel-picker__item--manage"
+          onClick={() => {
+            onClose();
+            onManageClick();
+          }}
+        >
+          <ManageIcon />
+          Manage subchannels
+        </button>
+      </div>
     </div>
   );
 }
