@@ -14,7 +14,7 @@ import type { Channel as PrismaChannel, Subchannel as PrismaSubchannel, Settings
 
 // Must match READ_ARCHIVE_DAYS in src/components/Channel/NewsFeed.tsx — see main/dataStore.ts's
 // identical constant for why.
-const READ_STATE_MAX_AGE_DAYS = 14;
+const READ_STATE_MAX_AGE_DAYS = 10;
 
 const PAUSE_FOREVER_UNTIL = new Date('9999-12-31T00:00:00.000Z');
 function pauseLabelForHours(hours: number): string {

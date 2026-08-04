@@ -4,7 +4,7 @@ import { PaywallBadge } from './PaywallBadge';
 import { DismissButton, type DismissVariant } from './DismissButton';
 import { BookmarkButton } from '../common/BookmarkButton';
 import { relativeTime } from '../../services/formatters';
-import { api } from '../../services/api';
+import { api, revalidateNow } from '../../services/api';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useSwipeToDismiss } from '../../hooks/useSwipeToDismiss';
 import { getStoryCardColor } from '../../utils/storyCardColor';
@@ -18,6 +18,14 @@ function PreviewChevron() {
   return (
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
       <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+function ReadBadgeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 6L9 17l-5-5" />
     </svg>
   );
 }
@@ -100,6 +108,12 @@ interface NewsCardProps {
   /** Files a read-in-place card away: plays the fly-off then removes it from the feed (into the
    * archive on a channel, or simply out of view in The Pool). Only meaningful when readInPlace. */
   onArchiveReadInPlace?: (articleId: string) => void;
+  /** Fires the instant this card's exit animation is committed to (dismiss click or swipe past the
+   * threshold) — before the real API call resolves or any poll picks it up. Lets the parent drop
+   * the id from its own local render set right away, so the list collapses the gap immediately
+   * instead of waiting on a network round trip. Not fired for the staysInPlace (Bookmarks flip-icon-
+   * only) or readInPlace-archive paths, which are already instant/local by their own nature. */
+  onLocalExit?: (articleId: string) => void;
 }
 
 type ExitReason = null | 'read' | 'unbookmark';
@@ -121,6 +135,7 @@ function NewsCardComponent({
   readInPlace,
   dimmed,
   onArchiveReadInPlace,
+  onLocalExit,
 }: NewsCardProps) {
   // "Reads as done" visually — either a channel's in-place read (readInPlace, which also makes the
   // check button archive it) or The Pool's plain dimmed-read (dimmed, check button just un-reads).
@@ -132,10 +147,12 @@ function NewsCardComponent({
   const commitDismiss = useCallback(
     (delayMs: number) => {
       window.setTimeout(() => {
+        onLocalExit?.(article.id);
         void api.markArticleRead(article.id, article.channelId);
+        revalidateNow();
       }, delayMs);
     },
-    [article.id, article.channelId]
+    [article.id, article.channelId, onLocalExit]
   );
 
   // Nothing to reveal by expanding a card with neither a snippet nor a thumbnail — the "Read full
@@ -158,6 +175,7 @@ function NewsCardComponent({
       // Undo — bring an already-filed story back to unread. No fly-off (it isn't leaving this list;
       // it either stays put here, or moves out of the archive/read section on the reload).
       void api.markArticleUnread(article.id, article.channelId);
+      revalidateNow();
       return;
     }
     if (dismissVariant === 'readInPlace') {
@@ -171,6 +189,7 @@ function NewsCardComponent({
     if (staysInPlace) {
       // Stays visible in this list either way (Bookmarks) — just flip the icon, no fly-off.
       void api.markArticleRead(article.id, article.channelId);
+      revalidateNow();
       return;
     }
     setExitReason('read');
@@ -181,6 +200,7 @@ function NewsCardComponent({
     (e: MouseEvent<HTMLAnchorElement>) => {
       e.stopPropagation();
       void api.markArticleRead(article.id, article.channelId);
+      revalidateNow();
     },
     [article.id, article.channelId]
   );
@@ -241,8 +261,20 @@ function NewsCardComponent({
       {...surfaceProps}
     >
       <div className="news-card__actions">
-        {!hideDismiss && (
+        {/* On mobile, clearing/archiving a card is swipe-only (see useSwipeToDismiss above) — the
+            checkmark stays for the 'archived' variant (undoing a story back to unread), which has
+            no swipe equivalent and would otherwise be unreachable. Desktop keeps it for every
+            variant, same as before. */}
+        {!hideDismiss && (!isMobile || dismissVariant === 'archived') && (
           <DismissButton onDismiss={handleDismissClick} disabled={!!exitReason} variant={dismissVariant} />
+        )}
+        {/* Mobile only: with the checkmark gone, its slot is free — put the "Read" marker there
+            instead of its own separate line below, saving a row on every read-in-place card. */}
+        {showAsRead && isMobile && (
+          <span className="news-card__read-badge news-card__read-badge--inline">
+            <ReadBadgeIcon />
+            Read
+          </span>
         )}
         <BookmarkButton
           articleId={article.id}
@@ -255,12 +287,11 @@ function NewsCardComponent({
       </div>
 
       {/* Read marker sits top-right, tucked under the action icons — a distinct "you've read this"
-          cue, separate from the dimming and from the (unrelated) "Recent" recency badge. */}
-      {showAsRead && (
+          cue, separate from the dimming and from the (unrelated) "Recent" recency badge. Desktop
+          only — mobile renders it inline in .news-card__actions above instead (see there). */}
+      {showAsRead && !isMobile && (
         <span className="news-card__read-badge">
-          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 6L9 17l-5-5" />
-          </svg>
+          <ReadBadgeIcon />
           Read
         </span>
       )}

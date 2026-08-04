@@ -224,6 +224,7 @@ export function ChannelPage() {
     if (totalUnread === 0) return;
     clearSuppressRef.current = true;
     void api.clearChannel(channel.id);
+    revalidateNow();
   };
 
   // The "All caught up on X!" message should name whatever you're actually viewing — the active
@@ -338,6 +339,7 @@ export function ChannelPage() {
                 onSelect={setSubchannelId}
                 counts={subchannelCounts}
                 totalUnread={totalUnread}
+                onManageClick={() => setManagingSubchannels((v) => !v)}
               />
             )}
           </div>

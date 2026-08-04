@@ -86,8 +86,8 @@ const DEFAULT_DATA: DataFile = {
 };
 
 // Must match READ_ARCHIVE_DAYS in src/components/Channel/NewsFeed.tsx — that's what the "Read
-// stories · 2 week archive" label promises, this is what actually stops collecting past it.
-const READ_STATE_MAX_AGE_DAYS = 14;
+// stories · 10 day archive" label promises, this is what actually stops collecting past it.
+const READ_STATE_MAX_AGE_DAYS = 10;
 
 // Sentinel pausedUntil for an indefinite ("until I say so") pause — far enough out that the normal
 // "pausedUntil > now" check treats it as paused forever, no special-casing needed.

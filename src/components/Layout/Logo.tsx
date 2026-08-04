@@ -3,6 +3,10 @@ interface LogoProps {
    * this to keep the silhouette proportional, unlike the old square mark. */
   size?: number;
   withWordmark?: boolean;
+  /** 'stacked' (default) is "Catch" over "Up", sized for the sidebar's vertical space. 'inline' is
+   * a single "Catch Up" line sized to match the bottle icon's own height — for the mobile top bar,
+   * which has the horizontal room a sidebar doesn't. */
+  wordmarkLayout?: 'stacked' | 'inline';
 }
 
 const VIEWBOX_WIDTH = 40;
@@ -11,7 +15,7 @@ const VIEWBOX_HEIGHT = 92;
 /** Ketchup-bottle mark — outlined/sticker style (from the Catch Up Home 2a design doc), replacing
  * the old smooth-gradient silhouette. Packaged app icons (build/icon*.png/.icns) are separate
  * static assets and intentionally untouched by this. */
-export function Logo({ size = 28, withWordmark = false }: LogoProps) {
+export function Logo({ size = 28, withWordmark = false, wordmarkLayout = 'stacked' }: LogoProps) {
   const width = size * (VIEWBOX_WIDTH / VIEWBOX_HEIGHT);
 
   return (
@@ -34,7 +38,7 @@ export function Logo({ size = 28, withWordmark = false }: LogoProps) {
           strokeLinejoin="round"
         />
       </svg>
-      {withWordmark && (
+      {withWordmark && wordmarkLayout === 'stacked' && (
         <span
           style={{
             fontFamily: 'var(--font-display)',
@@ -48,6 +52,21 @@ export function Logo({ size = 28, withWordmark = false }: LogoProps) {
           Catch
           <br />
           Up
+        </span>
+      )}
+      {withWordmark && wordmarkLayout === 'inline' && (
+        <span
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 900,
+            fontSize: size * 0.8,
+            lineHeight: 1,
+            letterSpacing: '-0.02em',
+            color: 'var(--text)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Catch Up
         </span>
       )}
     </span>

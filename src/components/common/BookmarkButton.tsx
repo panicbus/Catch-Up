@@ -1,5 +1,5 @@
-import { useCallback, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
-import { api } from '../../services/api';
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
+import { api, revalidateNow } from '../../services/api';
 import { BurstEffect } from './BurstEffect';
 import './BookmarkButton.css';
 
@@ -39,7 +39,16 @@ export function BookmarkButton({
   const [bursting, setBursting] = useState(false);
   const [wagging, setWagging] = useState(false);
   const [forceUnfilled, setForceUnfilled] = useState(false);
+  // The `bookmarked` prop only reflects reality once the parent's article list reloads — on the web
+  // build that's a real network round trip (see revalidateNow below), which reads as a multi-second
+  // delay before the icon fills in. This holds the icon at whatever we just asked for so the click
+  // itself feels instant; it's cleared once the prop actually catches up to match.
+  const [optimistic, setOptimistic] = useState<boolean | null>(null);
   const removing = useRef(false);
+
+  useEffect(() => {
+    if (optimistic !== null && bookmarked === optimistic) setOptimistic(null);
+  }, [bookmarked, optimistic]);
 
   const onClick = useCallback(
     (e: MouseEvent<HTMLButtonElement>) => {
@@ -56,12 +65,15 @@ export function BookmarkButton({
           onRemoving?.();
           window.setTimeout(() => {
             void api.toggleBookmark(articleId, channelId);
+            revalidateNow();
           }, BOOKMARK_REMOVE_CARD_FADE_MS);
         }, WAG_MS);
         return;
       }
 
+      setOptimistic(!bookmarked);
       void api.toggleBookmark(articleId, channelId);
+      revalidateNow();
       if (!bookmarked) setBursting(true);
       onToggled?.(!bookmarked);
     },
@@ -72,7 +84,7 @@ export function BookmarkButton({
   // which begins at pointerdown — click-time stopPropagation alone fires too late for that.
   const onPointerDown = (e: PointerEvent<HTMLButtonElement>) => e.stopPropagation();
 
-  const showFilled = bookmarked && !forceUnfilled;
+  const showFilled = (optimistic ?? bookmarked) && !forceUnfilled;
 
   return (
     <button

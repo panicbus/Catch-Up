@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { groupByDay } from '../../utils/groupByDay';
 import { intersperseByContent } from '../../utils/intersperseByContent';
 import { formatDateHeader } from '../../services/formatters';
-import { api } from '../../services/api';
+import { api, revalidateNow } from '../../services/api';
 import { useScrollCatchUp } from '../../hooks/useScrollCatchUp';
 import { NewsCard, type NewsCardData } from './NewsCard';
 import { AllCaughtUp } from './AllCaughtUp';
@@ -18,7 +18,7 @@ const hasReadableContent = (a: NewsCardData) => !!(a.snippet && a.snippet.trim()
 /** Must match main/dataStore.ts's READ_STATE_MAX_AGE_DAYS — that's what actually stops collecting
  * read stories past this point; this is just the label saying so. Expressed in days (not weeks)
  * since that's the unit the underlying prune logic actually uses. */
-const READ_ARCHIVE_DAYS = 14;
+const READ_ARCHIVE_DAYS = 10;
 
 interface NewsFeedProps {
   articles: NewsCardData[];
@@ -114,6 +114,7 @@ function GridSection({
   dimReadCards,
   animateReflow = isGrid,
   onArchiveReadInPlace,
+  onLocalExit,
 }: {
   articles: NewsCardData[];
   isGrid: boolean;
@@ -132,6 +133,9 @@ function GridSection({
    * bloat every transition's snapshot — you don't reflow the main grid against the archive. */
   animateReflow?: boolean;
   onArchiveReadInPlace?: (articleId: string) => void;
+  /** See NewsCard's onLocalExit — passed straight through so the main (unread) section can drop a
+   * dismissed card from the render set the instant its exit fires, without waiting on a reload. */
+  onLocalExit?: (articleId: string) => void;
 }) {
   const containerClass = isGrid ? 'news-feed__grid' : 'news-feed__list';
 
@@ -154,6 +158,7 @@ function GridSection({
             readInPlace={readInPlace}
             dimmed={dimmed}
             onArchiveReadInPlace={onArchiveReadInPlace}
+            onLocalExit={onLocalExit}
             onToggleExpand={() => onToggleExpand(article.id)}
           />
         );
@@ -172,6 +177,7 @@ function DayGroups({
   readInPlaceIds,
   dimReadCards,
   onArchiveReadInPlace,
+  onLocalExit,
 }: {
   articles: NewsCardData[];
   viewMode: ViewMode;
@@ -182,6 +188,7 @@ function DayGroups({
   readInPlaceIds?: Set<string>;
   dimReadCards?: boolean;
   onArchiveReadInPlace?: (articleId: string) => void;
+  onLocalExit?: (articleId: string) => void;
 }) {
   const byDay = groupByDay(articles, 'publishedAt');
 
@@ -200,6 +207,7 @@ function DayGroups({
             readInPlaceIds={readInPlaceIds}
             dimReadCards={dimReadCards}
             onArchiveReadInPlace={onArchiveReadInPlace}
+            onLocalExit={onLocalExit}
           />
         </section>
       ))}
@@ -229,7 +237,7 @@ function ReadArchive({
 
   return (
     <div className="news-feed__archive">
-      <div className="news-feed__archive-title">Read stories · {READ_ARCHIVE_DAYS / 7} week archive</div>
+      <div className="news-feed__archive-title">Read stories · {READ_ARCHIVE_DAYS} day archive</div>
       {[...byDay.entries()].map(([dateKey, dayArticles]) => {
         const isOpen = openDate === dateKey;
         return (
@@ -292,8 +300,23 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // under you mid-scroll. Resets on remount — on your next visit those reads settle into the archive
   // (channel) or drop out (The Pool) naturally, since they're no longer held here.
   const [keepVisible, setKeepVisible] = useState<Set<string>>(() => new Set());
+  // Ids whose dismiss/swipe exit has already been committed to locally (see NewsCard's onLocalExit)
+  // — dropped from the main section immediately, before the real mutation's network round trip
+  // completes, so the gap they leave behind closes instantly instead of sitting empty for however
+  // long that round trip takes. Never needs clearing: once the real data reloads without them,
+  // membership here just stops mattering.
+  const [locallyExited, setLocallyExited] = useState<Set<string>>(() => new Set());
   const prevUnreadCountRef = useRef<number | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
+
+  const onLocalExit = useCallback((articleId: string) => {
+    setLocallyExited((prev) => {
+      if (prev.has(articleId)) return prev;
+      const next = new Set(prev);
+      next.add(articleId);
+      return next;
+    });
+  }, []);
 
   const byId = useMemo(() => new Map(articles.map((a) => [a.id, a])), [articles]);
 
@@ -310,9 +333,10 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   const cappedBaseIds = useMemo(() => new Set(cappedBase.map((a) => a.id)), [cappedBase]);
 
   // Main section: the capped unread cards, plus (in catch-up mode) the ones read-in-place this
-  // session so they stay put and dimmed. Filtering `articles` directly keeps chronological order.
+  // session so they stay put and dimmed — minus anything whose exit already committed locally
+  // (see locallyExited above). Filtering `articles` directly keeps chronological order.
   const mainArticles = articles.filter(
-    (a) => cappedBaseIds.has(a.id) || (catchUpMode && a.read && keepVisible.has(a.id))
+    (a) => !locallyExited.has(a.id) && (cappedBaseIds.has(a.id) || (catchUpMode && a.read && keepVisible.has(a.id)))
   );
   // Archive gets read cards that AREN'T being kept in place (i.e. swept away with the check button,
   // or read in a previous session).
@@ -321,9 +345,13 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // Source of truth for the celebration + streak. Normally the uncapped unread count (you must clear
   // everything — more slide in under the cap as you go). In showReadDimmed mode (The Pool) the shown
   // set IS capped, so "caught up" means the shown stories are all read — count unread among those.
+  // Counts anything in keepVisible/locallyExited as handled even before the server confirms it —
+  // both are already-committed local actions (read-in-place, or a dismissed card's exit), so waiting
+  // on a network round trip just to notice "you're actually done" would make the celebration lag
+  // behind what the screen already shows.
   const trueUnreadCount = showReadDimmed
-    ? cappedBase.reduce((n, a) => (a.read ? n : n + 1), 0)
-    : articles.reduce((n, a) => (a.read ? n : n + 1), 0);
+    ? cappedBase.reduce((n, a) => (a.read || keepVisible.has(a.id) || locallyExited.has(a.id) ? n : n + 1), 0)
+    : articles.reduce((n, a) => (a.read || keepVisible.has(a.id) || locallyExited.has(a.id) ? n : n + 1), 0);
 
   const markReadInPlace = useCallback((articleId: string, channelId: string) => {
     setKeepVisible((prev) => {
@@ -335,6 +363,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     // main-process change, pre-restart) would otherwise blank the whole app instead of just skipping.
     try {
       void api.markArticleRead(articleId, channelId)?.catch((err) => console.error('[NewsFeed] markRead failed', err));
+      revalidateNow();
     } catch (err) {
       console.error('[NewsFeed] markRead failed synchronously', err);
     }
@@ -476,6 +505,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
             readInPlaceIds={catchUpMode && !showReadDimmed ? keepVisible : undefined}
             dimReadCards={showReadDimmed}
             onArchiveReadInPlace={catchUpMode && !showReadDimmed ? archiveReadInPlace : undefined}
+            onLocalExit={onLocalExit}
           />
         </>
       )}

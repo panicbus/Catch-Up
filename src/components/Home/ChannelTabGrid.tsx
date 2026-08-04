@@ -39,6 +39,18 @@ interface DragState {
   baseOrder: string[];
 }
 
+/** Where the dragged tile's wrap sat, in viewport coordinates, at the instant the drag armed —
+ * position:fixed uses the same coordinate space, so the floating ghost (below) can be seeded from
+ * this once and then just add the live pointer delta, with no dependency on wherever CSS Grid
+ * decides to auto-place the tile's own (now-hidden) DOM node as the reorder preview shuffles other
+ * tiles around it. */
+interface OriginRect {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
 /** Transient per-gesture data for a touch drag — kept in a ref (not state) since most of it changes
  * every pointermove and must never itself trigger a re-render; only touchOffset (below) does. */
 interface TouchDragRef {
@@ -49,9 +61,24 @@ interface TouchDragRef {
   pendingOffset: { x: number; y: number };
   scrollRafId: number;
   lastClientY: number;
-  /** The element pointer capture was set on — see the long comment at the pointerdown handler for
-   * why this is the grid container, not the grip button that was actually pressed. */
+  /** The element pointer capture was set on — see the long comment at the arm point below for why
+   * this is the grid container, not the tile that was actually pressed. */
   captureEl: HTMLDivElement;
+  origin: OriginRect;
+}
+
+/** A press-and-hold not yet committed to a drag — cancelled by releasing early (a tap) or by
+ * moving far enough that it reads as a scroll instead of a hold. Separate from TouchDragRef, which
+ * only exists once a drag is actually live. */
+interface PendingLongPress {
+  pointerId: number;
+  channelId: string;
+  startX: number;
+  startY: number;
+  lastX: number;
+  lastY: number;
+  timerId: number;
+  tileEl: HTMLElement;
 }
 
 function sameOrder(a: string[], b: string[]): boolean {
@@ -64,6 +91,13 @@ function sameOrder(a: string[], b: string[]): boolean {
 const AUTO_SCROLL_EDGE_PX = 60;
 const AUTO_SCROLL_SPEED_PX = 12;
 
+// How long a touch has to hold still before it commits to a drag, and how far it's allowed to
+// wander during that hold before it reads as a scroll intent instead (cancelling the hold and
+// leaving native scrolling completely alone — the hold never calls preventDefault/setPointerCapture
+// until it actually fires).
+const LONG_PRESS_MS = 420;
+const LONG_PRESS_MOVE_TOLERANCE_PX = 10;
+
 export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [armedId, setArmedId] = useState<string | null>(null);
@@ -72,6 +106,11 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
   // browser's own native drag ghost covers that case instead).
   const [touchOffset, setTouchOffset] = useState<{ x: number; y: number } | null>(null);
   const touchRef = useRef<TouchDragRef | null>(null);
+  const pendingRef = useRef<PendingLongPress | null>(null);
+  // Set right as a touch drag ends, so the synthetic `click` the browser fires right after that
+  // same pointerup doesn't also navigate the Link — cleared the moment that click is swallowed (or
+  // never set at all for a plain tap, which never arms a drag in the first place).
+  const justDraggedRef = useRef(false);
 
   // Derived, not accumulated. The previous version recomputed `to = prev.indexOf(targetId)`
   // against its OWN last output, so re-entering the same tile (which `dragenter` does 2-5 times per
@@ -130,6 +169,8 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
   // Scrolls .app-shell__main (the app's real scroll container — see AppShell.css) while the finger
   // sits near its top/bottom edge. Genuinely needed: ten-plus channels in a two-column mobile grid
   // don't fit on one screen, so a drag that starts near the bottom has nowhere to go without this.
+  // The floating ghost (position:fixed, see the render below) needs no help from this — it tracks
+  // the finger in viewport space regardless of how far the page underneath has scrolled.
   const startAutoScroll = (fromEl: HTMLElement) => {
     const scrollRoot = fromEl.closest<HTMLElement>('.app-shell__main');
     if (!scrollRoot) return;
@@ -147,6 +188,39 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
     touchRef.current!.scrollRafId = requestAnimationFrame(tick);
   };
 
+  // Fires once the long-press hold has been held still for LONG_PRESS_MS — commits to an actual
+  // drag from wherever the finger currently is (not the original press point, which may have
+  // wandered a little within tolerance during the hold).
+  const armLongPress = (p: PendingLongPress) => {
+    pendingRef.current = null;
+    const gridEl = p.tileEl.closest<HTMLDivElement>('.channel-grid');
+    if (!gridEl) return;
+    gridEl.setPointerCapture(p.pointerId);
+    const rect = p.tileEl.getBoundingClientRect();
+    touchRef.current = {
+      pointerId: p.pointerId,
+      startX: p.lastX,
+      startY: p.lastY,
+      rafId: 0,
+      pendingOffset: { x: 0, y: 0 },
+      scrollRafId: 0,
+      lastClientY: p.lastY,
+      captureEl: gridEl,
+      origin: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+    };
+    setDrag({ draggingId: p.channelId, overId: null, baseOrder: channels.map((c) => c.id) });
+    setTouchOffset({ x: 0, y: 0 });
+    startAutoScroll(gridEl);
+  };
+
+  const cancelPendingLongPress = (pointerId: number) => {
+    const p = pendingRef.current;
+    if (p && p.pointerId === pointerId) {
+      window.clearTimeout(p.timerId);
+      pendingRef.current = null;
+    }
+  };
+
   const finishTouchDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
     const t = touchRef.current;
     if (!t || e.pointerId !== t.pointerId) return;
@@ -154,19 +228,28 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
     stopAutoScroll();
     t.captureEl.releasePointerCapture(e.pointerId);
     touchRef.current = null;
+    // Swallow the click the browser is about to fire right after this pointerup — but only THAT
+    // one: self-clears shortly after in case no click ever actually arrives to consume it (some
+    // browsers skip the click entirely once a touchmove in the gesture called preventDefault), so a
+    // completed drag can never leave this stuck "true" and silently eat the next unrelated tap.
+    justDraggedRef.current = true;
+    window.setTimeout(() => {
+      justDraggedRef.current = false;
+    }, 400);
     commitReorder(preview);
     setDrag(null);
     setArmedId(null);
     setTouchOffset(null);
   };
 
-  // Unmounting mid-drag (e.g. navigating away) must not leave a rAF loop running against a gone
-  // component — same reasoning as every other rAF/timer cleanup in this app.
+  // Unmounting mid-drag (e.g. navigating away) must not leave a rAF loop or a pending timer running
+  // against a gone component — same reasoning as every other rAF/timer cleanup in this app.
   useEffect(() => {
     return () => {
       const t = touchRef.current;
       if (t?.rafId) cancelAnimationFrame(t.rafId);
       if (t?.scrollRafId) cancelAnimationFrame(t.scrollRafId);
+      if (pendingRef.current) window.clearTimeout(pendingRef.current.timerId);
     };
   }, []);
 
@@ -174,16 +257,59 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
     e.preventDefault();
     e.stopPropagation();
     void api.clearChannel(channelId);
+    revalidateNow();
   };
+
+  // Count/name/meta content shared by both the real tile (inside its Link) and the floating drag
+  // ghost (below), so the two can never visually drift apart.
+  const tileInner = (channel: Channel) => {
+    const count = counts[channel.id];
+    const unread = count?.unread ?? 0;
+    const hasNew = (count?.recent ?? 0) > 0;
+    const paused = isChannelPaused(channel.pausedUntil);
+    const subchannelText =
+      channel.subchannels.length > 0
+        ? `${channel.subchannels.length} subchannel${channel.subchannels.length === 1 ? '' : 's'}`
+        : 'No subchannels';
+    return (
+      <>
+        <div className="channel-tile__count">{unread > 0 ? unread : ''}</div>
+        <div>
+          <div className="channel-tile__name">{channel.name}</div>
+          <div className="channel-tile__meta">
+            {paused ? 'Paused' : subchannelText}
+            {!paused && hasNew ? ' · new' : ''}
+          </div>
+        </div>
+      </>
+    );
+  };
+
+  const draggingChannel = drag ? byId.get(drag.draggingId) : undefined;
+  const ghostOrigin = touchRef.current?.origin;
+  const showGhost = !!draggingChannel && !!touchOffset && !!ghostOrigin;
 
   return (
     <div
       className={`channel-grid ${drag ? 'channel-grid--dragging' : ''}`}
-      // Touch drag's move/up/cancel listeners live HERE, not on the grip button that started the
-      // gesture — see the pointerdown handler below for why. Guarded on touchRef being set, so this
-      // is a no-op for any pointer movement that isn't an active touch drag (ordinary scrolling,
-      // taps elsewhere, etc.).
+      // Both the long-press hold (before it's armed a real drag) and the live touch-drag itself are
+      // tracked from HERE, not from the tile that was actually pressed — a captured pointer's
+      // events stop targeting a DOM node that's been physically repositioned among its siblings
+      // (which is exactly what happens once React reorders `ordered` to match the live preview), so
+      // anything bound to the tile itself would silently lose the gesture mid-drag. The grid
+      // container never moves, so capturing there survives the reorder.
       onPointerMove={(e) => {
+        const p = pendingRef.current;
+        if (p && e.pointerId === p.pointerId) {
+          p.lastX = e.clientX;
+          p.lastY = e.clientY;
+          if (Math.hypot(e.clientX - p.startX, e.clientY - p.startY) > LONG_PRESS_MOVE_TOLERANCE_PX) {
+            // Wandered enough to read as a scroll, not a hold — let it go. Nothing was ever
+            // captured or prevented, so native scrolling has been free to happen the whole time.
+            window.clearTimeout(p.timerId);
+            pendingRef.current = null;
+          }
+        }
         const t = touchRef.current;
         if (!t || e.pointerId !== t.pointerId) return;
         e.preventDefault();
@@ -199,8 +325,9 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
         }
         // The touch equivalent of onDragEnter — dragenter only fires from real HTML5 drag sources,
         // never from touch, so this is what discovers "which tile is the finger over right now" for
-        // a touch gesture. pointer-events:none on the lifted tile (see CSS) keeps this from just
-        // finding itself.
+        // a touch gesture. The dragged tile's own slot is visibility:hidden while lifted (see the
+        // render below), so elementFromPoint naturally finds whatever's underneath instead of
+        // always finding itself.
         //
         // Only ADVANCES overId when the finger is actually over another tile — never clears it back
         // to null just because this one instant landed on the grid's own background (the 10px gaps
@@ -214,18 +341,16 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
           setDrag((d) => (d && d.overId !== overId ? { ...d, overId } : d));
         }
       }}
-      onPointerUp={finishTouchDrag}
-      onPointerCancel={finishTouchDrag}
+      onPointerUp={(e) => {
+        cancelPendingLongPress(e.pointerId);
+        finishTouchDrag(e);
+      }}
+      onPointerCancel={(e) => {
+        cancelPendingLongPress(e.pointerId);
+        finishTouchDrag(e);
+      }}
     >
       {ordered.map((channel) => {
-        const count = counts[channel.id];
-        const unread = count?.unread ?? 0;
-        const hasNew = (count?.recent ?? 0) > 0;
-        const paused = isChannelPaused(channel.pausedUntil);
-        const subchannelText =
-          channel.subchannels.length > 0
-            ? `${channel.subchannels.length} subchannel${channel.subchannels.length === 1 ? '' : 's'}`
-            : 'No subchannels';
         const isDraggingThis = drag?.draggingId === channel.id;
         const isTouchLifted = isDraggingThis && !!touchOffset;
 
@@ -233,8 +358,7 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
           <div
             key={channel.id}
             data-channel-id={channel.id}
-            className={`channel-tile-wrap ${isTouchLifted ? 'channel-tile-wrap--touch-lifted' : isDraggingThis ? 'channel-tile-wrap--dragging' : ''}`}
-            style={isTouchLifted ? { transform: `translate(${touchOffset.x}px, ${touchOffset.y}px)` } : undefined}
+            className={`channel-tile-wrap ${isTouchLifted ? 'channel-tile-wrap--touch-source' : isDraggingThis ? 'channel-tile-wrap--dragging' : ''}`}
             draggable={armedId === channel.id}
             onDragStart={(e) => {
               setDrag({ draggingId: channel.id, overId: null, baseOrder: channels.map((c) => c.id) });
@@ -252,63 +376,51 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
               setDrag(null);
               setArmedId(null);
             }}
+            // Touch only: press-and-hold anywhere on the tile arms a drag after LONG_PRESS_MS,
+            // unless it's released early (a tap — handled by the grid's onPointerUp/cancelPendingLongPress
+            // above, which lets the Link's own onClick navigate normally) or the finger wanders past
+            // tolerance first (a scroll — see the grid's onPointerMove above). Skips presses that
+            // started on the always-visible controls, which have their own instant tap behavior.
+            onPointerDown={(e) => {
+              if (e.pointerType !== 'touch') return;
+              if ((e.target as HTMLElement).closest('.channel-tile__controls, .channel-tile__handle')) return;
+              const pointerId = e.pointerId;
+              const startX = e.clientX;
+              const startY = e.clientY;
+              const tileEl = e.currentTarget;
+              const timerId = window.setTimeout(() => {
+                const p = pendingRef.current;
+                if (p && p.pointerId === pointerId) armLongPress(p);
+              }, LONG_PRESS_MS);
+              pendingRef.current = { pointerId, channelId: channel.id, startX, startY, lastX: startX, lastY: startY, timerId, tileEl };
+            }}
           >
             <Link
-              className={`channel-tile ${paused ? 'channel-tile--paused' : ''}`}
+              className={`channel-tile ${isChannelPaused(channel.pausedUntil) ? 'channel-tile--paused' : ''}`}
               style={{ background: getTileColor(channel.id) }}
               to={`/channel/${channel.id}`}
               draggable={false}
+              onClick={(e) => {
+                if (justDraggedRef.current) {
+                  e.preventDefault();
+                  justDraggedRef.current = false;
+                }
+              }}
             >
-              <div className="channel-tile__count">{unread > 0 ? unread : ''}</div>
-              <div>
-                <div className="channel-tile__name">{channel.name}</div>
-                <div className="channel-tile__meta">
-                  {paused ? 'Paused' : subchannelText}
-                  {!paused && hasNew ? ' · new' : ''}
-                </div>
-              </div>
+              {tileInner(channel)}
             </Link>
 
-            {/* Drag handle (top-left). Arms the wrapper for a mouse drag on press; on touch, this
-                same button drives an entirely separate Pointer Events path (native HTML5 drag never
-                fires from touch input at all) that reuses the exact same DragState/preview/
-                commitReorder as the mouse path above — only how `overId` gets discovered differs
-                (elementFromPoint instead of a dragenter event).
-                Pointer capture is set on the GRID container (via e.currentTarget.closest), not on
-                this button — confirmed by instrumenting a real touch drag: once the dragged tile's
-                DOM node gets physically repositioned among its siblings (React reordering `ordered`
-                to match the live preview), a captured pointer's events stop targeting this button
-                and start hitting whatever's really under the finger instead — silently losing the
-                drag mid-gesture with no error. The grid container never moves, so capturing there
-                survives the reorder; move/up/cancel listeners live on the grid for the same reason
-                (see its own props above). */}
+            {/* Drag handle (top-left), desktop/mouse only — hidden on mobile (see CSS), where the
+                whole tile itself is the long-press target instead. Arms the wrapper for a mouse
+                drag on press; the touch path lives on the wrapper's own onPointerDown above. */}
             <button
               type="button"
               className="channel-tile__handle"
               title="Drag to reorder"
               aria-label={`Reorder ${channel.name}`}
               onPointerDown={(e) => {
-                if (e.pointerType === 'mouse') {
-                  setArmedId(channel.id);
-                  return;
-                }
-                e.preventDefault();
-                const gridEl = e.currentTarget.closest<HTMLDivElement>('.channel-grid');
-                if (!gridEl) return;
-                gridEl.setPointerCapture(e.pointerId);
-                touchRef.current = {
-                  pointerId: e.pointerId,
-                  startX: e.clientX,
-                  startY: e.clientY,
-                  rafId: 0,
-                  pendingOffset: { x: 0, y: 0 },
-                  scrollRafId: 0,
-                  lastClientY: e.clientY,
-                  captureEl: gridEl,
-                };
-                setDrag({ draggingId: channel.id, overId: null, baseOrder: channels.map((c) => c.id) });
-                setTouchOffset({ x: 0, y: 0 });
-                startAutoScroll(gridEl);
+                if (e.pointerType !== 'mouse') return;
+                setArmedId(channel.id);
               }}
               onClick={(e) => {
                 e.preventDefault();
@@ -316,21 +428,20 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
                 // `click` fires only when mousedown/up happened without an intervening drag — the
                 // exact case a plain press-and-release on the grip needs to disarm. Without this, a
                 // click here left the tile `draggable` indefinitely (armedId only ever cleared in
-                // onDragEnd, which a non-drag click never reaches). Touch never reaches this at all
-                // (its pointerdown branch returns before arming anything), which is fine — armedId
-                // is a mouse-only concept.
+                // onDragEnd, which a non-drag click never reaches).
                 setArmedId(null);
               }}
             >
               <GripIcon />
             </button>
 
-            {/* Always-visible mini controls (bottom-right): pause + clear. */}
+            {/* Always-visible mini controls (bottom-right): pause + clear (clear is desktop-only —
+                see CSS; mobile relies on the channel view's own clear, not a Home-tile shortcut). */}
             <div className="channel-tile__controls">
               <PauseChannelControl channelId={channel.id} pausedUntil={channel.pausedUntil} variant="icon" />
               <button
                 type="button"
-                className="channel-tile__ctrl"
+                className="channel-tile__ctrl channel-tile__ctrl--clear"
                 title="Clear — mark all read"
                 aria-label={`Clear ${channel.name}`}
                 onClick={(e) => clear(e, channel.id)}
@@ -341,6 +452,35 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
           </div>
         );
       })}
+
+      {/* Floating drag ghost — the ONLY visible representation of the tile being touch-dragged.
+          position:fixed roots it in viewport coordinates (the same space getBoundingClientRect and
+          clientX/clientY already use), seeded once from where the tile actually sat when the drag
+          armed (origin) plus the live pointer delta (touchOffset) — completely independent of
+          wherever CSS Grid auto-places the tile's own (hidden) DOM node as the reorder preview
+          reshuffles the OTHER tiles around it. That independence is what fixes the old jump/jutter:
+          previously the dragged tile's real node carried the translate, so the instant it got
+          reflowed into a new grid cell (which happens as soon as the finger crosses into another
+          tile's bounds) the translate suddenly applied against a different base position. */}
+      {showGhost && draggingChannel && touchOffset && ghostOrigin && (
+        <div
+          className="channel-tile-ghost"
+          style={{
+            top: ghostOrigin.top,
+            left: ghostOrigin.left,
+            width: ghostOrigin.width,
+            height: ghostOrigin.height,
+            transform: `translate(${touchOffset.x}px, ${touchOffset.y}px)`,
+          }}
+        >
+          <div
+            className={`channel-tile ${isChannelPaused(draggingChannel.pausedUntil) ? 'channel-tile--paused' : ''}`}
+            style={{ background: getTileColor(draggingChannel.id) }}
+          >
+            {tileInner(draggingChannel)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

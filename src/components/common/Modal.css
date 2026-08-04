@@ -22,6 +22,17 @@
   max-width: calc(100vw - 40px);
 }
 
+/* Below 767px the sidebar is hidden (replaced by the bottom nav — see AppShell.css), so offsetting
+   the centering axis by its width no longer makes sense: it left the overlay only covering the
+   right portion of the screen and pushed every modal (including a wider one like the Roll the Dice
+   card, which only clamps via max-width) off-center and partly clipped. Matches the same "true
+   center below 767px" reset ChannelPage.css already does for its own sidebar-offset overlay. */
+@media (max-width: 767px) {
+  .modal-overlay {
+    left: 0;
+  }
+}
+
 .modal__title {
   display: flex;
   align-items: center;

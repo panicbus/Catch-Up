@@ -3,20 +3,20 @@
   display: inline-flex;
 }
 
+/* The main way into a channel's subchannels on mobile (SubchannelBar's own chip row is desktop-
+   only — see its CSS) — accent-tinted rather than a plain neutral pill, so it reads as the primary
+   control it is instead of blending into the row like a disabled/inert element. */
 .subchannel-picker__trigger {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 7px 14px;
   border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
   font-size: 13px;
-  font-weight: 600;
-}
-.subchannel-picker__trigger:disabled {
-  opacity: 0.4;
+  font-weight: 700;
 }
 
 .subchannel-picker__menu {
@@ -73,5 +73,21 @@
 }
 .subchannel-picker__item--active .subchannel-picker__count {
   background: rgba(255, 255, 255, 0.3);
+  color: var(--accent-strong);
+}
+
+.subchannel-picker__divider {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border-strong);
+}
+
+.subchannel-picker__item--manage {
+  justify-content: flex-start;
+  gap: 8px;
+  color: var(--text-faint);
+  font-weight: 500;
+}
+.subchannel-picker__item--manage:hover {
   color: var(--accent-strong);
 }

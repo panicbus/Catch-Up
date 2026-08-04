@@ -35,9 +35,9 @@ interface CacheFile {
 const DEFAULT_BUCKET: Omit<ChannelBucket, 'articles'> = { maxAgeDays: 14, maxCount: 300 };
 
 // Hard ceiling on UNREAD stories per channel so the "to catch up on" number never gets overwhelming.
-// Read stories don't count against this (they live out their 14-day life in the archive); when new
-// stories arrive the freshest 100 unread are kept and older unread fall away. maxCount above stays
-// as a high total-storage safety net.
+// Read stories don't count against this (they live out their 10-day life in the archive — see
+// READ_STATE_MAX_AGE_DAYS in dataStore.ts); when new stories arrive the freshest 100 unread are
+// kept and older unread fall away. maxCount above stays as a high total-storage safety net.
 const MAX_UNREAD_PER_CHANNEL = 100;
 
 // Google News RSS is a last-resort fallback (see registry.ts) precisely because every one of its

@@ -1,10 +1,14 @@
 import { useEffect, useRef, type RefObject } from 'react';
 
 /** How long a card must stay scrolled above the top before it counts as "read" — long enough that a
- * quick flick-scroll that overshoots and comes back doesn't clear anything you didn't mean to. */
-const PASS_DELAY_MS = 500;
-/** How close to the bottom (px) counts as "reached the bottom of the feed." */
-const BOTTOM_THRESHOLD_PX = 8;
+ * quick flick-scroll that overshoots and comes back doesn't clear anything you didn't mean to, short
+ * enough that it doesn't read as sluggish on an otherwise-fast mobile scroll. */
+const PASS_DELAY_MS = 300;
+/** How close to the bottom (px) counts as "reached the bottom of the feed." Generous rather than
+ * pixel-exact — mobile browsers report fractional/rubber-banding scrollTop/scrollHeight values
+ * (especially mid-momentum-scroll or during Safari's dynamic toolbar show/hide), and a tight
+ * threshold here missed "reached bottom" often enough on a phone to read as this just not working. */
+const BOTTOM_THRESHOLD_PX = 32;
 /** Minimum gap between bottom-reached clears, so sitting at the bottom across reveal-more waves
  * fires at most once per beat rather than on every scroll tick. */
 const BOTTOM_COOLDOWN_MS = 400;

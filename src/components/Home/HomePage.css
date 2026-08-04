@@ -100,3 +100,21 @@
 .home-page__mobile-streak {
   margin-bottom: 18px;
 }
+
+@media (max-width: 767px) {
+  /* Less on the left, a bit more on the right, and tighter overall than desktop's 40px both
+     sides — gives the tile grid more usable width on a narrow screen. */
+  .home-page {
+    padding: 8px 20px 24px 14px;
+  }
+
+  /* The sketch reads as clutter at phone width, where it sits directly behind a much denser
+     stack of tiles/search/streak than the spacious desktop layout it was tuned for. */
+  .home-page__bg {
+    display: none;
+  }
+
+  .home-page__utility-bar {
+    margin-bottom: 12px;
+  }
+}

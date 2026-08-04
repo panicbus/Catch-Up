@@ -37,7 +37,7 @@ function MobileTopBar() {
   return (
     <div className="home-page__mobile-topbar">
       <div className="home-page__mobile-topbar-row">
-        <Logo withWordmark size={30} />
+        <Logo withWordmark wordmarkLayout="inline" size={34} />
         <button type="button" className="home-page__sign-in" onClick={showNote}>
           <PersonIcon />
           Sign in

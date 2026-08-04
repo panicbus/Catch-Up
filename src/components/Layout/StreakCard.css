@@ -111,6 +111,28 @@
   75% { transform: scaleY(1.13) scaleX(0.95); opacity: 1; }
 }
 
+/* Mobile home renders this above the tile grid (desktop has it in the sidebar, with vertical room
+   to spare) — shrink it to give the grid more of the screen. Only ever reached on a narrow phone
+   viewport, so this can't affect the desktop sidebar's copy of the same component. */
+@media (max-width: 767px) {
+  .streak-card {
+    padding: 8px 12px;
+  }
+  .streak-card__fire {
+    width: 28px;
+    height: 28px;
+  }
+  .streak-card__count {
+    font-size: 18px;
+  }
+  .streak-card__progress {
+    margin-top: 5px;
+  }
+  .streak-card__progress i {
+    height: 4px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .streak-card__fire--flicker,
   .streak-card__fire--flicker .streak-card__flame--center,

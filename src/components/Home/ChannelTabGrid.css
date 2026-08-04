@@ -14,17 +14,31 @@
   opacity: 0.4;
 }
 
-/* Touch has no browser-native drag ghost the way HTML5 DnD does (that's what --dragging's opacity
-   dims out of the way of), so the tile itself has to visibly follow the finger — full opacity,
-   elevated, translated by ChannelTabGrid.tsx's tracked touchOffset. pointer-events:none so
-   elementFromPoint (the touch equivalent of dragenter) finds whatever's underneath instead of
-   always finding this tile itself. No transition — it must track 1:1 with the finger, not ease. */
-.channel-tile-wrap--touch-lifted {
-  z-index: 20;
+/* The dragged tile's real grid slot, while a touch drag has it lifted — invisible but still
+   occupying its cell (NOT display:none), so the other tiles reflow around a stable hole instead of
+   the grid collapsing/rejumping. The only visible stand-in is the floating ghost below; visibility
+   (not opacity) so it's also out of hit-testing, letting elementFromPoint find whatever's actually
+   underneath the finger. */
+.channel-tile-wrap--touch-source {
+  visibility: hidden;
+}
+
+/* The floating drag ghost (ChannelTabGrid.tsx renders exactly one, positioned via inline
+   top/left/width/height + a translate transform) — a standalone class, deliberately NOT sharing
+   .channel-tile-wrap (it isn't a grid item at all, and reusing that class made it collide with the
+   real grid items in anything that queries by it). position:fixed roots it in viewport space, so
+   it's completely unaffected by the grid reflowing the other tiles around the now-hidden source
+   slot above. pointer-events:none for the same elementFromPoint reason as --touch-source. Slightly
+   transparent + elevated, echoing the desktop mouse-drag source's own --dragging opacity fade. */
+.channel-tile-ghost {
+  position: fixed;
+  z-index: 200;
+  display: flex;
+  opacity: 0.92;
   pointer-events: none;
   transition: none;
 }
-.channel-tile-wrap--touch-lifted .channel-tile {
+.channel-tile-ghost .channel-tile {
   box-shadow: 0 14px 30px -8px rgba(0, 0, 0, 0.4);
   transform: scale(1.03);
 }
@@ -147,13 +161,37 @@
     gap: 10px;
   }
 
-  /* Both are already always-visible (no :hover gate to remove) — this is purely enlarging their hit
-     targets for touch, since 24px/26px falls under the ~44px guidance for a comfortably tappable
-     control. */
+  /* No grip handle on mobile — the whole tile is the long-press-to-drag target instead (see
+     ChannelTabGrid.tsx). Its onPointerDown handler stays mounted either way, but hiding the button
+     means there's nothing left to route mouse-only drag-arming through, which is fine — mouse never
+     shows up at this width in practice. */
   .channel-tile__handle {
-    width: 34px;
-    height: 34px;
+    display: none;
   }
+
+  /* The Home-tile "clear" shortcut is redundant with the channel view's own Clear, and on mobile
+     its checkmark icon collided with the tile's copy — dropped there; pause stays. */
+  .channel-tile__ctrl--clear {
+    display: none;
+  }
+
+  /* .channel-tile's justify-content:space-between anchors the name/meta block to the tile's true
+     bottom edge — with only the pause control left there now (34px + 10px offset), reserve that
+     much room so a two-line channel name never renders underneath it. */
+  .channel-tile {
+    padding-bottom: 46px;
+  }
+
+  /* Cheap, native-feeling touch feedback the instant a finger lands, well before the long-press
+     threshold — otherwise a tap gives no visible response at all until either navigation happens
+     (fast) or the drag arms (420ms), which reads as unresponsive. */
+  .channel-tile-wrap:active .channel-tile {
+    transform: scale(0.97);
+    transition: transform 0.1s ease;
+  }
+
+  /* Already always-visible (no :hover gate to remove) — this is purely enlarging its hit target for
+     touch, since 26px falls under the ~44px guidance for a comfortably tappable control. */
   .channel-tile__ctrl {
     width: 34px;
     height: 34px;

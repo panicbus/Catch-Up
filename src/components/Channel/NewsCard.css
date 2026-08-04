@@ -35,7 +35,8 @@
 }
 
 /* The "Read" marker — top-right, tucked just under the action icons. The distinct "you've read
-   this" cue, separate from the dimming and from the (unrelated) "Recent" recency badge. */
+   this" cue, separate from the dimming and from the (unrelated) "Recent" recency badge. Desktop
+   only (see NewsCard.tsx) — mobile uses --inline instead, in the icon row itself. */
 .news-card__read-badge {
   position: absolute;
   top: 40px;
@@ -50,6 +51,13 @@
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.02em;
+}
+
+/* Mobile: sits in .news-card__actions itself, in the checkmark's now-empty slot (see NewsCard.tsx)
+   — no absolute positioning needed since it's a normal member of that flex row. */
+.news-card__read-badge--inline {
+  position: static;
+  margin-right: 4px;
 }
 
 /* Background itself is set inline per-card (see getStoryCardColor in NewsCard.tsx) — hashed by
@@ -244,4 +252,14 @@
 }
 .news-feed__grid .news-card__snippet:not(.news-card__snippet--full) {
   -webkit-line-clamp: 3;
+}
+
+@media (max-width: 767px) {
+  /* The eyebrow row above (channel label + "Recent" badge) already reserves room for the top-right
+     action icons, and channel view always renders it (channelName is always set there) — so the
+     title's OWN padding-right is redundant weight on an already-narrow column, clipping the
+     headline to noticeably less than the tile's real width for no reason once it's below that row. */
+  .news-card__top {
+    padding-right: 0;
+  }
 }

@@ -89,11 +89,11 @@
   color: var(--accent-strong);
 }
 
-/* Mobile keeps this same component (not a fork) for its manage-toggle button — the mockup's
-   "+ Add subchannels" pill is exactly this — but replaces the chip row with SubchannelPicker
-   (ChannelPage.tsx), a dropdown, since flex-wrap chips stack badly at phone width. */
+/* Mobile replaces this whole component with SubchannelPicker (ChannelPage.tsx) — a dropdown, since
+   flex-wrap chips stack badly at phone width, and its own "Manage subchannels" is now the last item
+   in that dropdown's menu instead of a second always-visible button next to it. */
 @media (max-width: 767px) {
-  .subchannel-bar__chip {
+  .subchannel-bar {
     display: none;
   }
 }
