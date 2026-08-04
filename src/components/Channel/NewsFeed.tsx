@@ -121,6 +121,7 @@ function GridSection({
   onArchiveReadInPlace,
   onLocalExit,
   onSwipeDismissed,
+  onLocalUnread,
 }: {
   articles: NewsCardData[];
   isGrid: boolean;
@@ -144,6 +145,9 @@ function GridSection({
   onLocalExit?: (articleId: string) => void;
   /** See NewsCard's onSwipeDismissed — passed straight through so NewsFeed can show its toast. */
   onSwipeDismissed?: () => void;
+  /** See NewsCard's onLocalUnread — passed straight through so an archived card's undo button
+   * moves it back to the main section instantly. */
+  onLocalUnread?: (articleId: string) => void;
 }) {
   const containerClass = isGrid ? 'news-feed__grid' : 'news-feed__list';
 
@@ -168,6 +172,7 @@ function GridSection({
             onArchiveReadInPlace={onArchiveReadInPlace}
             onLocalExit={onLocalExit}
             onSwipeDismissed={onSwipeDismissed}
+            onLocalUnread={onLocalUnread}
             onToggleExpand={() => onToggleExpand(article.id)}
           />
         );
@@ -188,6 +193,7 @@ function DayGroups({
   onArchiveReadInPlace,
   onLocalExit,
   onSwipeDismissed,
+  onLocalUnread,
 }: {
   articles: NewsCardData[];
   viewMode: ViewMode;
@@ -200,6 +206,7 @@ function DayGroups({
   onArchiveReadInPlace?: (articleId: string) => void;
   onLocalExit?: (articleId: string) => void;
   onSwipeDismissed?: () => void;
+  onLocalUnread?: (articleId: string) => void;
 }) {
   const byDay = groupByDay(articles, 'publishedAt');
 
@@ -220,6 +227,7 @@ function DayGroups({
             onArchiveReadInPlace={onArchiveReadInPlace}
             onLocalExit={onLocalExit}
             onSwipeDismissed={onSwipeDismissed}
+            onLocalUnread={onLocalUnread}
           />
         </section>
       ))}
@@ -233,12 +241,14 @@ function ReadArchive({
   removeCardOnUnbookmark,
   expandedArticleId,
   onToggleExpand,
+  onLocalUnread,
 }: {
   articles: NewsCardData[];
   viewMode: ViewMode;
   removeCardOnUnbookmark: boolean;
   expandedArticleId: string | null;
   onToggleExpand: (articleId: string) => void;
+  onLocalUnread?: (articleId: string) => void;
 }) {
   const byDay = groupByDay(articles, 'publishedAt');
   const [openDate, setOpenDate] = useState<string | null>(null);
@@ -275,6 +285,7 @@ function ReadArchive({
                     expandedArticleId={expandedArticleId}
                     onToggleExpand={onToggleExpand}
                     animateReflow={false}
+                    onLocalUnread={onLocalUnread}
                   />
                 </div>
               </div>
@@ -320,6 +331,12 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // long that round trip takes. Never needs clearing: once the real data reloads without them,
   // membership here just stops mattering.
   const [locallyExited, setLocallyExited] = useState<Set<string>>(() => new Set());
+  // Ids whose 'archived' undo button has already been tapped — treated as unread immediately
+  // (overriding the real, not-yet-caught-up article.read), so the card moves back to the main
+  // section right away instead of sitting in the archive for however long the real mutation's
+  // network round trip takes. Pruned once the real data actually catches up (see the effect below)
+  // so this can't grow without bound over a long session.
+  const [locallyUnread, setLocallyUnread] = useState<Set<string>>(() => new Set());
   // Brief confirmation for a swipe-dismissed card — swiping leaves nothing else on screen to say
   // anything happened once the card itself has flown off, unlike the checkmark button (which has
   // its own click flourish right before the card leaves).
@@ -343,18 +360,51 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     swipeToastTimerRef.current = setTimeout(() => setSwipeToast(false), 1800);
   }, []);
 
+  const onLocalUnread = useCallback((articleId: string) => {
+    setLocallyUnread((prev) => {
+      if (prev.has(articleId)) return prev;
+      const next = new Set(prev);
+      next.add(articleId);
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     return () => {
       if (swipeToastTimerRef.current) clearTimeout(swipeToastTimerRef.current);
     };
   }, []);
 
+  // Once the real data catches up (article.read genuinely false), the override has done its job —
+  // drop it so this doesn't just grow forever across a long session.
+  useEffect(() => {
+    if (locallyUnread.size === 0) return;
+    setLocallyUnread((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of prev) {
+        const a = articles.find((art) => art.id === id);
+        if (!a || !a.read) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // Only re-checking against the current articles matters here, not locallyUnread's own identity
+    // (which this effect itself changes) — including it would re-run this on every prune.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [articles]);
+
   const byId = useMemo(() => new Map(articles.map((a) => [a.id, a])), [articles]);
+
+  // True read state, with a just-undone card's real (not-yet-caught-up) `read:true` overridden back
+  // to unread immediately — see locallyUnread above.
+  const isRead = (a: NewsCardData) => a.read && !locallyUnread.has(a.id);
 
   // articles arrive already sorted newest-first (see articlesCache.getArticles). In showReadDimmed
   // mode (The Pool) the cap covers ALL recent stories (read stay, dimmed); otherwise only unread.
-  const baseUnread =
-    !showReadDimmed && (partitionByRead || removeOnRead) ? articles.filter((a) => !a.read) : articles;
+  const baseUnread = !showReadDimmed && (partitionByRead || removeOnRead) ? articles.filter((a) => !isRead(a)) : articles;
   // Intersperse *before* slicing to the cap, not after — groupByDay (used below) always re-sorts
   // each day's own bucket back to pure chronological order, so any interspersing done after grouping
   // can only rearrange whatever already survived this cut. Doing it here means a content-having
@@ -370,8 +420,8 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     (a) => !locallyExited.has(a.id) && (cappedBaseIds.has(a.id) || (catchUpMode && a.read && keepVisible.has(a.id)))
   );
   // Archive gets read cards that AREN'T being kept in place (i.e. swept away with the check button,
-  // or read in a previous session).
-  const archive = partitionByRead ? articles.filter((a) => a.read && !keepVisible.has(a.id)) : [];
+  // or read in a previous session) and haven't just been locally un-archived.
+  const archive = partitionByRead ? articles.filter((a) => isRead(a) && !keepVisible.has(a.id)) : [];
 
   // Source of truth for the celebration + streak. Normally the uncapped unread count (you must clear
   // everything — more slide in under the cap as you go). In showReadDimmed mode (The Pool) the shown
@@ -381,8 +431,8 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // on a network round trip just to notice "you're actually done" would make the celebration lag
   // behind what the screen already shows.
   const trueUnreadCount = showReadDimmed
-    ? cappedBase.reduce((n, a) => (a.read || keepVisible.has(a.id) || locallyExited.has(a.id) ? n : n + 1), 0)
-    : articles.reduce((n, a) => (a.read || keepVisible.has(a.id) || locallyExited.has(a.id) ? n : n + 1), 0);
+    ? cappedBase.reduce((n, a) => (isRead(a) || keepVisible.has(a.id) || locallyExited.has(a.id) ? n : n + 1), 0)
+    : articles.reduce((n, a) => (isRead(a) || keepVisible.has(a.id) || locallyExited.has(a.id) ? n : n + 1), 0);
 
   const markReadInPlace = useCallback((articleId: string, channelId: string) => {
     setKeepVisible((prev) => {
@@ -548,6 +598,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
             onArchiveReadInPlace={catchUpMode && !showReadDimmed ? archiveReadInPlace : undefined}
             onLocalExit={onLocalExit}
             onSwipeDismissed={onSwipeDismissed}
+            onLocalUnread={onLocalUnread}
           />
         </>
       )}
@@ -559,6 +610,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
           removeCardOnUnbookmark={removeCardOnUnbookmark}
           expandedArticleId={expandedArticleId}
           onToggleExpand={toggleExpand}
+          onLocalUnread={onLocalUnread}
         />
       )}
 

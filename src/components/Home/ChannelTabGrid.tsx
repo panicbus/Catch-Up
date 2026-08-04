@@ -376,6 +376,10 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
               setDrag(null);
               setArmedId(null);
             }}
+            // Belt-and-suspenders alongside the CSS -webkit-touch-callout:none (see ChannelTabGrid.css)
+            // — a long press on a link/text can still surface iOS's native context menu even with
+            // that CSS in place in some cases; explicitly blocking the event closes that gap too.
+            onContextMenu={(e) => e.preventDefault()}
             // Touch only: press-and-hold anywhere on the tile arms a drag after LONG_PRESS_MS,
             // unless it's released early (a tap — handled by the grid's onPointerUp/cancelPendingLongPress
             // above, which lets the Link's own onClick navigate normally) or the finger wanders past

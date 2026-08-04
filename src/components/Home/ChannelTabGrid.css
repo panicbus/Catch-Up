@@ -189,13 +189,18 @@
      cover these — but confirmed live that iOS Safari's text-selection magnifier (a DIFFERENT
      mechanism from the link-callout the wrap's rule targets) can still trigger on the actual text
      nodes during the long-press hold even with an ancestor's user-select:none in effect. Setting it
-     directly on every text-bearing element closes that gap. */
+     directly on every text-bearing element AND the <a> itself (links carry their own default
+     -webkit-touch-callout in iOS's UA stylesheet, which an inherited value doesn't reliably beat)
+     closes the gap all the way down. -webkit-user-drag:none additionally stops iOS from offering to
+     drag-copy the link/text itself mid-hold, a separate native affordance from the callout/loupe. */
+  .channel-tile,
   .channel-tile__name,
   .channel-tile__meta,
   .channel-tile__count {
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     user-select: none;
+    -webkit-user-drag: none;
   }
 
   /* The Home-tile "clear" shortcut is redundant with the channel view's own Clear, and on mobile

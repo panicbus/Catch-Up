@@ -118,6 +118,12 @@ interface NewsCardProps {
    * to show a brief "Story archived." toast, since a swipe leaves no other confirmation that
    * anything happened once the card itself has flown off screen. */
   onSwipeDismissed?: () => void;
+  /** Fires the instant the 'archived' undo button is tapped — the parent's cue to treat this
+   * article as unread right away (moving it from the archive back into the main list), instead of
+   * waiting on the real mutation's network round trip to notice. Without this the button had no
+   * visible effect for however long that round trip took, easy to read as "not working" since
+   * there's no exit animation on THIS path to at least show something happened in the meantime. */
+  onLocalUnread?: (articleId: string) => void;
 }
 
 type ExitReason = null | 'read' | 'unbookmark';
@@ -141,6 +147,7 @@ function NewsCardComponent({
   onArchiveReadInPlace,
   onLocalExit,
   onSwipeDismissed,
+  onLocalUnread,
 }: NewsCardProps) {
   // "Reads as done" visually — either a channel's in-place read (readInPlace, which also makes the
   // check button archive it) or The Pool's plain dimmed-read (dimmed, check button just un-reads).
@@ -178,8 +185,11 @@ function NewsCardComponent({
   const handleDismissClick = useCallback(() => {
     if (exitReason) return;
     if (dismissVariant === 'archived') {
-      // Undo — bring an already-filed story back to unread. No fly-off (it isn't leaving this list;
-      // it either stays put here, or moves out of the archive/read section on the reload).
+      // Undo — bring an already-filed story back to unread. No fly-off (it isn't leaving this list
+      // via an exit animation; it moves TO the main section instead) — but the move itself needs to
+      // happen immediately, not after the real mutation's network round trip, or tapping this reads
+      // as doing nothing for however long that takes.
+      onLocalUnread?.(article.id);
       void api.markArticleUnread(article.id, article.channelId);
       revalidateNow();
       return;

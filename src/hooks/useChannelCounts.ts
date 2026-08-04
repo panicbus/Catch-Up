@@ -23,15 +23,33 @@ export function useChannelCounts(channels: Channel[]) {
   const reload = useCallback(() => {
     void Promise.all(
       channels.map((c) =>
-        api.getArticles({ channelId: c.id, subchannelId: null }).then((r) => {
-          const unread = r.articles.filter((a) => !a.read);
-          return [
-            c.id,
-            { unread: unread.length, recent: unread.filter((a) => isNewArticle(a.publishedAt)).length },
-          ] as const;
-        })
+        api.getArticles({ channelId: c.id, subchannelId: null }).then(
+          (r) => {
+            const unread = r.articles.filter((a) => !a.read);
+            return [
+              c.id,
+              { unread: unread.length, recent: unread.filter((a) => isNewArticle(a.publishedAt)).length },
+            ] as const;
+          },
+          // One channel's fetch failing (a rate limit, a network hiccup, a cold-starting server)
+          // must not blank out every OTHER channel's tile too — Promise.all rejects the whole batch
+          // on a single rejection, and the un-caught rejection this used to leave behind meant
+          // setCounts never even ran, silently leaving every tile's count stuck at whatever it last
+          // was (blank, on first load). Skip just this one channel instead.
+          () => null
+        )
       )
-    ).then((pairs) => setCounts(Object.fromEntries(pairs)));
+    ).then((pairs) => {
+      // Merge into the previous counts rather than replacing wholesale, so a channel that failed
+      // this cycle keeps showing its last known good count instead of going blank.
+      setCounts((prev) => {
+        const next = { ...prev };
+        for (const pair of pairs) {
+          if (pair) next[pair[0]] = pair[1];
+        }
+        return next;
+      });
+    });
   }, [channels]);
 
   // Coalesce: a background sweep broadcasts one 'articles' event per channel, and each reload here

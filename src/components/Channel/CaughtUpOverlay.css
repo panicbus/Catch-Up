@@ -35,6 +35,18 @@
   pointer-events: auto;
 }
 
+/* A long "Channel · Subchannel" combination had nothing to stop it running past both edges of the
+   screen — nowrap plus no max-width just let the badge grow as wide as the text needed, regardless
+   of viewport. Wraps and caps at the viewport width (minus the same margin the badge already reads
+   as sitting within) instead. */
+@media (max-width: 767px) {
+  .caught-up-overlay__badge {
+    white-space: normal;
+    max-width: calc(100vw - 32px);
+    text-align: center;
+  }
+}
+
 .caught-up-overlay__text-col {
   display: flex;
   flex-direction: column;

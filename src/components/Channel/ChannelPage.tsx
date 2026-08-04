@@ -397,6 +397,17 @@ export function ChannelPage() {
         <EmptyState
           title="No stories yet"
           body="Catch Up checks for new stories every 30 minutes. Hit Refresh to check now."
+          action={
+            activeSubchannel ? (
+              <button type="button" className="empty-state__action" onClick={() => setSubchannelId(null)}>
+                ← Back to {channel.name}
+              </button>
+            ) : (
+              <button type="button" className="empty-state__action" onClick={() => navigate('/')}>
+                ← Back to home
+              </button>
+            )
+          }
         />
       ) : (
         <NewsFeed
