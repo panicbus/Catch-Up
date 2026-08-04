@@ -16,6 +16,13 @@ interface BookmarkButtonProps {
   /** Fires once the wag+unfill has played, right before the (delayed) real toggle call — the signal
    * for the parent card to start its own fade-out in sync. Only meaningful with animateRemoval. */
   onRemoving?: () => void;
+  /** Fires once the fade-out (BOOKMARK_REMOVE_CARD_FADE_MS) has actually finished playing, right as
+   * the real toggle call goes out — the parent's cue to drop this card from its own render list
+   * immediately, instead of waiting on the network round trip to notice it's gone. Without this the
+   * card's own animation completed instantly but the gap it left stayed empty for however long that
+   * round trip took — the exact same class of bug the swipe-dismiss path already had. Only
+   * meaningful with animateRemoval. */
+  onRemoved?: () => void;
   /** Fires with the new bookmarked state right as a plain (non-animateRemoval) toggle is dispatched.
    * Most callers don't need this — the `bookmarked` prop already comes from a hook that's subscribed
    * to bookmark-change events and re-renders on its own. It exists for the one place that isn't:
@@ -34,6 +41,7 @@ export function BookmarkButton({
   variant = 'overlay',
   animateRemoval,
   onRemoving,
+  onRemoved,
   onToggled,
 }: BookmarkButtonProps) {
   const [bursting, setBursting] = useState(false);
@@ -64,6 +72,7 @@ export function BookmarkButton({
           setForceUnfilled(true);
           onRemoving?.();
           window.setTimeout(() => {
+            onRemoved?.();
             void api.toggleBookmark(articleId, channelId);
             revalidateNow();
           }, BOOKMARK_REMOVE_CARD_FADE_MS);
@@ -77,7 +86,7 @@ export function BookmarkButton({
       if (!bookmarked) setBursting(true);
       onToggled?.(!bookmarked);
     },
-    [articleId, channelId, bookmarked, animateRemoval, onRemoving, onToggled]
+    [articleId, channelId, bookmarked, animateRemoval, onRemoving, onRemoved, onToggled]
   );
 
   // Stops a press on this button from also arming the parent card's mobile swipe-drag tracking,

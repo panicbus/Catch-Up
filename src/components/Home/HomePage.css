@@ -25,6 +25,16 @@
   z-index: 1;
 }
 
+/* The rule above gives every direct child the SAME z-index (1) — tied stacking contexts fall back
+   to DOM order, so "Your channels" (later in the JSX) was painting over the streak card's own
+   subtree, including its info tooltip, regardless of the tooltip's own (locally-scoped) z-index.
+   Same specificity as the rule above (one class + child combinator), placed after it so it wins the
+   tie-break — this only ever matters while the tooltip is open; nothing else on this page overlaps
+   the streak card spatially. */
+.home-page > .home-page__mobile-streak {
+  z-index: 2;
+}
+
 .home-page__utility-bar {
   display: flex;
   align-items: center;

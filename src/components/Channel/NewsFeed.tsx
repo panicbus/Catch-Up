@@ -64,6 +64,11 @@ interface NewsFeedProps {
    * transition is then treated as a manual clear — no celebration, no streak advance. Consumed
    * (reset to false) once handled. */
   suppressCelebrationRef?: { current: boolean };
+  /** Set only when `channelName` is itself a narrower filter (a subchannel) than the whole channel
+   * — lets the caught-up celebration offer "Back to {parentChannelName}" to step back out to the
+   * unfiltered view. See AllCaughtUp/CaughtUpOverlay, which both take this straight through. */
+  parentChannelName?: string;
+  onBackToParent?: () => void;
 }
 
 /** Imperative handle for parents (ChannelPage's "move read to archive" button). */
@@ -294,6 +299,8 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     showReadDimmed = false,
     onReadInPlaceCountChange,
     suppressCelebrationRef,
+    parentChannelName,
+    onBackToParent,
   }: NewsFeedProps,
   ref
 ) {
@@ -509,13 +516,23 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   return (
     <div className="news-feed" ref={feedRef}>
       {showFullCaughtUp ? (
-        <AllCaughtUp channelName={channelName} celebrate={justCleared} />
+        <AllCaughtUp
+          channelName={channelName}
+          celebrate={justCleared}
+          parentChannelName={parentChannelName}
+          onBackToParent={onBackToParent}
+        />
       ) : (
         <>
           {/* Just reached zero this session, with the cleared cards still shown dimmed in place —
               float the reward over them instead of replacing the feed. */}
           {caughtUp && mainArticles.length > 0 && !celebrationDismissed && (
-            <CaughtUpOverlay channelName={channelName} onClose={() => setCelebrationDismissed(true)} />
+            <CaughtUpOverlay
+              channelName={channelName}
+              onClose={() => setCelebrationDismissed(true)}
+              parentChannelName={parentChannelName}
+              onBackToParent={onBackToParent}
+            />
           )}
           <DayGroups
             articles={mainArticles}

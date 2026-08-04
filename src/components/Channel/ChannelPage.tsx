@@ -228,10 +228,11 @@ export function ChannelPage() {
     revalidateNow();
   };
 
-  // The "All caught up on X!" message should name whatever you're actually viewing — the active
-  // subchannel when one is selected, otherwise the whole channel.
+  // The "All caught up in X!" message should name whatever you're actually viewing — the channel
+  // AND the active subchannel when one is selected (matching the header's own "Tech · Jobs"), not
+  // just the subchannel alone, which read as if the channel itself had been dropped.
   const activeSubchannel = subchannelId ? channel.subchannels.find((s) => s.id === subchannelId) : null;
-  const caughtUpName = activeSubchannel?.name ?? channel.name;
+  const caughtUpName = activeSubchannel ? `${channel.name} · ${activeSubchannel.name}` : channel.name;
 
   // While paused, the channel view is replaced by a grayed "on a break" takeover — only Resume acts.
   if (isChannelPaused(channel.pausedUntil)) {
@@ -406,6 +407,8 @@ export function ChannelPage() {
           maxUnreadStories={settings.maxStoriesShown}
           onReadInPlaceCountChange={setReadInPlaceCount}
           suppressCelebrationRef={clearSuppressRef}
+          parentChannelName={activeSubchannel ? channel.name : undefined}
+          onBackToParent={activeSubchannel ? () => setSubchannelId(null) : undefined}
         />
       )}
     </div>

@@ -20,6 +20,12 @@
   padding: 24px;
   width: 380px;
   max-width: calc(100vw - 40px);
+  /* Nothing here capped height at all — a modal whose content (e.g. Roll the Dice previewing a
+     long article) grew taller than the viewport just overflowed off both the top AND bottom with
+     no way to reach whatever scrolled out of view, including the Close button itself. Capped and
+     scrollable internally instead, mirroring the width clamp just above. */
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
 }
 
 /* Below 767px the sidebar is hidden (replaced by the bottom nav — see AppShell.css), so offsetting

@@ -6,10 +6,18 @@ import './CaughtUpOverlay.css';
  * duration so the countdown is visible. */
 const DISMISS_MS = 4000;
 
+interface CaughtUpOverlayProps {
+  channelName: string;
+  onClose: () => void;
+  /** See AllCaughtUp's identical props — set only when viewing a subchannel. */
+  parentChannelName?: string;
+  onBackToParent?: () => void;
+}
+
 /** The "All caught up!" reward — a floating card layered over the just-cleared cards. Confetti
  * bursts once on appearance; it auto-dismisses after DISMISS_MS (with a filling timer bar), and the
  * close button dismisses it early. It returns on the next fresh catch-up. */
-export function CaughtUpOverlay({ channelName, onClose }: { channelName: string; onClose: () => void }) {
+export function CaughtUpOverlay({ channelName, onClose, parentChannelName, onBackToParent }: CaughtUpOverlayProps) {
   const [confettiDone, setConfettiDone] = useState(false);
 
   // Auto-dismiss once, DISMISS_MS after mount. A ref keeps us on the latest onClose without the
@@ -29,7 +37,14 @@ export function CaughtUpOverlay({ channelName, onClose }: { channelName: string;
             <ConfettiEffect pieceCount={90} durationMs={2500} onDone={() => setConfettiDone(true)} />
           )}
         </span>
-        <span className="caught-up-overlay__text">All caught up in {channelName}!</span>
+        <span className="caught-up-overlay__text-col">
+          <span className="caught-up-overlay__text">All caught up in {channelName}!</span>
+          {parentChannelName && onBackToParent && (
+            <button type="button" className="caught-up-overlay__back" onClick={onBackToParent}>
+              ← Back to {parentChannelName}
+            </button>
+          )}
+        </span>
         <button
           type="button"
           className="caught-up-overlay__close"

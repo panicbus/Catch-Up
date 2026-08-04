@@ -288,6 +288,7 @@ function NewsCardComponent({
           bookmarked={article.bookmarked}
           animateRemoval={removeCardOnUnbookmark}
           onRemoving={() => setExitReason('unbookmark')}
+          onRemoved={() => onLocalExit?.(article.id)}
           onToggled={onBookmarkToggled}
         />
       </div>

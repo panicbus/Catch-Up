@@ -185,6 +185,19 @@
     user-select: none;
   }
 
+  /* Belt-and-suspenders: user-select is inherited, so the wrap's own rule above should already
+     cover these — but confirmed live that iOS Safari's text-selection magnifier (a DIFFERENT
+     mechanism from the link-callout the wrap's rule targets) can still trigger on the actual text
+     nodes during the long-press hold even with an ancestor's user-select:none in effect. Setting it
+     directly on every text-bearing element closes that gap. */
+  .channel-tile__name,
+  .channel-tile__meta,
+  .channel-tile__count {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
   /* The Home-tile "clear" shortcut is redundant with the channel view's own Clear, and on mobile
      its checkmark icon collided with the tile's copy — dropped there; pause stays. */
   .channel-tile__ctrl--clear {
