@@ -404,16 +404,6 @@ export async function setAiProvider(userId: string, provider: AiProvider | null)
   await prisma.settings.update({ where: { userId }, data: { aiProvider: provider } });
 }
 
-export async function getGeminiApiKey(userId: string): Promise<string | null> {
-  const settings = await prisma.settings.findUniqueOrThrow({ where: { userId } });
-  return settings.aiApiKey;
-}
-
-export async function hasGeminiApiKey(userId: string): Promise<boolean> {
-  const settings = await prisma.settings.findUniqueOrThrow({ where: { userId } });
-  return !!settings.aiApiKey;
-}
-
 export async function setGeminiApiKey(userId: string, key: string | null): Promise<void> {
   await prisma.settings.update({
     where: { userId },
@@ -421,26 +411,11 @@ export async function setGeminiApiKey(userId: string, key: string | null): Promi
   });
 }
 
-export async function getGroqApiKey(userId: string): Promise<string | null> {
-  const settings = await prisma.settings.findUniqueOrThrow({ where: { userId } });
-  return settings.groqApiKey;
-}
-
-export async function hasGroqApiKey(userId: string): Promise<boolean> {
-  const settings = await prisma.settings.findUniqueOrThrow({ where: { userId } });
-  return !!settings.groqApiKey;
-}
-
 export async function setGroqApiKey(userId: string, key: string | null): Promise<void> {
   await prisma.settings.update({
     where: { userId },
     data: { groqApiKey: key && key.trim() ? key.trim() : null },
   });
-}
-
-export async function getOllamaModel(userId: string): Promise<string> {
-  const settings = await prisma.settings.findUniqueOrThrow({ where: { userId } });
-  return settings.ollamaModel;
 }
 
 export async function setOllamaModel(userId: string, model: string): Promise<void> {

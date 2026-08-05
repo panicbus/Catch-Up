@@ -88,9 +88,19 @@ export function registerIpcHandlers({ dataStore, articlesCache, classificationSt
     // channelIds (The Pool's multi-channel path) exists for the web build, where it collapses one
     // request per channel into one. Desktop reads from an in-memory cache where that fan-out cost
     // nothing, so this just concatenates — same result, no network involved either way.
+    //
+    // params.limit here is the caller's GLOBAL budget (usePoolArticles.ts sends
+    // MAX_PER_CHANNEL * channels.length), not a per-channel one. Passing it straight through to
+    // each channel's own getArticles(id, null, limit) would let every channel contribute up to its
+    // *entire* cache (typically ~300 articles), so a single busy channel could crowd quieter ones
+    // out of the merged result entirely — a real behavior change from the app's original "every
+    // channel gets its fair share" Pool, which this call is not meant to alter. Dividing the budget
+    // back out per channel restores that guarantee: with the caller's own math, this recovers
+    // exactly MAX_PER_CHANNEL when every requested channel is included.
     if (params.channelIds?.length) {
+      const perChannelLimit = params.limit ? Math.ceil(params.limit / params.channelIds.length) : undefined;
       const merged = params.channelIds
-        .flatMap((id) => articlesCache.getArticles(id, null, params.limit))
+        .flatMap((id) => articlesCache.getArticles(id, null, perChannelLimit))
         .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
         .slice(0, params.limit ?? undefined);
       return { articles: merged.map((a) => toArticle(a, dataStore)) };

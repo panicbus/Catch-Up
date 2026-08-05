@@ -153,6 +153,14 @@ function syncPollTimer(): void {
     clearInterval(pollTimer);
     pollTimer = null;
   }
+  // Also cancel any poll a mutation queued via revalidateNow() moments ago. Without this, a
+  // bookmark/dismiss right before backgrounding the tab (or before the last listener unmounts)
+  // left its debounced timeout to fire anyway a few hundred ms later — one request slipping through
+  // after we've just decided nothing should be polling.
+  if (!shouldRun && revalidateTimer) {
+    clearTimeout(revalidateTimer);
+    revalidateTimer = null;
+  }
 }
 
 function webOnDataChanged(listener: (event: DataChangeEvent) => void): () => void {

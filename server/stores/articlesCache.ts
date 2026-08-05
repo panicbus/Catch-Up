@@ -315,15 +315,29 @@ export async function getRandomArticle(
   // pulled EVERY article the user owns (all columns, no limit) plus their entire read-state and
   // bookmark tables — well over a megabyte of database transfer to return a single story. Two
   // queries at a few hundred bytes each do the same job.
-  const total = await prisma.article.count({ where });
-  if (total === 0) return null;
-  const [pick] = await prisma.article.findMany({
-    where,
-    select: ARTICLE_SELECT,
-    skip: Math.floor(Math.random() * total),
-    take: 1,
-  });
-  if (!pick) return null; // a concurrent prune could delete the row between the count and the read
+  //
+  // Both run in ONE repeatable-read transaction, and the findMany has an explicit orderBy — Postgres
+  // gives no ordering guarantee for skip/take without one, so without both of these a `skip` derived
+  // from `count` isn't guaranteed to line up with the same query run a moment later (a concurrent
+  // insert from the scheduled refresh, or simply a different query plan, could shift what's at a
+  // given offset). Repeatable-read pins both statements to one consistent snapshot, closing that gap
+  // entirely rather than just the delete case the id ordering alone would leave open.
+  const pick = await prisma.$transaction(
+    async (tx) => {
+      const total = await tx.article.count({ where });
+      if (total === 0) return null;
+      const [row] = await tx.article.findMany({
+        where,
+        select: ARTICLE_SELECT,
+        orderBy: { id: 'asc' },
+        skip: Math.floor(Math.random() * total),
+        take: 1,
+      });
+      return row ?? null;
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }
+  );
+  if (!pick) return null;
   // Two point lookups on the one article we actually picked, rather than both tables in full.
   const [readRow, bookmarkRow] = await Promise.all([
     prisma.readState.findUnique({ where: { userId_articleId: { userId, articleId: pick.id } } }),
