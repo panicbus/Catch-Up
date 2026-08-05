@@ -8,18 +8,17 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { router } from './routes';
-import { passwordGate, failedAuthLimiter } from './passwordGate';
 
 const PORT = Number(process.env.PORT) || 3001;
 
 // Local dev origins, used ONLY as the fallback when ALLOWED_ORIGINS is unset. Deliberately NOT a
-// wildcard: an unset variable in a real deployment must not silently open the API to every origin
-// (the password gate already fails closed in that situation — these two should agree).
+// wildcard, even though there's no auth in front of the API right now — an unset variable in a real
+// deployment shouldn't additionally invite every origin in a browser.
 const DEV_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:5174', 'http://127.0.0.1:5174'];
 
 // Comma-separated list of exact website origins allowed to call this API (e.g. the Vercel site's
 // address). Note this is a browser-enforced control, not a real security boundary — a direct
-// (non-browser) request ignores it entirely. The password gate is the actual access control.
+// (non-browser) request ignores it entirely.
 const configuredOrigins = (process.env.ALLOWED_ORIGINS ?? '')
   .split(',')
   .map((s) => s.trim())
@@ -36,7 +35,10 @@ app.use(express.json({ limit: '1mb' }));
 app.use(cors({ origin: allowedOrigins }));
 
 // Broad ceiling on total traffic. Sized well above real use (the web app polls every ~20s and
-// fans out per channel) so it only catches genuine runaway/abusive volume.
+// fans out per channel) so it only catches genuine runaway/abusive volume. With the shared-password
+// gate removed (2026-08-05), this is now the ONLY thing between the API and a runaway script — so
+// it stays, and it deliberately isn't the per-IP brute-force limiter that used to sit beside it
+// (that one locked the owner out of his own site during an unrelated outage).
 app.use(
   '/api',
   rateLimit({ windowMs: 15 * 60 * 1000, limit: 2000, standardHeaders: 'draft-7', legacyHeaders: false })
@@ -46,7 +48,13 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-app.use('/api', failedAuthLimiter, passwordGate, router);
+// No authentication in front of the router. Deliberate and temporary: the shared password was
+// removed because it was pure friction for a single-owner site while providing little real
+// protection (the API address is discoverable in the public repo and in the site's own network
+// traffic). Real Google sign-in is the planned replacement — until it ships, anyone who finds this
+// address can read and modify this account's channels and stories. Provider API keys are still
+// safe: they live in Settings and are never returned to any client.
+app.use('/api', router);
 
 // Last-resort handler so a throw anywhere in the stack becomes a clean 500 instead of a dangling
 // request (or a leaked stack trace). Must keep all four parameters — that's how Express

@@ -5,7 +5,6 @@ import type {
   Channel,
   DataChangeEvent,
 } from '../../ipc-contract';
-import { clearSitePassword, getSitePassword } from './sitePassword';
 import * as channelsStore from './channelsStore';
 
 // --- Desktop build: talk to the Electron bridge exactly as before ------------------------------
@@ -73,18 +72,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'X-Site-Password': getSitePassword() ?? '',
       ...options.headers,
     },
   });
-  if (res.status === 401) {
-    // The stored password was rejected (changed server-side, or never valid) — clear it and
-    // reload so PasswordGate re-prompts, rather than the app silently failing every call.
-    clearSitePassword();
-    window.location.reload();
-    // Never resolves — the reload above is already in flight; this just satisfies the return type.
-    return new Promise<T>(() => {});
-  }
+  // A 401 used to mean "the stored shared password was rejected", and this cleared it and reloaded
+  // so the gate could re-prompt. With no gate there's nothing to re-prompt for, and reloading on
+  // every failed call would spin forever — so a 401 is now just an error like any other status.
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body?.error || `Request failed: ${res.status}`);
   return body as T;
@@ -148,37 +141,61 @@ async function doPoll(): Promise<void> {
   }
 }
 
+/** Whether the poll interval should be running at all: someone has to be listening AND the tab has
+ * to be visible. A hidden tab polling every 20s forever was a real cost — it kept fetching (and
+ * kept the database awake) all night for a tab left open on a phone or a second monitor. */
+function syncPollTimer(): void {
+  const shouldRun = listeners.size > 0 && (typeof document === 'undefined' || document.visibilityState === 'visible');
+  if (shouldRun && !pollTimer) {
+    pollTimer = setInterval(poll, POLL_INTERVAL_MS);
+  } else if (!shouldRun && pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
 function webOnDataChanged(listener: (event: DataChangeEvent) => void): () => void {
   listeners.add(listener);
-  if (!pollTimer) pollTimer = setInterval(poll, POLL_INTERVAL_MS);
+  syncPollTimer();
   return () => {
     listeners.delete(listener);
-    if (listeners.size === 0 && pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
+    syncPollTimer();
   };
 }
+
+/** How long revalidateNow() waits before actually polling, so a burst of mutations collapses into
+ * one. Short enough to still feel immediate; long enough to absorb a rapid sequence of actions. */
+const REVALIDATE_DEBOUNCE_MS = 600;
+let revalidateTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Ask for a poll right now instead of waiting for the next interval tick — for a web mutation that
  * just succeeded and shouldn't sit behind up to 20s of staleness before its effects (articles,
  * streak, bookmarks, etc. beyond what the mutation's own optimistic update already covers) show up.
  * A no-op on desktop, which gets real push notifications instead (main/ipcHandlers.ts's broadcast())
  * and has no poll loop to restart — so call sites never need to branch on which build they're in.
- * Restarts the interval so this doesn't leave a redundant tick moments later. */
+ *
+ * Trailing-debounced: several call sites fire in quick succession (bookmarking, dismissing, and
+ * previously every single story scrolled past), and each undebounced call was a full poll cycle —
+ * one feed scroll could trigger dozens. Restarts the interval too, so this doesn't leave a redundant
+ * tick moments later. */
 export function revalidateNow(): void {
   if (typeof window !== 'undefined' && window.api) return;
-  void poll();
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = setInterval(poll, POLL_INTERVAL_MS);
-  }
+  if (revalidateTimer) clearTimeout(revalidateTimer);
+  revalidateTimer = setTimeout(() => {
+    revalidateTimer = null;
+    void poll();
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = setInterval(poll, POLL_INTERVAL_MS);
+    }
+  }, REVALIDATE_DEBOUNCE_MS);
 }
 
 if (typeof document !== 'undefined') {
-  // Coming back to a backgrounded tab shouldn't wait up to 20s to feel fresh — this is the
-  // cheapest possible "did anything happen while I was away" check.
+  // Stop polling entirely while the tab is hidden, and catch up on return — coming back to a
+  // backgrounded tab shouldn't wait up to 20s to feel fresh.
   document.addEventListener('visibilitychange', () => {
+    syncPollTimer();
     if (document.visibilityState === 'visible') revalidateNow();
   });
 }

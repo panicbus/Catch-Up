@@ -8,11 +8,11 @@ interface Options {
   channelId?: string | null;
   /** Also reload on 'bookmarks' events — for views that render bookmark state, not just read state. */
   includeBookmarks?: boolean;
-  /** Coalesce bursts of events into a single reload after this many ms of quiet. Default 0 = reload
-   * immediately per event (preserves snappy read-state reflection for views that dim/remove cards as
-   * you scroll past them). Opt in only where a lag is invisible AND the burst is costly — e.g. the
-   * home tiles, where a background sweep broadcasts one 'articles' event PER channel and each reload
-   * re-fans-out every channel. */
+  /** Coalesce bursts of events into a single reload after this many ms of quiet. Opt in to a real
+   * delay only where a lag is invisible AND the burst is costly — e.g. the home tiles, where one
+   * poll broadcasts an 'articles' event PER channel and each reload re-fans-out every channel.
+   *
+   * Note that 0 (the default) is NOT "no coalescing" — see the scheduler below. */
   debounceMs?: number;
 }
 
@@ -27,18 +27,21 @@ export function useReloadOnDataChange(reload: () => void, options: Options = {})
     reload();
 
     let timer: ReturnType<typeof setTimeout> | null = null;
-    // debounceMs <= 0 → reload synchronously in the handler (no timer), matching the pre-refactor
-    // immediate behavior exactly. Otherwise coalesce a burst into one trailing reload.
-    const schedule =
-      debounceMs > 0
-        ? () => {
-            if (timer) clearTimeout(timer);
-            timer = setTimeout(() => {
-              timer = null;
-              reload();
-            }, debounceMs);
-          }
-        : reload;
+    // Always trailing-debounced, including at debounceMs: 0 (which becomes setTimeout(…, 0) — the
+    // same macrotask, still before paint, so it stays visually immediate).
+    //
+    // This used to call `reload` synchronously per event at 0, which was a real cost: one poll tick
+    // delivers 'articles' + 'readState' + 'bookmarks' in a single synchronous loop, so a channel
+    // page fired THREE identical /articles requests every 20 seconds and Bookmarks fired two. The
+    // duplicates were pure waste — same tick, same response. Coalescing here fixes it once for
+    // every consumer instead of per hook.
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        reload();
+      }, debounceMs);
+    };
 
     const unsubscribe = api.onDataChanged((event: DataChangeEvent) => {
       const relevant =

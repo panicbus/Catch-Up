@@ -236,6 +236,17 @@ export async function toggleBookmark(
 
 export async function getBookmarksByChannel(userId: string): Promise<Record<string, BookmarkEntry[]>> {
   const bookmarks = await prisma.bookmark.findMany({ where: { userId }, orderBy: { bookmarkedAt: 'desc' } });
+  // One batched read-state lookup instead of the previous `await isRead(...)` inside the loop, which
+  // was a separate database round trip per bookmark — and, being awaited in sequence, made the whole
+  // response as slow as the sum of them.
+  const readIds = new Set(
+    (
+      await prisma.readState.findMany({
+        where: { userId, articleId: { in: bookmarks.map((b) => b.articleId) } },
+        select: { articleId: true },
+      })
+    ).map((r) => r.articleId)
+  );
   const byChannel: Record<string, BookmarkEntry[]> = {};
   for (const b of bookmarks) {
     (byChannel[b.channelId] ??= []).push({
@@ -245,7 +256,7 @@ export async function getBookmarksByChannel(userId: string): Promise<Record<stri
       articleId: b.articleId,
       bookmarkedAt: b.bookmarkedAt.toISOString(),
       articleSnapshot: b.articleSnapshot as unknown as BookmarkEntry['articleSnapshot'],
-      read: await isRead(userId, b.articleId),
+      read: readIds.has(b.articleId),
     });
   }
   return byChannel;
@@ -349,12 +360,44 @@ export async function setSettings(userId: string, partial: Partial<AppSettings>)
 
 // --- AI relevance filtering ---------------------------------------------------------------------
 
+export interface AiSettings {
+  provider: AiProvider | null;
+  geminiApiKey: string | null;
+  groqApiKey: string | null;
+  ollamaModel: string;
+}
+
+/** Everything the AI layer needs, in ONE selected read. The individual getters below each issue
+ * their own `findUniqueOrThrow` for the same row, so the two callers that want several at once
+ * (`GET /ai-config` and refreshAgent's per-channel setup) were reading the same Settings row four
+ * times per call — four full-row fetches where one narrow one does. The single-value getters are
+ * kept for the routes that genuinely only need one thing. */
+export async function getAiSettings(userId: string): Promise<AiSettings> {
+  const s = await prisma.settings.findUniqueOrThrow({
+    where: { userId },
+    select: { aiProvider: true, aiEnabled: true, aiApiKey: true, groqApiKey: true, ollamaModel: true },
+  });
+  return {
+    provider: aiProviderFrom(s),
+    geminiApiKey: s.aiApiKey,
+    groqApiKey: s.groqApiKey,
+    ollamaModel: s.ollamaModel,
+  };
+}
+
 /** null on rows saved before providers existed — falls back to the legacy aiEnabled+aiApiKey pair
  * (Gemini was the only provider then, so "on" with a key stored unambiguously meant Gemini). */
+function aiProviderFrom(s: { aiProvider: string | null; aiEnabled: boolean; aiApiKey: string | null }): AiProvider | null {
+  if (s.aiProvider) return s.aiProvider as AiProvider;
+  return s.aiEnabled && s.aiApiKey ? 'gemini' : null;
+}
+
 export async function getAiProvider(userId: string): Promise<AiProvider | null> {
-  const settings = await prisma.settings.findUniqueOrThrow({ where: { userId } });
-  if (settings.aiProvider) return settings.aiProvider as AiProvider;
-  return settings.aiEnabled && settings.aiApiKey ? 'gemini' : null;
+  const settings = await prisma.settings.findUniqueOrThrow({
+    where: { userId },
+    select: { aiProvider: true, aiEnabled: true, aiApiKey: true },
+  });
+  return aiProviderFrom(settings);
 }
 
 export async function setAiProvider(userId: string, provider: AiProvider | null): Promise<void> {

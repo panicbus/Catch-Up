@@ -23,7 +23,7 @@ function PersonIcon() {
 
 /** Mobile-only — desktop reaches the brand mark and streak card through the sidebar, which is
  * hidden below 767px (see AppShell.css), so both need a mobile home for them. There's no account
- * system yet (the whole site sits behind one shared password, see PasswordGate), so "Sign in" is a
+ * system yet (the site has no auth at all right now — see server/index.ts), so "Sign in" is a
  * placeholder for the future per-user auth phase — it renders as designed but only ever shows a
  * short note that accounts are coming, never a real sign-in flow. */
 function MobileTopBar() {

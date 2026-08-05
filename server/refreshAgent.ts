@@ -86,13 +86,13 @@ export async function runChannel(
   }
 
   const profile = channelProfile(channel.name);
-  const [settings, provider, geminiKey, groqKey] = await Promise.all([
+  // Two reads, not four: getAiProvider/getGeminiApiKey/getGroqApiKey each used to fetch the whole
+  // Settings row separately, per channel, on every cron run.
+  const [settings, ai] = await Promise.all([
     dataStore.getSettings(userId),
-    dataStore.getAiProvider(userId),
-    dataStore.getGeminiApiKey(userId),
-    dataStore.getGroqApiKey(userId),
+    dataStore.getAiSettings(userId),
   ]);
-  const aiConfig = buildAiConfig(provider, geminiKey, groqKey);
+  const aiConfig = buildAiConfig(ai.provider, ai.geminiApiKey, ai.groqApiKey);
   const homeLocation = settings.homeLocation;
   const classificationStore = new ServerClassificationStore(userId);
 

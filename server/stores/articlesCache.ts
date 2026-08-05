@@ -19,7 +19,30 @@ const MAX_UNREAD_PER_CHANNEL = 100;
 const MAX_GOOGLE_NEWS_RSS_PER_CHANNEL = 15;
 const GOOGLE_NEWS_RSS_PROVIDER_ID = 'googlenewsrss';
 
-function toArticle(a: PrismaArticle, read: boolean, bookmarked: boolean): Article {
+/** Exactly the columns toArticle() below reads — deliberately NOT the whole row. Notably excludes
+ * `titleDedupeKey` (internal to prune's fuzzy collapse) and `userId` (the caller already knows it),
+ * neither of which is ever sent to a client. Shared by every read path so they can't drift. */
+const ARTICLE_SELECT = {
+  id: true,
+  url: true,
+  title: true,
+  snippet: true,
+  source: true,
+  sourceDomain: true,
+  imageUrl: true,
+  publishedAt: true,
+  fetchedAt: true,
+  provider: true,
+  channelId: true,
+  subchannelId: true,
+  paywalled: true,
+} as const;
+
+/** The narrowed row shape ARTICLE_SELECT produces. Typed off PrismaArticle rather than restated, so
+ * a schema change still flows through and typecheck catches any mismatch. */
+type SelectedArticle = Pick<PrismaArticle, keyof typeof ARTICLE_SELECT>;
+
+function toArticle(a: SelectedArticle, read: boolean, bookmarked: boolean): Article {
   return {
     id: a.id,
     url: a.url,
@@ -45,14 +68,20 @@ export async function getArticles(
   subchannelId?: string | null,
   limit = 300
 ): Promise<Article[]> {
-  const [rows, readIds, bookmarkedIds] = await Promise.all([
-    prisma.article.findMany({
-      where: { userId, channelId, ...(subchannelId ? { subchannelId } : {}) },
-      orderBy: { publishedAt: 'desc' },
-      take: limit,
-    }),
-    prisma.readState.findMany({ where: { userId }, select: { articleId: true } }),
-    prisma.bookmark.findMany({ where: { userId }, select: { articleId: true } }),
+  const rows = await prisma.article.findMany({
+    where: { userId, channelId, ...(subchannelId ? { subchannelId } : {}) },
+    orderBy: { publishedAt: 'desc' },
+    take: limit,
+    select: ARTICLE_SELECT,
+  });
+  // Scoped to the articles actually being returned. Previously both of these pulled the user's
+  // ENTIRE read-state and bookmark tables on every call — and this endpoint is hit several times
+  // per 20-second poll tick, per channel. That made each call cost O(the user's whole history)
+  // instead of O(one page of one channel).
+  const ids = rows.map((r) => r.id);
+  const [readIds, bookmarkedIds] = await Promise.all([
+    prisma.readState.findMany({ where: { userId, articleId: { in: ids } }, select: { articleId: true } }),
+    prisma.bookmark.findMany({ where: { userId, articleId: { in: ids } }, select: { articleId: true } }),
   ]);
   const read = new Set(readIds.map((r) => r.articleId));
   const bookmarked = new Set(bookmarkedIds.map((b) => b.articleId));
@@ -133,13 +162,26 @@ export async function merge(
  * round-trip. */
 async function prune(userId: string, channelId: string): Promise<Set<string>> {
   const cutoff = new Date(Date.now() - MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
-  const [rows, readRows] = await Promise.all([
-    prisma.article.findMany({
-      where: { userId, channelId, publishedAt: { gte: cutoff } },
-      orderBy: { publishedAt: 'desc' },
-    }),
-    prisma.readState.findMany({ where: { userId }, select: { articleId: true } }),
-  ]);
+  // `select` is load-bearing, not tidiness: this used to fetch every column (title, snippet, url,
+  // imageUrl…) of up to MAX_COUNT rows, and prune() runs once per refresh TARGET — channel plus its
+  // staggered subchannels — on every cron cycle. Together with the unscoped read-state pull below
+  // it was the single largest consumer of the database's data-transfer quota, which it eventually
+  // exhausted entirely (2026-08-05 outage). The four fields here are exactly what the rules below
+  // use: `titleDedupeKey` (fuzzy collapse), `id` (read lookup + delete set), `provider` (the
+  // Google-News-RSS share cap), `publishedAt` (its sort). Adding a rule that needs a fifth field
+  // means adding it here too — a missing one fails as silently-wrong pruning, not a crash.
+  const rows = await prisma.article.findMany({
+    where: { userId, channelId, publishedAt: { gte: cutoff } },
+    orderBy: { publishedAt: 'desc' },
+    select: { id: true, titleDedupeKey: true, provider: true, publishedAt: true },
+  });
+  // Scoped to just these articles rather than the user's entire read-state history. Sequential
+  // rather than the previous Promise.all because it now depends on `rows` — irrelevant here, this
+  // only ever runs on the background refresh path.
+  const readRows = await prisma.readState.findMany({
+    where: { userId, articleId: { in: rows.map((r) => r.id) } },
+    select: { articleId: true },
+  });
   const readIds = new Set(readRows.map((r) => r.articleId));
 
   const seenKeys = new Set<string>();
@@ -196,20 +238,28 @@ export async function getRandomArticle(
   excludeIds: Set<string>,
   channelIds?: string[] | null
 ): Promise<Article | null> {
-  const [rows, readIds, bookmarkedIds] = await Promise.all([
-    prisma.article.findMany({
-      where: {
-        userId,
-        ...(channelIds && channelIds.length > 0 ? { channelId: { in: channelIds } } : {}),
-        id: { notIn: [...excludeIds] },
-      },
-    }),
-    prisma.readState.findMany({ where: { userId }, select: { articleId: true } }),
-    prisma.bookmark.findMany({ where: { userId }, select: { articleId: true } }),
+  const where = {
+    userId,
+    ...(channelIds && channelIds.length > 0 ? { channelId: { in: channelIds } } : {}),
+    id: { notIn: [...excludeIds] },
+  };
+  // Count-then-offset instead of loading every candidate row and picking one in JS. The old version
+  // pulled EVERY article the user owns (all columns, no limit) plus their entire read-state and
+  // bookmark tables — well over a megabyte of database transfer to return a single story. Two
+  // queries at a few hundred bytes each do the same job.
+  const total = await prisma.article.count({ where });
+  if (total === 0) return null;
+  const [pick] = await prisma.article.findMany({
+    where,
+    select: ARTICLE_SELECT,
+    skip: Math.floor(Math.random() * total),
+    take: 1,
+  });
+  if (!pick) return null; // a concurrent prune could delete the row between the count and the read
+  // Two point lookups on the one article we actually picked, rather than both tables in full.
+  const [readRow, bookmarkRow] = await Promise.all([
+    prisma.readState.findUnique({ where: { userId_articleId: { userId, articleId: pick.id } } }),
+    prisma.bookmark.findUnique({ where: { userId_articleId: { userId, articleId: pick.id } } }),
   ]);
-  if (rows.length === 0) return null;
-  const pick = rows[Math.floor(Math.random() * rows.length)];
-  const read = new Set(readIds.map((r) => r.articleId));
-  const bookmarked = new Set(bookmarkedIds.map((b) => b.articleId));
-  return toArticle(pick, read.has(pick.id), bookmarked.has(pick.id));
+  return toArticle(pick, !!readRow, !!bookmarkRow);
 }

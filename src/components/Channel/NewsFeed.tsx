@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { groupByDay } from '../../utils/groupByDay';
 import { intersperseByContent } from '../../utils/intersperseByContent';
 import { formatDateHeader } from '../../services/formatters';
-import { api, revalidateNow } from '../../services/api';
+import { api } from '../../services/api';
 import { useScrollCatchUp } from '../../hooks/useScrollCatchUp';
 import { NewsCard, type NewsCardData } from './NewsCard';
 import { AllCaughtUp } from './AllCaughtUp';
@@ -440,11 +440,16 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
       next.add(articleId);
       return next;
     });
+    // Deliberately does NOT call revalidateNow(). This runs once per story scrolled past (see
+    // useScrollCatchUp's observer) and once per remaining card on reaching the bottom, so a single
+    // feed scroll fired dozens of full poll cycles — a large share of the database traffic that
+    // eventually exhausted the hosting quota. Nothing is lost by omitting it: setKeepVisible above
+    // already updates the screen immediately, and the next ordinary poll reconciles the rest.
+    //
     // Guarded — this app has no error boundary, so a throw here (e.g. a stale preload bundle after a
     // main-process change, pre-restart) would otherwise blank the whole app instead of just skipping.
     try {
       void api.markArticleRead(articleId, channelId)?.catch((err) => console.error('[NewsFeed] markRead failed', err));
-      revalidateNow();
     } catch (err) {
       console.error('[NewsFeed] markRead failed synchronously', err);
     }

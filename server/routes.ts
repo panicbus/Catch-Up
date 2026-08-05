@@ -40,10 +40,6 @@ function handle(fn: (userId: string, req: Request) => Promise<unknown>) {
   };
 }
 
-// A plain "did the password gate let this through" check — used only by the frontend's password
-// screen to validate what someone typed before storing it. No user resolution needed here.
-router.get('/ping', (_req, res) => res.json({ ok: true }));
-
 // --- Onboarding ------------------------------------------------------------------------------
 
 router.get('/onboarding', handle((userId) => dataStore.getOnboardingStatus(userId)));
@@ -183,19 +179,17 @@ router.post('/settings/resolve-location', handle(async (_userId, req) => resolve
 router.get(
   '/ai-config',
   handle(async (userId) => {
-    const [provider, hasGeminiKey, hasGroqKey, ollamaModel] = await Promise.all([
-      dataStore.getAiProvider(userId),
-      dataStore.hasGeminiApiKey(userId),
-      dataStore.hasGroqApiKey(userId),
-      dataStore.getOllamaModel(userId),
-    ]);
+    // One read of the Settings row rather than four (this used to call four separate getters that
+    // each fetched the same full row).
+    const ai = await dataStore.getAiSettings(userId);
     // A key from the server's own env (dev/shared) counts as configured too, same as the desktop
-    // app's "don't needlessly prompt the modal" behavior.
+    // app's "don't needlessly prompt the modal" behavior. Only ever booleans leave here — the keys
+    // themselves are never sent to any client.
     return {
-      provider,
-      geminiKeyConfigured: hasGeminiKey || !!process.env.GEMINI_API_KEY?.trim(),
-      groqKeyConfigured: hasGroqKey || !!process.env.GROQ_API_KEY?.trim(),
-      ollamaModel,
+      provider: ai.provider,
+      geminiKeyConfigured: !!ai.geminiApiKey || !!process.env.GEMINI_API_KEY?.trim(),
+      groqKeyConfigured: !!ai.groqApiKey || !!process.env.GROQ_API_KEY?.trim(),
+      ollamaModel: ai.ollamaModel,
     };
   })
 );
