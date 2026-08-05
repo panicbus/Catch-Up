@@ -5,15 +5,15 @@ name: Scheduled news refresh
 # for a repo this size) and needs no billing details, unlike some hosts' cron-job products.
 # `workflow_dispatch` also allows triggering a run manually from the Actions tab for testing.
 
-# SCHEDULE TEMPORARILY DISABLED (2026-08-05). Neon cut the database off at its monthly data-transfer
-# quota, and this job was the single largest consumer of it (prune() pulled full article rows plus
-# the entire read-state table, ~13-14 times per run). Every run since the cutoff has failed anyway.
-# Left disabled so it can't resume consuming the moment a quota resets — re-enable by uncommenting
-# the two `schedule` lines below, but ONLY after the query fixes are deployed and a new database
-# host is live. `workflow_dispatch` stays on, so a run can still be triggered by hand for testing.
+# Re-enabled 2026-08-05 after the outage that paused the old Neon database at its monthly
+# data-transfer limit. This job was the largest consumer of that quota: prune() fetched full article
+# rows plus the entire read-state table, ~13-14 times per run. Both are now scoped and column-
+# selected (see server/stores/articlesCache.ts), and the database moved to Supabase. Watch the new
+# host's usage for the first couple of days — if it climbs unexpectedly, this schedule is the first
+# thing to lengthen or disable again.
 on:
-  # schedule:
-  #   - cron: '*/30 * * * *'
+  schedule:
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
