@@ -92,6 +92,74 @@ export async function getArticleById(userId: string, channelId: string, id: stri
   return prisma.article.findFirst({ where: { id, userId, channelId } });
 }
 
+/** The Pool's read path: a slice of several channels in ONE query, instead of the one-request-per-
+ * channel fan-out it used to do. `limit` is applied globally (newest-first across all the channels
+ * combined) rather than per channel — which is what a chronological cross-channel pool wants
+ * anyway, and avoids a busy channel being trimmed to the same count as a quiet one. */
+export async function getArticlesForChannels(
+  userId: string,
+  channelIds: string[],
+  limit = 300
+): Promise<Article[]> {
+  if (channelIds.length === 0) return [];
+  const rows = await prisma.article.findMany({
+    where: { userId, channelId: { in: channelIds } },
+    orderBy: { publishedAt: 'desc' },
+    take: limit,
+    select: ARTICLE_SELECT,
+  });
+  const ids = rows.map((r) => r.id);
+  const [readIds, bookmarkedIds] = await Promise.all([
+    prisma.readState.findMany({ where: { userId, articleId: { in: ids } }, select: { articleId: true } }),
+    prisma.bookmark.findMany({ where: { userId, articleId: { in: ids } }, select: { articleId: true } }),
+  ]);
+  const read = new Set(readIds.map((r) => r.articleId));
+  const bookmarked = new Set(bookmarkedIds.map((b) => b.articleId));
+  return rows.map((a) => toArticle(a, read.has(a.id), bookmarked.has(a.id)));
+}
+
+export interface ChannelCounts {
+  /** Unread stories in the channel — "stories to catch up on". */
+  unread: number;
+  /** Of the unread, how many published in the last 24h — drives the "new" freshness tag. */
+  recent: number;
+}
+
+/** Per-channel unread/recent counts for the home tiles, computed in the DATABASE.
+ *
+ * This exists because the home screen previously fetched every article of every channel — full
+ * rows, one request per channel, every 20-second poll tick — purely to call `.length` on the
+ * result and count how many were under 24h old. With nine channels that was megabytes of transfer
+ * per tick to produce eighteen small integers, and it was the largest remaining consumer after the
+ * refresh job was fixed (see the 2026-08-05 outage). Two aggregate rows replace all of it.
+ *
+ * Raw SQL because this is an anti-join (articles with NO matching read-state row), which Prisma's
+ * `groupBy` can't express. The join is on `(user_id, article_id)` with no channel component, which
+ * is correct and deliberate: ReadState's key is `(userId, articleId)` while Article's is
+ * `(channelId, id)`, so one story appearing in two channels shares a single read-state row and
+ * reads as read in both — matching what getArticles already does with its global read Set.
+ *
+ * The 24h window matches src/utils/isNew.ts exactly; if that changes, change this too. */
+export async function getChannelCounts(userId: string): Promise<Record<string, ChannelCounts>> {
+  const rows = await prisma.$queryRaw<{ channel_id: string; unread: bigint; recent: bigint }[]>`
+    SELECT a.channel_id,
+           COUNT(*) FILTER (WHERE r.article_id IS NULL) AS unread,
+           COUNT(*) FILTER (WHERE r.article_id IS NULL
+                              AND a.published_at > now() - interval '24 hours') AS recent
+      FROM articles a
+      LEFT JOIN read_state r
+        ON r.user_id = a.user_id AND r.article_id = a.id
+     WHERE a.user_id = ${userId}
+     GROUP BY a.channel_id
+  `;
+  const counts: Record<string, ChannelCounts> = {};
+  // COUNT() comes back as bigint over the wire; Number() is safe at these magnitudes (a channel is
+  // capped at MAX_COUNT rows) and keeps the JSON response plain numbers rather than BigInt, which
+  // JSON.stringify refuses to serialize at all.
+  for (const r of rows) counts[r.channel_id] = { unread: Number(r.unread), recent: Number(r.recent) };
+  return counts;
+}
+
 /** Merges freshly-fetched provider articles into a channel's pool, deduping by id and by a
  * fuzzy title key, then re-applies every prune rule. Returns the count of stories genuinely NEW
  * TO READ — added this merge, still present after pruning, and not already read (same narrower-

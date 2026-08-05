@@ -85,8 +85,32 @@ export function registerIpcHandlers({ dataStore, articlesCache, classificationSt
   });
 
   ipcMain.handle('getArticles', (_e, params: ArticleListParams) => {
+    // channelIds (The Pool's multi-channel path) exists for the web build, where it collapses one
+    // request per channel into one. Desktop reads from an in-memory cache where that fan-out cost
+    // nothing, so this just concatenates — same result, no network involved either way.
+    if (params.channelIds?.length) {
+      const merged = params.channelIds
+        .flatMap((id) => articlesCache.getArticles(id, null, params.limit))
+        .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+        .slice(0, params.limit ?? undefined);
+      return { articles: merged.map((a) => toArticle(a, dataStore)) };
+    }
     const cached = articlesCache.getArticles(params.channelId, params.subchannelId, params.limit);
     return { articles: cached.map((a) => toArticle(a, dataStore)) };
+  });
+  // Same counts the web build gets from its dedicated endpoint — computed straight off the
+  // in-memory cache here, since desktop has no network cost to avoid.
+  ipcMain.handle('getChannelCounts', () => {
+    const counts: Record<string, { unread: number; recent: number }> = {};
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    for (const channel of dataStore.getChannels()) {
+      const unread = articlesCache.getArticles(channel.id, null).filter((a) => !dataStore.isRead(a.id));
+      counts[channel.id] = {
+        unread: unread.length,
+        recent: unread.filter((a) => new Date(a.publishedAt).getTime() > dayAgo).length,
+      };
+    }
+    return counts;
   });
   ipcMain.handle('refreshChannel', (_e, channelId: string) => runChannel(refreshDeps, channelId));
   ipcMain.handle('refreshAll', () => runAll(refreshDeps));

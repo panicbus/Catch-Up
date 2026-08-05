@@ -41,9 +41,20 @@ export interface Article {
 }
 
 export interface ArticleListParams {
+  /** A single channel. Ignored when `channelIds` is set. */
   channelId: string;
   subchannelId?: string | null;
   limit?: number;
+  /** Several channels at once, newest-first across all of them (The Pool). Set this INSTEAD of
+   * relying on channelId — it exists so a cross-channel view is one request rather than one per
+   * channel. `subchannelId` doesn't apply: The Pool never drills into subchannels. */
+  channelIds?: string[];
+}
+
+/** Unread + recent counts per channel id, for the home tiles. Deliberately its own tiny endpoint
+ * rather than something derived from a full article fetch — see articlesCache.getChannelCounts. */
+export interface ChannelCountsResult {
+  [channelId: string]: { unread: number; recent: number };
 }
 
 export interface ArticleListResult {
@@ -184,6 +195,10 @@ export interface CatchUpApi {
 
   // Articles
   getArticles: (params: ArticleListParams) => Promise<ArticleListResult>;
+  /** Unread/recent counts for every channel in one call — what the home tiles actually need.
+   * Desktop computes this locally from its in-memory cache; web hits a dedicated endpoint rather
+   * than downloading every article just to count them. */
+  getChannelCounts: () => Promise<ChannelCountsResult>;
   refreshChannel: (channelId: string) => Promise<RefreshResult>;
   refreshAll: () => Promise<RefreshResult[]>;
   getProviderStatus: () => Promise<ProviderStatus[]>;

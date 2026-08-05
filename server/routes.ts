@@ -103,11 +103,29 @@ router.delete(
 router.get(
   '/articles',
   handle(async (userId, req) => {
-    const { channelId, subchannelId, limit } = req.query as { channelId: string; subchannelId?: string; limit?: string };
-    const articles = await articlesCache.getArticles(userId, channelId, subchannelId ?? null, limit ? Number(limit) : undefined);
+    const { channelId, channelIds, subchannelId, limit } = req.query as {
+      channelId?: string;
+      channelIds?: string;
+      subchannelId?: string;
+      limit?: string;
+    };
+    const parsedLimit = limit ? Number(limit) : undefined;
+    // `channelIds` (comma-separated) is The Pool's path: it wants a slice of every channel at once,
+    // and used to issue one request PER channel to get it. One query with an `IN` replaces all of
+    // them. `channelId` stays the single-channel path used by the channel view.
+    if (channelIds) {
+      const ids = channelIds.split(',').map((s) => s.trim()).filter(Boolean);
+      const articles = await articlesCache.getArticlesForChannels(userId, ids, parsedLimit);
+      return { articles };
+    }
+    const articles = await articlesCache.getArticles(userId, channelId ?? '', subchannelId ?? null, parsedLimit);
     return { articles };
   })
 );
+
+// Home tiles only need two integers per channel, not the articles themselves — see
+// articlesCache.getChannelCounts for why this endpoint exists at all.
+router.get('/channel-counts', handle((userId) => articlesCache.getChannelCounts(userId)));
 router.post('/channels/:channelId/refresh', handle((userId, req) => runChannel(userId, param(req, 'channelId'))));
 router.post('/refresh-all', handle((userId) => runAll(userId)));
 router.get('/provider-status', handle(async () => getProviderStatus()));

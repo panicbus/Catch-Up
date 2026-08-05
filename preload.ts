@@ -32,6 +32,7 @@ const api: CatchUpApi = {
     ipcRenderer.invoke('deleteSubchannel', channelId, subchannelId),
 
   getArticles: (params) => ipcRenderer.invoke('getArticles', params),
+  getChannelCounts: () => ipcRenderer.invoke('getChannelCounts'),
   refreshChannel: (channelId) => ipcRenderer.invoke('refreshChannel', channelId),
   refreshAll: () => ipcRenderer.invoke('refreshAll'),
   getProviderStatus: () => ipcRenderer.invoke('getProviderStatus'),

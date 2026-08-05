@@ -35,6 +35,7 @@ const electronApi: CatchUpApi = {
   deleteSubchannel: (channelId, subchannelId) => getBridge().deleteSubchannel(channelId, subchannelId),
 
   getArticles: (params) => getBridge().getArticles(params),
+  getChannelCounts: () => getBridge().getChannelCounts(),
   refreshChannel: (channelId) => getBridge().refreshChannel(channelId),
   refreshAll: () => getBridge().refreshAll(),
   getProviderStatus: () => getBridge().getProviderStatus(),
@@ -201,8 +202,12 @@ if (typeof document !== 'undefined') {
 }
 
 function articlesQuery(params: ArticleListParams): string {
-  const qs = new URLSearchParams({ channelId: params.channelId });
-  if (params.subchannelId) qs.set('subchannelId', params.subchannelId);
+  // channelIds (the multi-channel Pool path) replaces channelId rather than joining it — the
+  // server branches on which one is present.
+  const qs = params.channelIds?.length
+    ? new URLSearchParams({ channelIds: params.channelIds.join(',') })
+    : new URLSearchParams({ channelId: params.channelId });
+  if (!params.channelIds?.length && params.subchannelId) qs.set('subchannelId', params.subchannelId);
   if (params.limit) qs.set('limit', String(params.limit));
   return qs.toString();
 }
@@ -227,6 +232,7 @@ const webApi: CatchUpApi = {
     request(`/channels/${channelId}/subchannels/${subchannelId}`, { method: 'DELETE' }),
 
   getArticles: (params) => request(`/articles?${articlesQuery(params)}`),
+  getChannelCounts: () => request('/channel-counts'),
   refreshChannel: (channelId) => post(`/channels/${channelId}/refresh`),
   refreshAll: () => post('/refresh-all'),
   getProviderStatus: () => request('/provider-status'),

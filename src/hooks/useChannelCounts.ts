@@ -1,7 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { api } from '../services/api';
 import { useReloadOnDataChange } from './useReloadOnDataChange';
-import { isNewArticle } from '../utils/isNew';
 import type { Channel } from '../../ipc-contract';
 
 export interface ChannelCount {
@@ -21,43 +20,37 @@ export function useChannelCounts(channels: Channel[]) {
   const [counts, setCounts] = useState<Record<string, ChannelCount>>({});
 
   const reload = useCallback(() => {
-    void Promise.all(
-      channels.map((c) =>
-        api.getArticles({ channelId: c.id, subchannelId: null }).then(
-          (r) => {
-            const unread = r.articles.filter((a) => !a.read);
-            return [
-              c.id,
-              { unread: unread.length, recent: unread.filter((a) => isNewArticle(a.publishedAt)).length },
-            ] as const;
-          },
-          // One channel's fetch failing (a rate limit, a network hiccup, a cold-starting server)
-          // must not blank out every OTHER channel's tile too — Promise.all rejects the whole batch
-          // on a single rejection, and the un-caught rejection this used to leave behind meant
-          // setCounts never even ran, silently leaving every tile's count stuck at whatever it last
-          // was (blank, on first load). Skip just this one channel instead.
-          () => null
-        )
-      )
-    ).then((pairs) => {
-      // Merge into the previous counts rather than replacing wholesale, so a channel that failed
-      // this cycle keeps showing its last known good count instead of going blank.
-      setCounts((prev) => {
-        const next = { ...prev };
-        for (const pair of pairs) {
-          if (pair) next[pair[0]] = pair[1];
-        }
-        return next;
-      });
-    });
-  }, [channels]);
+    // ONE aggregate call, not one full article fetch per channel. This used to download every
+    // article of every channel — complete rows, snippets and all — every poll tick, purely to call
+    // .length on the result. With nine channels that was the single largest source of database
+    // traffic once the background job was fixed, and it's what exhausted the hosting quota on
+    // 2026-08-05. The server now counts in SQL and returns two integers per channel.
+    void api.getChannelCounts().then(
+      // Merge rather than replace, so a channel missing from the response (it has no articles yet,
+      // so no row in the aggregate) keeps whatever it last showed instead of flickering blank.
+      (fresh) => setCounts((prev) => ({ ...prev, ...fresh })),
+      // A failed poll must not blank every tile — keep the last known counts and try again next
+      // tick, same "a background sync failure never breaks the app" rule as the rest of this code.
+      () => {}
+    );
+  }, []);
 
-  // Coalesce: a background sweep broadcasts one 'articles' event per channel, and each reload here
-  // re-fetches EVERY channel — without debouncing, an N-channel sweep would fire N × N fetches. The
-  // home tiles show only counts (no scroll-to-read dimming), so a small settle delay is invisible.
+  // Coalesce: one poll broadcasts an 'articles' event per channel, and every one of them would
+  // otherwise trigger this same single request. The home tiles show only counts, so a small settle
+  // delay is invisible.
   useReloadOnDataChange(reload, { debounceMs: 150 });
 
-  const totalUnread = Object.values(counts).reduce((sum, c) => sum + c.unread, 0);
+  // Scoped to channels that currently exist. `counts` is merged across reloads (so a channel absent
+  // from one response keeps its last known value rather than flickering), which on its own would
+  // also keep DELETED channels around forever and overstate the header total. The channel list is
+  // the authority on what exists; this is the only thing it's needed for.
+  const visible = useMemo(() => {
+    const live: Record<string, ChannelCount> = {};
+    for (const c of channels) if (counts[c.id]) live[c.id] = counts[c.id];
+    return live;
+  }, [channels, counts]);
 
-  return { counts, totalUnread };
+  const totalUnread = Object.values(visible).reduce((sum, c) => sum + c.unread, 0);
+
+  return { counts: visible, totalUnread };
 }

@@ -29,37 +29,38 @@ export function usePoolArticles(channels: Channel[]) {
       return;
     }
     setLoading(true);
-    void Promise.all(
-      channels.map((c) =>
-        api
-          .getArticles({ channelId: c.id, subchannelId: null, limit: MAX_PER_CHANNEL })
-          .then((r) => r.articles.map((a): PoolArticle => ({ ...a, channelName: c.name })))
-      )
-    ).then((lists) => {
-      // The same story can legitimately get pulled into two different channels' buckets
-      // independently (e.g. a story matching both "Tech" and "Pop Culture" searches) — same
-      // article id (hashed from its URL) under two different channelIds. Deduping here (rather
-      // than relying on React keys to sort it out) matters beyond just avoiding a duplicate card:
-      // duplicate keys within one render can leave stale DOM nodes behind on the next re-render,
-      // which is exactly what let a channel-filtered view briefly show more cards than the
-      // shown-count cap allowed.
-      const byId = new Map<string, PoolArticle>();
-      for (const article of lists.flat()) {
-        if (!byId.has(article.id)) byId.set(article.id, article);
-      }
-      const merged = [...byId.values()].sort(
-        (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-      );
-      setArticles(merged);
-      setLoading(false);
-    });
+    // ONE request for every channel, rather than one per channel. The server applies the limit
+    // globally (newest-first across all of them), which is what a chronological cross-channel pool
+    // wants anyway — a busy channel shouldn't be trimmed to match a quiet one.
+    const nameById = new Map(channels.map((c) => [c.id, c.name]));
+    void api
+      .getArticles({
+        channelId: '',
+        channelIds: channels.map((c) => c.id),
+        limit: MAX_PER_CHANNEL * channels.length,
+      })
+      .then((r) => {
+        // The same story can legitimately be pulled into two different channels independently (e.g.
+        // one matching both a "Tech" and a "Pop Culture" search) — same article id (hashed from its
+        // URL) under two different channelIds. Deduping here matters beyond avoiding a visible
+        // duplicate: duplicate React keys in one render can leave stale DOM nodes behind on the
+        // next, which is what once let a channel-filtered view show more cards than its cap allowed.
+        const byId = new Map<string, PoolArticle>();
+        for (const a of r.articles) {
+          if (!byId.has(a.id)) byId.set(a.id, { ...a, channelName: nameById.get(a.channelId) ?? '' });
+        }
+        // Already ordered newest-first by the server, but re-sorted here so this doesn't silently
+        // depend on that (and stays correct for the desktop bridge's own merge path).
+        setArticles(
+          [...byId.values()].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+        );
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, [channels]);
 
-  // Debounced for the same reason useChannelCounts is: this reload fans out one getArticles call
-  // PER CHANNEL. Undebounced, a single poll tick's articles + readState + bookmarks events (the web
-  // build fires all three every ~20s) triggered three full re-fans-out back to back — with 9
-  // channels that's ~27 requests every tick just from this one hook, on top of nudging the site
-  // toward its own rate limit.
+  // Still debounced: one poll tick delivers articles + readState + bookmarks, and without this each
+  // would trigger its own reload of the same data.
   useReloadOnDataChange(reload, { includeBookmarks: true, debounceMs: 150 });
 
   return { articles, loading, reload };
