@@ -16,6 +16,14 @@ const PROVIDER_LABELS: Record<AiProvider, string> = {
   ollama: 'Ollama',
 };
 
+// Shown below the picker for whichever provider is currently active, so picking one also explains
+// what it actually does — free tier, speed/accuracy trade-off, or the local-only caveat.
+const PROVIDER_NOTES: Record<AiProvider, string> = {
+  gemini: 'Google Gemini — generous free tier, the most accurate filtering of the three.',
+  groq: 'Groq — free tier, serves open-source models fast; filtering is quicker but slightly less precise than Gemini.',
+  ollama: 'Ollama — runs locally on this Mac, no key and no cost, but only filters while Catch Up and Ollama are both running here.',
+};
+
 /** The AI relevance-filtering provider picker: off, or one of Gemini / Groq / Ollama (desktop-only).
  * Picking a cloud provider without a key configured opens a key-collecting modal; picking Ollama
  * always opens its model/connection modal, since there's no key, just a model name to confirm. */
@@ -91,18 +99,28 @@ export function AiFilteringSetting() {
         )}
       </div>
 
+      {config.provider && (
+        <p className="ai-filtering__note">{PROVIDER_NOTES[config.provider]}</p>
+      )}
+
       {config.provider === 'gemini' && (
-        <button type="button" className="ai-filtering__replace" onClick={() => setOpenModal('gemini')}>
-          Replace API key
-        </button>
+        <p className="ai-filtering__key-status">
+          API key set.{' '}
+          <button type="button" className="ai-filtering__replace" onClick={() => setOpenModal('gemini')}>
+            Replace
+          </button>
+        </p>
       )}
       {config.provider === 'groq' && (
-        <button type="button" className="ai-filtering__replace" onClick={() => setOpenModal('groq')}>
-          Replace API key
-        </button>
+        <p className="ai-filtering__key-status">
+          API key set.{' '}
+          <button type="button" className="ai-filtering__replace" onClick={() => setOpenModal('groq')}>
+            Replace
+          </button>
+        </p>
       )}
       {config.provider === 'ollama' && isDesktop && (
-        <button type="button" className="ai-filtering__replace" onClick={() => setOpenModal('ollama')}>
+        <button type="button" className="ai-filtering__replace ai-filtering__replace--standalone" onClick={() => setOpenModal('ollama')}>
           Change model
         </button>
       )}
@@ -113,6 +131,7 @@ export function AiFilteringSetting() {
           lead="AI filtering reads each incoming story and drops the ones that aren’t really about your channel. Gemini has a free tier."
           keyUrl="https://aistudio.google.com/api-keys"
           keyUrlLabel="aistudio.google.com/api-keys"
+          existingKeyLast4={config.geminiKeyConfigured ? config.geminiKeyLast4 : null}
           onSave={saveGeminiKey}
           onClose={() => setOpenModal(null)}
           onSaved={() => setOpenModal(null)}
@@ -124,6 +143,7 @@ export function AiFilteringSetting() {
           lead="AI filtering reads each incoming story and drops the ones that aren’t really about your channel. Groq has a free tier and serves fast open-source models."
           keyUrl="https://console.groq.com/keys"
           keyUrlLabel="console.groq.com/keys"
+          existingKeyLast4={config.groqKeyConfigured ? config.groqKeyLast4 : null}
           onSave={saveGroqKey}
           onClose={() => setOpenModal(null)}
           onSaved={() => setOpenModal(null)}

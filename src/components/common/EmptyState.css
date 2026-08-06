@@ -4,9 +4,14 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 64px 24px;
+  padding: 48px 24px;
+  margin: 20px 0;
   color: var(--text-faint);
   gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-sizing: border-box;
 }
 
 .empty-state__title {
@@ -17,7 +22,8 @@
 
 .empty-state__body {
   font-size: 14px;
-  max-width: 320px;
+  max-width: min(320px, 100%);
+  box-sizing: border-box;
 }
 
 .empty-state__action {

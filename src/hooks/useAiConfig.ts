@@ -6,11 +6,14 @@ const DEFAULT_CONFIG: AiConfig = {
   provider: null,
   geminiKeyConfigured: false,
   groqKeyConfigured: false,
+  geminiKeyLast4: null,
+  groqKeyLast4: null,
   ollamaModel: '',
 };
 
-/** AI relevance-filtering config for the Settings provider picker + key/model modals. Keys never
- * cross into the renderer — this only knows the active provider and whether each key is configured. */
+/** AI relevance-filtering config for the Settings provider picker + key/model modals. Full keys
+ * never cross into the renderer — this only knows the active provider, whether each key is
+ * configured, and its last 4 characters (enough for the Settings UI to confirm a key is saved). */
 export function useAiConfig() {
   const [config, setConfig] = useState<AiConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);

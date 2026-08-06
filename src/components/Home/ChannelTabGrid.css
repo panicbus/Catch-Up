@@ -10,15 +10,13 @@
   position: relative;
   display: flex;
 }
-.channel-tile-wrap--dragging {
-  opacity: 0.4;
-}
 
-/* The dragged tile's real grid slot, while a touch drag has it lifted — invisible but still
-   occupying its cell (NOT display:none), so the other tiles reflow around a stable hole instead of
-   the grid collapsing/rejumping. The only visible stand-in is the floating ghost below; visibility
-   (not opacity) so it's also out of hit-testing, letting elementFromPoint find whatever's actually
-   underneath the finger. */
+/* The dragged tile's real grid slot, while it's lifted (mouse or touch alike — both input methods
+   share one floating-ghost drag system, see ChannelTabGrid.tsx) — invisible but still occupying its
+   cell (NOT display:none), so the other tiles reflow around a stable hole instead of the grid
+   collapsing/rejumping. The only visible stand-in is the floating ghost below; visibility (not
+   opacity) so it's also out of hit-testing, letting elementFromPoint find whatever's actually
+   underneath the pointer. */
 .channel-tile-wrap--touch-source {
   visibility: hidden;
 }
@@ -43,11 +41,11 @@
   transform: scale(1.03);
 }
 
-/* dragenter bubbles from every descendant (the Link's inner divs, the grip button, the controls
-   div) — without this, crossing one tile fires the wrapper's onDragEnter 2-5 times per tile instead
-   of once. Harmless once the preview math is idempotent (see ChannelTabGrid.tsx), but this still
-   collapses the redundant handler calls and keeps a drop from ever landing on the Link itself. Only
-   the wrapper stays hit-testable, so it's the sole drag/drop target throughout the whole gesture. */
+/* While any tile is being dragged, no descendant (the Link, its inner divs, the grip button, the
+   controls) should be its own hit-testable target — only the wrapper. This keeps a hovered tile's
+   own :hover/:active styles from flickering under the cursor mid-drag, and keeps
+   elementFromPoint (ChannelTabGrid.tsx's over-detection) resolving to a clean tile boundary instead
+   of whichever inner element happens to be directly underneath. */
 .channel-grid--dragging .channel-tile-wrap > * {
   pointer-events: none;
 }
@@ -177,7 +175,12 @@
      a normal vertical scroll that happens to start on a tile work natively — a real scroll exceeds
      the long-press move tolerance well within the 420ms hold, which cancels our own pending-drag
      timer before it ever arms, so the two never actually fight over the same gesture. Matches
-     NewsCard.css's swipe-to-dismiss tiles, which have the identical tension. */
+     NewsCard.css's swipe-to-dismiss tiles, which have the identical tension.
+
+     Confirmed live that this CSS alone isn't always enough — the tile wrapper's own onPointerDown
+     (ChannelTabGrid.tsx) now also calls preventDefault() on the raw pointerdown the instant the
+     long-press timer arms, which tells iOS not to start its native gesture recognizer at all rather
+     than fighting it after the fact once it's already begun. */
   .channel-tile-wrap {
     touch-action: pan-y;
     -webkit-touch-callout: none;

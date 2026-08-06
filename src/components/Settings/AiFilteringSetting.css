@@ -61,8 +61,24 @@
   color: #fff;
 }
 
+.ai-filtering__note {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  background: var(--surface-hover);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  max-width: 560px;
+}
+
+.ai-filtering__key-status {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 .ai-filtering__replace {
-  margin-top: 12px;
   padding: 0;
   border: none;
   background: none;
@@ -73,4 +89,8 @@
 }
 .ai-filtering__replace:hover {
   text-decoration: underline;
+}
+.ai-filtering__replace--standalone {
+  display: block;
+  margin-top: 12px;
 }

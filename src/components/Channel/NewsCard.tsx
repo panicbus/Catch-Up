@@ -115,9 +115,11 @@ interface NewsCardProps {
    * only) or readInPlace-archive paths, which are already instant/local by their own nature. */
   onLocalExit?: (articleId: string) => void;
   /** Fires specifically for a swipe-committed dismiss (not the checkmark button) — the parent's cue
-   * to show a brief "Story archived." toast, since a swipe leaves no other confirmation that
-   * anything happened once the card itself has flown off screen. */
-  onSwipeDismissed?: () => void;
+   * to show a brief confirmation toast, since a swipe leaves no other sign that anything happened
+   * once the card itself has flown off screen. Passes this card's own channel name along so the
+   * toast can say where the story actually went (most useful in The Pool, where that's otherwise
+   * invisible). */
+  onSwipeDismissed?: (channelName?: string) => void;
   /** Fires the instant the 'archived' undo button is tapped — the parent's cue to treat this
    * article as unread right away (moving it from the archive back into the main list), instead of
    * waiting on the real mutation's network round trip to notice. Without this the button had no
@@ -160,12 +162,12 @@ function NewsCardComponent({
     (delayMs: number, viaSwipe?: boolean) => {
       window.setTimeout(() => {
         onLocalExit?.(article.id);
-        if (viaSwipe) onSwipeDismissed?.();
+        if (viaSwipe) onSwipeDismissed?.(article.channelName);
         void api.markArticleRead(article.id, article.channelId);
         revalidateNow();
       }, delayMs);
     },
-    [article.id, article.channelId, onLocalExit, onSwipeDismissed]
+    [article.id, article.channelId, article.channelName, onLocalExit, onSwipeDismissed]
   );
 
   // Nothing to reveal by expanding a card with neither a snippet nor a thumbnail — the "Read full

@@ -1,3 +1,45 @@
+.api-key-modal__current {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.api-key-modal__current-label {
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.api-key-modal__current-value {
+  flex: 1;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  letter-spacing: 0.05em;
+}
+
+.api-key-modal__reveal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  border-radius: 6px;
+}
+.api-key-modal__reveal:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+
 .api-key-modal__lead {
   margin: 0 0 14px;
   color: var(--text-muted);

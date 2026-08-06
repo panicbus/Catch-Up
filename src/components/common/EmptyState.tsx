@@ -3,7 +3,7 @@ import './EmptyState.css';
 
 interface EmptyStateProps {
   title: string;
-  body?: string;
+  body?: ReactNode;
   action?: ReactNode;
 }
 

@@ -113,10 +113,16 @@ export type AiProvider = 'gemini' | 'groq' | 'ollama';
 export interface AiConfig {
   /** null = AI filtering is off. */
   provider: AiProvider | null;
-  /** Whether a Gemini API key is stored (the key itself is never sent to the renderer). */
+  /** Whether a Gemini API key is stored (the key itself is never sent to the renderer — only its
+   * last 4 characters, below, so the Settings UI can confirm one is saved without exposing it). */
   geminiKeyConfigured: boolean;
   /** Whether a Groq API key is stored. */
   groqKeyConfigured: boolean;
+  /** Last 4 characters of the stored Gemini key, e.g. for showing "••••••••ab12" — null when no
+   * key (or an env-only key with nothing in the store) is configured. */
+  geminiKeyLast4: string | null;
+  /** Last 4 characters of the stored Groq key. */
+  groqKeyLast4: string | null;
   /** The configured Ollama model name — meaningful on desktop only. */
   ollamaModel: string;
 }

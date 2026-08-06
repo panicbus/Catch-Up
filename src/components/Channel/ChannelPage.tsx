@@ -396,7 +396,13 @@ export function ChannelPage() {
       ) : articles.length === 0 ? (
         <EmptyState
           title="No stories yet"
-          body="Catch Up checks for new stories every 30 minutes. Hit Refresh to check now."
+          body={
+            <>
+              Catch Up checks for new stories every 30 minutes.
+              <br />
+              Hit Refresh to check now.
+            </>
+          }
           action={
             activeSubchannel ? (
               <button type="button" className="empty-state__action" onClick={() => setSubchannelId(null)}>

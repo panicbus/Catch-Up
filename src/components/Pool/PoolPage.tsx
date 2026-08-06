@@ -152,6 +152,10 @@ export function PoolPage() {
           </div>
         ))}
 
+      {isMobile && filtered.length > 0 && (
+        <p className="pool-page__swipe-hint">Swipe to archive a story into its channel.</p>
+      )}
+
       {loading && filtered.length === 0 ? (
         // Same reasoning as ChannelPage's identical branch: without this, a fresh/reloading Pool
         // falls through to NewsFeed with an empty array, which reads as "All caught up in Pool!"
@@ -177,6 +181,9 @@ export function PoolPage() {
           // false.
           removeOnRead
           removeCardOnUnbookmark={false}
+          swipeToastText={(channelName) =>
+            channelName ? `Marked read — filed to ${channelName}.` : 'Marked read.'
+          }
         />
       )}
     </div>

@@ -57,6 +57,10 @@ interface NewsFeedProps {
    * (maxUnreadStories) becomes a cap on the TOTAL number of recent stories shown, read or unread —
    * and the count pill visibly controls it. "Caught up" then means the shown set is all read. */
   showReadDimmed?: boolean;
+  /** Builds the brief toast shown after a swipe-dismiss, from the swiped card's own channel name.
+   * Defaults to a plain "Story archived." — The Pool overrides this to name the destination
+   * channel, since a swipe there otherwise gives no sign of where the story actually went. */
+  swipeToastText?: (channelName?: string) => string;
   /** Reports how many stories are currently read-in-place (dimmed, kept in the feed) so a parent
    * can drive a "move all to archive" control's enabled state. */
   onReadInPlaceCountChange?: (count: number) => void;
@@ -144,7 +148,7 @@ function GridSection({
    * dismissed card from the render set the instant its exit fires, without waiting on a reload. */
   onLocalExit?: (articleId: string) => void;
   /** See NewsCard's onSwipeDismissed — passed straight through so NewsFeed can show its toast. */
-  onSwipeDismissed?: () => void;
+  onSwipeDismissed?: (channelName?: string) => void;
   /** See NewsCard's onLocalUnread — passed straight through so an archived card's undo button
    * moves it back to the main section instantly. */
   onLocalUnread?: (articleId: string) => void;
@@ -205,7 +209,7 @@ function DayGroups({
   dimReadCards?: boolean;
   onArchiveReadInPlace?: (articleId: string) => void;
   onLocalExit?: (articleId: string) => void;
-  onSwipeDismissed?: () => void;
+  onSwipeDismissed?: (channelName?: string) => void;
   onLocalUnread?: (articleId: string) => void;
 }) {
   const byDay = groupByDay(articles, 'publishedAt');
@@ -308,6 +312,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     removeCardOnUnbookmark = !partitionByRead,
     catchUpMode = partitionByRead,
     showReadDimmed = false,
+    swipeToastText = () => 'Story archived.',
     onReadInPlaceCountChange,
     suppressCelebrationRef,
     parentChannelName,
@@ -340,7 +345,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // Brief confirmation for a swipe-dismissed card — swiping leaves nothing else on screen to say
   // anything happened once the card itself has flown off, unlike the checkmark button (which has
   // its own click flourish right before the card leaves).
-  const [swipeToast, setSwipeToast] = useState(false);
+  const [swipeToast, setSwipeToast] = useState<string | null>(null);
   const swipeToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevUnreadCountRef = useRef<number | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
@@ -354,11 +359,14 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     });
   }, []);
 
-  const onSwipeDismissed = useCallback(() => {
-    if (swipeToastTimerRef.current) clearTimeout(swipeToastTimerRef.current);
-    setSwipeToast(true);
-    swipeToastTimerRef.current = setTimeout(() => setSwipeToast(false), 1800);
-  }, []);
+  const onSwipeDismissed = useCallback(
+    (channelName?: string) => {
+      if (swipeToastTimerRef.current) clearTimeout(swipeToastTimerRef.current);
+      setSwipeToast(swipeToastText(channelName));
+      swipeToastTimerRef.current = setTimeout(() => setSwipeToast(null), 1800);
+    },
+    [swipeToastText]
+  );
 
   const onLocalUnread = useCallback((articleId: string) => {
     setLocallyUnread((prev) => {
@@ -619,7 +627,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
         />
       )}
 
-      {swipeToast && <div className="news-feed__toast" role="status">Story archived.</div>}
+      {swipeToast && <div className="news-feed__toast" role="status">{swipeToast}</div>}
     </div>
   );
 });

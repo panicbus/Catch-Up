@@ -56,6 +56,7 @@ export function DismissButton({ onDismiss, disabled, variant }: DismissButtonPro
       onClick={onClick}
       onPointerDown={onPointerDown}
       aria-label={variant === 'archived' ? 'Mark unread' : variant === 'readInPlace' ? 'Move to archive' : 'Mark read'}
+      title={variant === 'archived' ? 'Mark unread' : variant === 'readInPlace' ? 'Move to archive' : 'Mark read'}
       disabled={disabled}
     >
       {bursting && <BurstEffect angleCount={8} sizeScale={0.7} durationMs={460} onDone={() => setBursting(false)} />}

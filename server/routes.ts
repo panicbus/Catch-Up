@@ -207,6 +207,10 @@ router.get(
       provider: ai.provider,
       geminiKeyConfigured: !!ai.geminiApiKey || !!process.env.GEMINI_API_KEY?.trim(),
       groqKeyConfigured: !!ai.groqApiKey || !!process.env.GROQ_API_KEY?.trim(),
+      // Only the last 4 characters leave the server — see ipc-contract.ts's AiConfig doc. Especially
+      // important here: this endpoint currently has no auth, so the full key must never appear in it.
+      geminiKeyLast4: ai.geminiApiKey?.slice(-4) ?? null,
+      groqKeyLast4: ai.groqApiKey?.slice(-4) ?? null,
       ollamaModel: ai.ollamaModel,
     };
   })

@@ -183,6 +183,10 @@ export function registerIpcHandlers({ dataStore, articlesCache, classificationSt
     // A key from .env (dev) counts as configured too, so it won't needlessly prompt the modal.
     geminiKeyConfigured: dataStore.hasGeminiApiKey() || !!process.env.GEMINI_API_KEY?.trim(),
     groqKeyConfigured: dataStore.hasGroqApiKey() || !!process.env.GROQ_API_KEY?.trim(),
+    // Only the last 4 characters ever leave main — enough for the Settings UI to confirm which key
+    // is saved without putting the whole secret on the wire (see ipc-contract.ts's AiConfig doc).
+    geminiKeyLast4: dataStore.getGeminiApiKey()?.slice(-4) ?? null,
+    groqKeyLast4: dataStore.getGroqApiKey()?.slice(-4) ?? null,
     ollamaModel: dataStore.getOllamaModel(),
   }));
   ipcMain.handle('setAiProvider', (_e, provider: AiProvider | null) => {

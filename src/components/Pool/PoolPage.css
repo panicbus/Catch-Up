@@ -22,6 +22,12 @@
   margin-bottom: 24px;
 }
 
+.pool-page__swipe-hint {
+  margin: 0 0 14px;
+  color: var(--text-faint);
+  font-size: 12.5px;
+}
+
 /* Same rounded-full shape as the individual channel chips beside it, just with three segments
    inside one pill instead of one chip per option — matches how the user described it ("one pill
    having sections"), and sits at the end of the row via the same margin-left:auto trick
