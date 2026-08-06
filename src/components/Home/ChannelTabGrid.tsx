@@ -339,6 +339,31 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
     };
   }, []);
 
+  // Confirmed live: calling preventDefault() on the React (Pointer Event) onPointerDown below is
+  // NOT reliable on iOS Safari for suppressing its native long-press text-selection/callout gesture
+  // — that gesture recognizer is driven off the raw touchstart, and WebKit doesn't consistently wire
+  // PointerEvent.preventDefault() through to cancel it the way calling preventDefault() directly on
+  // the underlying TouchEvent does. Once iOS's gesture wins, it owns the rest of that touch
+  // sequence — which is almost certainly why taps/drags stopped registering right after: the native
+  // selection UI (handles + copy/paste callout) is still sitting on top, intercepting input until
+  // it's dismissed by a tap elsewhere. So the fix for BOTH symptoms is the same: never let iOS start
+  // it in the first place. A real (non-React, non-passive) touchstart listener is the one place that
+  // reliably does that across iOS/Safari versions — { passive: false } is required, since a passive
+  // listener's preventDefault() call is ignored entirely. touch-action: pan-y (see the CSS) keeps
+  // real vertical scrolling working regardless, since panning is governed by that property
+  // independent of what any touchstart handler does.
+  useEffect(() => {
+    const gridEl = gridRef.current;
+    if (!gridEl) return;
+    const onTouchStart = (e: TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('.channel-tile__controls, .channel-tile__handle')) return;
+      if (target.closest('.channel-tile-wrap')) e.preventDefault();
+    };
+    gridEl.addEventListener('touchstart', onTouchStart, { passive: false });
+    return () => gridEl.removeEventListener('touchstart', onTouchStart);
+  }, []);
+
   const clear = (e: React.MouseEvent, channelId: string) => {
     e.preventDefault();
     e.stopPropagation();
