@@ -339,29 +339,67 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
     };
   }, []);
 
-  // Confirmed live: calling preventDefault() on the React (Pointer Event) onPointerDown below is
-  // NOT reliable on iOS Safari for suppressing its native long-press text-selection/callout gesture
-  // — that gesture recognizer is driven off the raw touchstart, and WebKit doesn't consistently wire
-  // PointerEvent.preventDefault() through to cancel it the way calling preventDefault() directly on
-  // the underlying TouchEvent does. Once iOS's gesture wins, it owns the rest of that touch
-  // sequence — which is almost certainly why taps/drags stopped registering right after: the native
-  // selection UI (handles + copy/paste callout) is still sitting on top, intercepting input until
-  // it's dismissed by a tap elsewhere. So the fix for BOTH symptoms is the same: never let iOS start
-  // it in the first place. A real (non-React, non-passive) touchstart listener is the one place that
-  // reliably does that across iOS/Safari versions — { passive: false } is required, since a passive
-  // listener's preventDefault() call is ignored entirely. touch-action: pan-y (see the CSS) keeps
-  // real vertical scrolling working regardless, since panning is governed by that property
-  // independent of what any touchstart handler does.
+  // Confirmed live: calling preventDefault() on the React (Pointer Event) onPointerDown is NOT
+  // reliable on iOS Safari for suppressing its native long-press text-selection/callout gesture —
+  // that gesture recognizer is driven off the raw touchstart, and WebKit doesn't consistently wire
+  // PointerEvent.preventDefault() through to cancel it. Calling preventDefault() unconditionally on
+  // a raw touchstart DID suppress it — but also confirmed live: doing that unconditionally, for
+  // every touch that lands on a tile, breaks scrolling that starts on a tile until an unrelated tap
+  // elsewhere "resets" it. That's a real WebKit behavior, not a bug in the reasoning that touch-
+  // action: pan-y should make touchstart's preventDefault harmless for scrolling — in practice, on
+  // iOS, calling preventDefault() ANYWHERE in a touch sequence can suppress panning for the rest of
+  // that same sequence, not just the one event.
+  //
+  // The fix is to intercept later and more narrowly, mirroring this file's own original (and
+  // correct) design for the long-press timer itself: nothing here is prevented until the touch has
+  // been read as "plausibly a hold, not a scroll" — i.e. displacement from its start is still under
+  // LONG_PRESS_MOVE_TOLERANCE_PX. iOS's own long-press gesture only ever fires from a
+  // near-motionless hold, so suppressing default JUST on those early, low-displacement touchmoves is
+  // enough to stop it from ever starting — while a real scroll swipe crosses the tolerance almost
+  // immediately, at which point this stops calling preventDefault entirely and native scrolling
+  // takes over untouched, exactly as if this listener wasn't here.
+  //
+  // Deliberately independent of pendingRef/dragRef (which are keyed by PointerEvent.pointerId) —
+  // Touch.identifier isn't guaranteed to correspond, so this tracks its own single in-flight origin.
   useEffect(() => {
     const gridEl = gridRef.current;
     if (!gridEl) return;
+    let origin: { id: number; x: number; y: number } | null = null;
+
     const onTouchStart = (e: TouchEvent) => {
       const target = e.target as HTMLElement;
       if (target.closest('.channel-tile__controls, .channel-tile__handle')) return;
-      if (target.closest('.channel-tile-wrap')) e.preventDefault();
+      if (!target.closest('.channel-tile-wrap')) return;
+      const touch = e.changedTouches[0];
+      if (touch) origin = { id: touch.identifier, x: touch.clientX, y: touch.clientY };
     };
-    gridEl.addEventListener('touchstart', onTouchStart, { passive: false });
-    return () => gridEl.removeEventListener('touchstart', onTouchStart);
+    const onTouchMove = (e: TouchEvent) => {
+      if (!origin) return;
+      const touch = [...e.changedTouches].find((t) => t.identifier === origin!.id);
+      if (!touch) return;
+      const moved = Math.hypot(touch.clientX - origin.x, touch.clientY - origin.y);
+      if (moved > LONG_PRESS_MOVE_TOLERANCE_PX) {
+        // Reads as a scroll now, same threshold the long-press timer itself uses — stop
+        // intercepting so native scrolling resumes cleanly from here for the rest of the gesture.
+        origin = null;
+        return;
+      }
+      e.preventDefault();
+    };
+    const onTouchEnd = () => {
+      origin = null;
+    };
+
+    gridEl.addEventListener('touchstart', onTouchStart, { passive: true });
+    gridEl.addEventListener('touchmove', onTouchMove, { passive: false });
+    gridEl.addEventListener('touchend', onTouchEnd, { passive: true });
+    gridEl.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    return () => {
+      gridEl.removeEventListener('touchstart', onTouchStart);
+      gridEl.removeEventListener('touchmove', onTouchMove);
+      gridEl.removeEventListener('touchend', onTouchEnd);
+      gridEl.removeEventListener('touchcancel', onTouchEnd);
+    };
   }, []);
 
   const clear = (e: React.MouseEvent, channelId: string) => {
@@ -501,11 +539,11 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
             onPointerDown={(e) => {
               if (e.pointerType !== 'touch') return;
               if ((e.target as HTMLElement).closest('.channel-tile__controls, .channel-tile__handle')) return;
-              // Tells iOS not to start its own long-press gesture recognizer (link callout /
-              // text-selection loupe) here at all, rather than fighting it with CSS after the fact
-              // — that's what let text selection sneak in and visually fight the drag ghost.
-              // touch-action: pan-y (see the CSS) keeps real scrolling working independently of
-              // this, since panning is governed by that property rather than by preventDefault.
+              // Suppresses the synthetic compatibility mouse events (mouseover/mousedown/click)
+              // browsers fire ~300ms after a touch sequence — harmless and worth keeping, but NOT
+              // what stops iOS's own long-press text-selection/callout gesture (Pointer Event
+              // preventDefault doesn't reliably cancel that; see the raw touchstart/touchmove
+              // listener below, which does).
               e.preventDefault();
               const pointerId = e.pointerId;
               const startX = e.clientX;

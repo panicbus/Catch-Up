@@ -191,10 +191,12 @@
      timer before it ever arms, so the two never actually fight over the same gesture. Matches
      NewsCard.css's swipe-to-dismiss tiles, which have the identical tension.
 
-     Confirmed live that this CSS alone isn't always enough — the tile wrapper's own onPointerDown
-     (ChannelTabGrid.tsx) now also calls preventDefault() on the raw pointerdown the instant the
-     long-press timer arms, which tells iOS not to start its native gesture recognizer at all rather
-     than fighting it after the fact once it's already begun. */
+     Confirmed live that this CSS alone isn't enough — ChannelTabGrid.tsx also attaches a raw,
+     non-passive touchmove listener (Pointer Event preventDefault doesn't reliably cancel iOS's
+     native gesture; a real TouchEvent's does) that suppresses default while a hold stays under the
+     long-press move tolerance, which is what actually closes this gap. It only intercepts touchmove,
+     never touchstart — confirmed live that preventDefault on touchstart, even with pan-y set here,
+     can suppress scrolling for the whole rest of that touch sequence on iOS. */
   .channel-tile-wrap {
     touch-action: pan-y;
     -webkit-touch-callout: none;
