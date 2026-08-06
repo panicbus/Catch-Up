@@ -13,10 +13,10 @@
 
 /* The dragged tile's real grid slot, while it's lifted (mouse or touch alike — both input methods
    share one floating-ghost drag system, see ChannelTabGrid.tsx) — invisible but still occupying its
-   cell (NOT display:none), so the other tiles reflow around a stable hole instead of the grid
-   collapsing/rejumping. The only visible stand-in is the floating ghost below; visibility (not
-   opacity) so it's also out of hit-testing, letting elementFromPoint find whatever's actually
-   underneath the pointer. */
+   cell (NOT display:none), so it holds that cell open as a stable hole for the whole gesture rather
+   than letting the grid collapse and re-lay-out around it. Keeping the layout frozen is what lets
+   the drag math treat the cell positions as fixed. The only visible stand-in is the floating ghost
+   below; visibility (not opacity) so it also stops catching hover/pointer states while lifted. */
 .channel-tile-wrap--touch-source {
   visibility: hidden;
 }
@@ -24,10 +24,10 @@
 /* The floating drag ghost (ChannelTabGrid.tsx renders exactly one, positioned via inline
    top/left/width/height + a translate transform) — a standalone class, deliberately NOT sharing
    .channel-tile-wrap (it isn't a grid item at all, and reusing that class made it collide with the
-   real grid items in anything that queries by it). position:fixed roots it in viewport space, so
-   it's completely unaffected by the grid reflowing the other tiles around the now-hidden source
-   slot above. pointer-events:none for the same elementFromPoint reason as --touch-source. Slightly
-   transparent + elevated, echoing the desktop mouse-drag source's own --dragging opacity fade. */
+   real grid items in anything that queries by it). position:fixed roots it in viewport space, so it
+   tracks the pointer regardless of how far the page beneath has auto-scrolled. pointer-events:none
+   so it never swallows the pointer it's chasing. Slightly transparent + elevated so the tile reads
+   as picked up off the page. */
 .channel-tile-ghost {
   position: fixed;
   z-index: 200;
@@ -42,12 +42,26 @@
 }
 
 /* While any tile is being dragged, no descendant (the Link, its inner divs, the grip button, the
-   controls) should be its own hit-testable target — only the wrapper. This keeps a hovered tile's
-   own :hover/:active styles from flickering under the cursor mid-drag, and keeps
-   elementFromPoint (ChannelTabGrid.tsx's over-detection) resolving to a clean tile boundary instead
-   of whichever inner element happens to be directly underneath. */
+   controls) should be its own hit-testable target — only the wrapper. Keeps a tile's own
+   :hover/:active styles from flickering under the cursor as it passes over them mid-drag. */
 .channel-grid--dragging .channel-tile-wrap > * {
   pointer-events: none;
+}
+
+/* The reorder animation. Displaced tiles keep their DOM position for the whole gesture and are
+   moved into their previewed cell with an inline transform (ChannelTabGrid.tsx's tileShift) — this
+   transition is what turns each of those jumps into a slide. Letting CSS own the interpolation is
+   deliberate: a drag that crosses several cells quickly retargets an already-running transition
+   from wherever it currently is, which the browser does natively and correctly. The previous
+   hand-rolled version re-measured mid-animation and compounded its own error, which is what made
+   tiles fly around at high speed.
+
+   Scoped to --dragging so the transforms clearing on drop is instant, not an animation of every
+   tile sliding back to where it started — at that moment the real order has already been committed
+   underneath, so the tiles are exactly where they should be and must simply stay there. */
+.channel-grid--dragging .channel-tile-wrap {
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1);
+  will-change: transform;
 }
 
 .channel-tile {

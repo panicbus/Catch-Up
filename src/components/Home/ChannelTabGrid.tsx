@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { getTileColor } from '../../utils/channelColor';
 import { api, revalidateNow } from '../../services/api';
@@ -51,6 +51,19 @@ interface OriginRect {
   height: number;
 }
 
+/** One grid cell's geometry, measured once at drag start and then treated as fixed for the whole
+ * gesture. Stored RELATIVE TO THE GRID CONTAINER (not the viewport) so auto-scrolling the page
+ * mid-drag doesn't invalidate any of it — the pointer gets converted into the same space on each
+ * move. `id` is whichever channel occupied this cell when the drag began, i.e. slots[i].id is
+ * always baseOrder[i]. */
+interface Slot {
+  id: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 /** Transient per-gesture data for an active drag — mouse (armed instantly from the grip handle) and
  * touch (armed after the long-press hold) both funnel into this same shape, kept in a ref (not
  * state) since most of it changes every pointermove and must never itself trigger a re-render; only
@@ -67,6 +80,10 @@ interface DragRef {
    * this is the grid container, not the tile that was actually pressed. */
   captureEl: HTMLDivElement;
   origin: OriginRect;
+  /** Every cell's geometry as of drag start, in base order. The single source of truth for both
+   * "which cell is the pointer over" and "where should each displaced tile be drawn" — see the
+   * render below for why nothing during a drag is ever measured off the live DOM. */
+  slots: Slot[];
 }
 
 /** A press-and-hold not yet committed to a drag — cancelled by releasing early (a tap) or by
@@ -101,9 +118,6 @@ const AUTO_SCROLL_SPEED_PX = 12;
 const LONG_PRESS_MS = 420;
 const LONG_PRESS_MOVE_TOLERANCE_PX = 10;
 
-// How long the FLIP settle animation takes when a displaced tile slides into its vacated slot.
-const FLIP_MS = 180;
-
 export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
   const [drag, setDrag] = useState<DragState | null>(null);
   // Live translate offset for the tile currently being dragged (mouse or touch alike) — null
@@ -117,18 +131,13 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
   // set at all for a plain tap/click, which never arms a drag in the first place).
   const justDraggedRef = useRef(false);
   const gridRef = useRef<HTMLDivElement>(null);
-  // Last measured position of every tile, keyed by channel id — the "First" half of the FLIP
-  // animation below (see the layout effect).
-  const tileRectsRef = useRef<Map<string, DOMRect>>(new Map());
 
-  // Derived, not accumulated. The previous version recomputed `to = prev.indexOf(targetId)`
-  // against its OWN last output, so re-entering the same tile (which `dragenter` does 2-5 times per
-  // tile — it bubbles from every child element inside it) flipped the order back and forth: the
-  // drag "took" or didn't depending on the parity of how many child boundaries the cursor crossed.
-  // A pure function of (baseOrder, draggingId, overId) can't oscillate — the same overId always
-  // produces the same array, however many times it's recomputed. Touch dragging feeds this same
-  // state (overId set from elementFromPoint instead of a dragenter event) so both input paths share
-  // one reorder algorithm and one commit path (commitReorder, below).
+  // Derived, not accumulated. An older version recomputed `to = prev.indexOf(targetId)` against its
+  // OWN last output, so re-entering the same tile flipped the order back and forth: the drag "took"
+  // or didn't depending on the parity of how many times the cursor had re-entered. A pure function
+  // of (baseOrder, draggingId, overId) can't oscillate — the same overId always produces the same
+  // array, however many times it's recomputed. Both input methods feed this one reorder algorithm
+  // and share one commit path (commitReorder, below).
   const preview = useMemo(() => {
     if (!drag) return null;
     const { draggingId, overId, baseOrder } = drag;
@@ -143,44 +152,48 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
     return [...without.slice(0, insertAt), draggingId, ...without.slice(insertAt)];
   }, [drag]);
 
-  const displayOrderIds = preview ?? channels.map((c) => c.id);
   const byId = new Map(channels.map((c) => [c.id, c]));
-  const ordered = displayOrderIds.map((id) => byId.get(id)).filter((c): c is Channel => !!c);
 
-  // FLIP (First-Last-Invert-Play): while a drag is live, every tile OTHER than the one being
-  // dragged should visibly slide into its new slot rather than snapping there the instant CSS Grid
-  // reflows it. Measure every tile's position on each render; once the DOM has settled into the
-  // NEW order, any tile whose position moved gets an inverted transform applied with no transition,
-  // then released on the next frame — the browser tweens it back to identity. Gated on `drag` being
-  // live so a normal channel-list reload elsewhere never triggers this.
-  useLayoutEffect(() => {
-    const gridEl = gridRef.current;
-    if (!gridEl) return;
-    const prevRects = tileRectsRef.current;
-    const nextRects = new Map<string, DOMRect>();
-    gridEl.querySelectorAll<HTMLElement>('[data-channel-id]').forEach((el) => {
-      const id = el.dataset.channelId;
-      if (!id) return;
-      const rect = el.getBoundingClientRect();
-      nextRects.set(id, rect);
-      // The dragged tile's own slot is hidden (visibility:hidden) while lifted — the floating ghost
-      // is its only visible representation, so it has nothing here to FLIP.
-      if (!drag || id === drag.draggingId) return;
-      const prev = prevRects.get(id);
-      if (!prev) return;
-      const dx = prev.left - rect.left;
-      const dy = prev.top - rect.top;
-      if (!dx && !dy) return;
-      el.style.transition = 'none';
-      el.style.transform = `translate(${dx}px, ${dy}px)`;
-      requestAnimationFrame(() => {
-        el.style.transition = `transform ${FLIP_MS}ms ease`;
-        el.style.transform = '';
-      });
-    });
-    tileRectsRef.current = nextRects;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayOrderIds.join('|'), drag?.draggingId]);
+  // THE DOM ORDER NEVER CHANGES DURING A DRAG. Tiles are rendered in base order the whole time and
+  // moved purely with transforms (see tileShift below) into wherever the live preview says they
+  // belong. This is the fix for the "tiles fly around at high speed" bug, which had two compounding
+  // causes, both of which this design removes by construction:
+  //
+  //  1. A FEEDBACK LOOP. Over-detection used to hit-test the live DOM (elementFromPoint), but the
+  //     reorder that produced changed which tile sat under the pointer — which flipped the preview
+  //     back, which moved the first tile under the pointer again. At any slot boundary that
+  //     ping-ponged many times per second. Now the pointer is tested against slot geometry frozen
+  //     at drag start (see armDrag), so a given pointer position always resolves to the same slot,
+  //     no matter what the preview is currently showing. Reordering can no longer feed back into
+  //     the thing that decides the reorder.
+  //  2. COMPOUNDING MEASUREMENT ERROR. The old FLIP pass measured each tile with its previous
+  //     animation's transform still applied, then stored that half-finished position as the
+  //     starting point for the next animation — so the error grew every cycle, which is what made
+  //     the motion look fast and wild rather than merely wrong. Nothing is measured off the live
+  //     DOM anymore; every position is arithmetic on the frozen slot list, so there is no error to
+  //     accumulate.
+  //
+  // A plain CSS transition on transform (see .channel-grid--dragging in the CSS) does the
+  // animating. Interrupting one mid-flight is handled natively by the browser — it re-targets from
+  // the current computed value — so dragging quickly across several slots stays smooth instead of
+  // fighting a hand-rolled interpolation.
+  const orderedIds = drag ? drag.baseOrder : channels.map((c) => c.id);
+  const ordered = orderedIds.map((id) => byId.get(id)).filter((c): c is Channel => !!c);
+
+  // Where a tile should be drawn right now: the offset from the cell it physically occupies (its
+  // base slot, which is also where the browser has actually laid it out) to the cell the preview
+  // wants it in. Undefined whenever it hasn't moved, so untouched tiles carry no transform at all.
+  const slots = dragRef.current?.slots;
+  const tileShift = (channelId: string): string | undefined => {
+    if (!drag || !preview || !slots) return undefined;
+    const from = slots.findIndex((s) => s.id === channelId);
+    const to = preview.indexOf(channelId);
+    if (from === -1 || to === -1 || from === to) return undefined;
+    const a = slots[from];
+    const b = slots[to];
+    if (!a || !b) return undefined;
+    return `translate(${b.left - a.left}px, ${b.top - a.top}px)`;
+  };
 
   // Shared commit point for BOTH input methods — one place that can decide "did the order actually
   // change" and fire exactly one setChannelOrder, so mouse and touch can't diverge on that logic.
@@ -246,6 +259,18 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
     if (!gridEl) return;
     gridEl.setPointerCapture(pointerId);
     const rect = tileEl.getBoundingClientRect();
+    // Freeze the grid's geometry for the whole gesture. Nothing is laid out or re-measured again
+    // until the drop: the DOM order stays put and tiles are moved with transforms, so these cells
+    // stay exactly where they are and stay a valid map of "pointer position → slot". Stored
+    // relative to the grid container so mid-drag auto-scrolling can't invalidate them. Measured
+    // before any tile is hidden or transformed, so slots[i].id === baseOrder[i] by construction.
+    const gridRect = gridEl.getBoundingClientRect();
+    const slots: Slot[] = [...gridEl.querySelectorAll<HTMLElement>('[data-channel-id]')].flatMap((el) => {
+      const id = el.dataset.channelId;
+      if (!id) return [];
+      const r = el.getBoundingClientRect();
+      return [{ id, left: r.left - gridRect.left, top: r.top - gridRect.top, width: r.width, height: r.height }];
+    });
     dragRef.current = {
       pointerId,
       startX: x,
@@ -256,8 +281,9 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
       lastClientY: y,
       captureEl: gridEl,
       origin: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+      slots,
     };
-    setDrag({ draggingId: channelId, overId: null, baseOrder: channels.map((c) => c.id) });
+    setDrag({ draggingId: channelId, overId: null, baseOrder: slots.map((s) => s.id) });
     setTouchOffset({ x: 0, y: 0 });
     startAutoScroll(gridEl);
   };
@@ -386,23 +412,29 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
             setTouchOffset(cur.pendingOffset);
           });
         }
-        // Discovers "which tile is the pointer over right now," for either input method —
-        // dragenter-style native events don't apply here at all now that both mouse and touch share
-        // this one path. The dragged tile's own slot is visibility:hidden while lifted (see the
-        // render below), so elementFromPoint naturally finds whatever's underneath instead of
-        // always finding itself.
+        // Which cell is the pointer over? Pure arithmetic against the slot geometry frozen at drag
+        // start — deliberately NOT elementFromPoint against the live DOM, which is what made tiles
+        // fly around: hit-testing the reordered DOM let the reorder decide its own input, so at a
+        // slot boundary the preview ping-ponged every frame (see the long comment above `orderedIds`
+        // in the render). Frozen geometry can't feed back, so a given pointer position resolves to
+        // one stable answer no matter what's currently drawn there.
         //
-        // Only ADVANCES overId when the pointer is actually over another tile — never clears it
-        // back to null just because this one instant landed on the grid's own background (the 10px
-        // gaps between cells). A real finger/cursor crosses those gaps constantly while dragging,
-        // and since the drop commits whatever overId was live at release, a gap landed on at the
-        // exact instant of lift-off would otherwise silently cancel an otherwise-clear reorder —
-        // confirmed live: an unlucky last frame in a gap reverted the whole drop back to the
-        // original order.
-        const el = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-channel-id]');
-        if (el) {
-          const overId = el.dataset.channelId ?? null;
-          setDrag((d) => (d && d.overId !== overId ? { ...d, overId } : d));
+        // Converted into grid space on every move rather than cached, so the answer stays right
+        // even while auto-scroll is moving the page under the pointer.
+        const gridBox = t.captureEl.getBoundingClientRect();
+        const px = e.clientX - gridBox.left;
+        const py = e.clientY - gridBox.top;
+        const hit = t.slots.find(
+          (s) => px >= s.left && px <= s.left + s.width && py >= s.top && py <= s.top + s.height
+        );
+        // Only ADVANCES overId when the pointer is genuinely inside a cell — never clears it back to
+        // null just because this one instant landed in the gaps between cells. A real finger/cursor
+        // crosses those constantly while dragging, and since the drop commits whatever overId was
+        // live at release, a gap landed on at the exact instant of lift-off would otherwise silently
+        // cancel an otherwise-clear reorder — confirmed live: an unlucky last frame in a gap
+        // reverted the whole drop back to the original order.
+        if (hit) {
+          setDrag((d) => (d && d.overId !== hit.id ? { ...d, overId: hit.id } : d));
         }
       }}
       onPointerUp={(e) => {
@@ -422,9 +454,13 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
             key={channel.id}
             data-channel-id={channel.id}
             // The dragged tile's real slot is hidden (not display:none) the instant it's lifted, so
-            // the grid reflows other tiles around a stable hole instead of collapsing/rejumping —
+            // it keeps holding its cell open as a stable hole instead of the grid collapsing —
             // the floating ghost below is its only visible stand-in for the rest of the gesture.
             className={`channel-tile-wrap ${isDraggingThis ? 'channel-tile-wrap--touch-source' : ''}`}
+            // Displaced tiles are moved into their previewed cell with a transform rather than by
+            // being re-placed in the DOM — see the comment above `orderedIds` for why that's what
+            // keeps this stable. The dragged tile itself is invisible, so it never needs one.
+            style={isDraggingThis ? undefined : { transform: tileShift(channel.id) }}
             // Belt-and-suspenders alongside the CSS -webkit-touch-callout:none (see
             // ChannelTabGrid.css) — a long press on a link/text can still surface iOS's native
             // context menu even with that CSS in place in some cases; explicitly blocking the event
