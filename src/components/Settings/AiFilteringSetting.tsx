@@ -19,8 +19,8 @@ const PROVIDER_LABELS: Record<AiProvider, string> = {
 // Shown below the picker for whichever provider is currently active, so picking one also explains
 // what it actually does — free tier, speed/accuracy trade-off, or the local-only caveat.
 const PROVIDER_NOTES: Record<AiProvider, string> = {
-  gemini: 'Google Gemini — generous free tier, the most accurate filtering of the three.',
-  groq: 'Groq — free tier, serves open-source models fast; filtering is quicker but slightly less precise than Gemini.',
+  gemini: 'Most accurate filtering, less snappy.',
+  groq: 'Quick filtering, slightly less precise.',
   ollama: 'Ollama — runs locally on this Mac, no key and no cost, but only filters while Catch Up and Ollama are both running here.',
 };
 

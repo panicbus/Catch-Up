@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useOnboardingGate } from '../../hooks/useOnboardingGate';
 import { OnboardingWizard } from './OnboardingWizard';
+import { Logo } from '../Layout/Logo';
 import './OnboardingGate.css';
 
 interface OnboardingGateProps {
@@ -32,8 +33,10 @@ export function OnboardingGate({ children }: OnboardingGateProps) {
   if (completed === null) {
     return showColdStartNotice ? (
       <div className="onboarding-gate__cold-start" role="status">
-        <div className="onboarding-gate__cold-start-spinner" aria-hidden />
-        <p>Waking up the server — this can take up to 30 seconds on the first load.</p>
+        <div className="onboarding-gate__cold-start-spinner">
+          <Logo size={64} />
+        </div>
+        <p>Waking up the server. This can take up to 30 seconds on the first load.</p>
       </div>
     ) : null;
   }

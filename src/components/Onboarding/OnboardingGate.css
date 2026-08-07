@@ -12,17 +12,32 @@
   background: var(--bg);
 }
 
+/* The ketchup bottle (Logo) spinning like a clock hand that hesitates at 12 rather than a
+   constant-speed spin: slow leaving 12, fast through the rest of the sweep (roughly the 12:10-to-
+   12:50 stretch of the rotation), slow again coming back into 12. Built as three keyframe segments
+   with the SLOW ones covering only a small arc (each ~1/6 of the rotation) and the FAST one covering
+   the rest (~2/3) — a small arc over a normal time-slice already reads as slow, a big arc over the
+   same time-slice already reads as fast, and the per-stop timing-functions round off the velocity
+   change at each handoff instead of leaving a visible kink. */
 .onboarding-gate__cold-start-spinner {
-  width: 28px;
-  height: 28px;
-  border: 3px solid var(--border-strong);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: onboarding-gate-cold-start-spin 0.8s linear infinite;
+  display: inline-flex;
+  animation: onboarding-gate-cold-start-spin 1.8s infinite;
 }
 
 @keyframes onboarding-gate-cold-start-spin {
-  to {
+  0% {
+    transform: rotate(0deg);
+    animation-timing-function: ease-in; /* leaving the 12 o'clock hesitation, picking up speed */
+  }
+  16.6% {
+    transform: rotate(25deg); /* 12:10 */
+    animation-timing-function: linear; /* the fast sweep */
+  }
+  83.3% {
+    transform: rotate(335deg); /* 12:50 */
+    animation-timing-function: ease-out; /* slowing back into the 12 o'clock hesitation */
+  }
+  100% {
     transform: rotate(360deg);
   }
 }
