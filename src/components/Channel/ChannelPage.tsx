@@ -64,10 +64,16 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
 }
 
 export function ChannelPage() {
-  const { channelId } = useParams<{ channelId: string }>();
+  // The URL identifies a channel by its slug (a readable version of the name, e.g. "tech"), not its
+  // real database id — slugs are unique per account (schema's userId+slug constraint), so this is a
+  // safe lookup key. Every internal operation below still uses the resolved channel's REAL id
+  // (channel.id) — the backend's routes take real ids, not slugs, and nothing about how a channel is
+  // actually addressed server-side changed, only what appears in the address bar.
+  const { channelSlug } = useParams<{ channelSlug: string }>();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { channels, loading: channelsLoading } = useChannels();
+  const channel = channels.find((c) => c.slug === channelSlug) ?? null;
   const { settings, update } = useSettings();
   const [subchannelId, setSubchannelId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -81,19 +87,20 @@ export function ChannelPage() {
   // this one DISMISSES the terminal result message after it's had time to be read. Two different
   // timers because the two messages have different lifecycles — see handleRefresh below.
   const noteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // ChannelPage isn't remounted when only the :channelId route param changes (same route element),
-  // so this is the one place a still-in-flight refresh can check "is the channel I started against
-  // still the one on screen" after an await — without it, navigating away mid-refresh lets a slow
-  // response for the OLD channel overwrite the feed and refresh note for whatever channel you've
-  // since switched to.
-  const channelIdRef = useRef(channelId);
+  // ChannelPage isn't remounted when only the :channelSlug route param changes (same route
+  // element), so this is the one place a still-in-flight refresh can check "is the channel I
+  // started against still the one on screen" after an await — without it, navigating away
+  // mid-refresh lets a slow response for the OLD channel overwrite the feed and refresh note for
+  // whatever channel you've since switched to. Tracks the resolved channel's REAL id (not the slug)
+  // since that's what handleRefresh's requestedChannelId comparison is keyed on below.
+  const channelIdRef = useRef(channel?.id);
   const [managingSubchannels, setManagingSubchannels] = useState(false);
   const [subchannelPickerOpen, setSubchannelPickerOpen] = useState(false);
   const [titleScrolledOut, setTitleScrolledOut] = useState(false);
   const [readInPlaceCount, setReadInPlaceCount] = useState(0);
   const feedRef = useRef<NewsFeedHandle>(null);
   const clearSuppressRef = useRef(false);
-  // A callback ref (rather than useRef + a effect keyed on channelId) so the observer attaches
+  // A callback ref (rather than useRef + a effect keyed on channelSlug) so the observer attaches
   // exactly when the <h1> node actually mounts — channels load asynchronously via IPC, so on first
   // render `channel` is still null and the early `if (!channel) return null` below skips rendering
   // the title entirely; a plain useRef effect would run once against that null ref and never retry.
@@ -122,17 +129,24 @@ export function ChannelPage() {
   // is a correctness requirement, not hygiene: without it, switching to a new channel and refreshing
   // it within 4s would let the OLD channel's dismiss timer clear the NEW channel's note early.
   useEffect(() => {
-    channelIdRef.current = channelId;
+    channelIdRef.current = channel?.id;
     setRefreshNote(null);
     setRefreshSlow(false);
     setRefreshing(false);
     clearRefreshTimers();
+    // Also keyed on channel?.id, not just channelSlug: on a fresh page load (a bookmark, a browser
+    // refresh) the channel list hasn't loaded yet on this effect's first run, so channel is still
+    // null and channelIdRef.current would sync to undefined — then never resync, since channelSlug
+    // itself doesn't change again once channels finish loading. Without this, refreshing on a
+    // freshly-loaded channel page would have channelIdRef.current stuck at undefined forever,
+    // making handleRefresh's "did the channel change mid-request" guard always read true and
+    // silently discard every refresh result. Harmless to also re-run this on normal in-app
+    // navigation (channel?.id changing alongside channelSlug) — there's nothing to reset yet.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId]);
+  }, [channelSlug, channel?.id]);
 
-  const channel = channels.find((c) => c.id === channelId) ?? null;
   const { articles, loading, reload, subchannelCounts, totalUnread } = useChannelArticles(
-    channelId ?? null,
+    channel?.id ?? null,
     subchannelId
   );
 
@@ -152,7 +166,7 @@ export function ChannelPage() {
     });
     observer.observe(titleNode);
     return () => observer.disconnect();
-  }, [titleNode, channelId]);
+  }, [titleNode, channelSlug]);
 
   if (!channel) {
     // Two genuinely different states used to look identical (a blank page): the channel list just

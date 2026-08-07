@@ -67,7 +67,7 @@ export function Sidebar() {
         <div className="sidebar__section-label">Channels</div>
         <div className="sidebar__channels">
           {channels.map((channel) => (
-            <NavLink key={channel.id} to={`/channel/${channel.id}`} className={navClass}>
+            <NavLink key={channel.id} to={`/channel/${channel.slug}`} className={navClass}>
               <span>{channel.name}</span>
             </NavLink>
           ))}

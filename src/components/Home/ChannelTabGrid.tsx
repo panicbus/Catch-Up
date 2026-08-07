@@ -675,7 +675,7 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
             <Link
               className={`channel-tile ${isChannelPaused(channel.pausedUntil) ? 'channel-tile--paused' : ''}`}
               style={{ background: getTileColor(channel.id) }}
-              to={`/channel/${channel.id}`}
+              to={`/channel/${channel.slug}`}
               draggable={false}
               onClick={(e) => {
                 if (justDraggedRef.current) {

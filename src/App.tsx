@@ -17,7 +17,7 @@ export default function App() {
             <Route element={<AppShell />}>
               <Route path="/" element={<HomePage />} />
               <Route path="/pool" element={<PoolPage />} />
-              <Route path="/channel/:channelId" element={<ChannelPage />} />
+              <Route path="/channel/:channelSlug" element={<ChannelPage />} />
               <Route path="/bookmarks" element={<BookmarksPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/about" element={<AboutPage />} />

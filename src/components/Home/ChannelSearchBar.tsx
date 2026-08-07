@@ -19,11 +19,11 @@ export function ChannelSearchBar() {
     return channels.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 5);
   }, [channels, query]);
 
-  const goToChannel = (channelId: string) => {
+  const goToChannel = (slug: string) => {
     setQuery('');
     setFocused(false);
     setError(null);
-    navigate(`/channel/${channelId}`);
+    navigate(`/channel/${slug}`);
   };
 
   const submit = async () => {
@@ -35,7 +35,7 @@ export function ChannelSearchBar() {
     // that already exists under a slightly different spelling/punctuation.
     const exact = channels.find((c) => c.slug === slugifyChannelName(trimmed));
     if (exact) {
-      goToChannel(exact.id);
+      goToChannel(exact.slug);
       return;
     }
     // Optimistic so the sidebar/Home tile shows up right away, but navigation still waits for the
@@ -65,7 +65,7 @@ export function ChannelSearchBar() {
         }
       );
       revalidateNow();
-      goToChannel(channel.id);
+      goToChannel(channel.slug);
     } catch (e) {
       // Surfaces real server messages (e.g. the per-account channel cap) instead of a generic
       // string that would make the cap look like a silent no-op.
@@ -118,7 +118,7 @@ export function ChannelSearchBar() {
               className="channel-search__suggestion"
               role="option"
               aria-selected={false}
-              onMouseDown={() => goToChannel(c.id)}
+              onMouseDown={() => goToChannel(c.slug)}
             >
               {c.name}
             </div>
