@@ -94,6 +94,12 @@ export async function getChannels(userId: string): Promise<Channel[]> {
   return channels.map(toChannel);
 }
 
+// A second, independent axis from the search-budget cap in providerBudget.ts: that one bounds
+// day-to-day refresh cost, this one bounds how much standing load a single guest account can add to
+// begin with. The founder's own account has 9 real channels — 25 is generous headroom for a real
+// guest while still capping any one signup's worst case. Never enforced for the owner.
+export const MAX_CHANNELS_PER_USER = 25;
+
 export async function createChannel(userId: string, name: string): Promise<Channel> {
   const capitalized = capitalizeWords(name.trim());
   const slug = slugifyChannelName(capitalized);
@@ -104,6 +110,10 @@ export async function createChannel(userId: string, name: string): Promise<Chann
   if (existing) return toChannel(existing);
 
   const count = await prisma.channel.count({ where: { userId } });
+  const owner = await prisma.user.findUnique({ where: { id: userId }, select: { isOwner: true } });
+  if (!owner?.isOwner && count >= MAX_CHANNELS_PER_USER) {
+    throw new Error(`You've reached the maximum of ${MAX_CHANNELS_PER_USER} channels per account.`);
+  }
   const created = await prisma.channel.create({
     data: { userId, name: capitalized, slug, sortOrder: count },
     include: { subchannels: true },

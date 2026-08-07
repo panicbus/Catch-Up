@@ -1,4 +1,4 @@
-.onboarding-gate__cold-start {
+.cold-start-notice {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -19,12 +19,12 @@
    the rest (~2/3) — a small arc over a normal time-slice already reads as slow, a big arc over the
    same time-slice already reads as fast, and the per-stop timing-functions round off the velocity
    change at each handoff instead of leaving a visible kink. */
-.onboarding-gate__cold-start-spinner {
+.cold-start-notice__spinner {
   display: inline-flex;
-  animation: onboarding-gate-cold-start-spin 1.8s infinite;
+  animation: cold-start-notice-spin 1.8s infinite;
 }
 
-@keyframes onboarding-gate-cold-start-spin {
+@keyframes cold-start-notice-spin {
   0% {
     transform: rotate(0deg);
     animation-timing-function: ease-in; /* leaving the 12 o'clock hesitation, picking up speed */

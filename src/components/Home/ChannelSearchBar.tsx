@@ -67,7 +67,9 @@ export function ChannelSearchBar() {
       revalidateNow();
       goToChannel(channel.id);
     } catch (e) {
-      setError('Could not create that channel — try again.');
+      // Surfaces real server messages (e.g. the per-account channel cap) instead of a generic
+      // string that would make the cap look like a silent no-op.
+      setError(e instanceof Error ? e.message : 'Could not create that channel — try again.');
       console.error('[ChannelSearchBar] createChannel failed', e);
     }
   };

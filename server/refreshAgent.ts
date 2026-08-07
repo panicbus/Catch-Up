@@ -13,6 +13,7 @@ import type { ProviderConfig, AiProvider } from '../main/providers/classifier';
 import * as dataStore from './stores/dataStore';
 import * as articlesCache from './stores/articlesCache';
 import { ServerClassificationStore } from './stores/classificationStore';
+import { assertSearchBudget, recordSearches, RateLimitedError } from './stores/providerBudget';
 
 /** Build the classifier config from the persisted setting, or null (AI off) if none is picked.
  * Ollama can be persisted here in principle (same Settings row shape as desktop) but is never
@@ -69,7 +70,22 @@ export async function runAll(userId: string): Promise<RunResult[]> {
   // long-running in-memory counter.
   const cycle = Math.floor(Date.now() / (30 * 60 * 1000));
   for (const channel of active) {
-    results.push(await runChannel(userId, channel.id, { staggerCycle: cycle }));
+    try {
+      results.push(await runChannel(userId, channel.id, { staggerCycle: cycle }));
+    } catch (e) {
+      if (!(e instanceof RateLimitedError)) throw e;
+      // Out of budget for the day (never true for the owner — see providerBudget.ts). Record it
+      // once and stop rather than let every remaining channel throw the same way — there's nothing
+      // left to spend regardless of how many channels are left to try.
+      results.push({
+        channelId: channel.id,
+        added: 0,
+        providersRun: [],
+        errors: [`Daily refresh limit reached — resets ${e.resetsAt.toISOString()}.`],
+        rateLimitedProviders: [],
+      });
+      break;
+    }
   }
   return results;
 }
@@ -84,6 +100,12 @@ export async function runChannel(
   if (!channel) {
     return { channelId, added: 0, providersRun: [], errors: [`Channel not found: ${channelId}`], rateLimitedProviders: [] };
   }
+
+  // Checked once, up front — a runaway guard on the shared provider quota, not a rationing scheme
+  // (see providerBudget.ts). Throws for a capped guest before any provider call is made; always a
+  // no-op for the owner. Callers: the interactive refresh route lets this throw straight through to
+  // handle()'s 429 mapping; runAll (above) catches it and stops early instead.
+  await assertSearchBudget(userId);
 
   const profile = channelProfile(channel.name);
   // Two reads, not four: getAiProvider/getGeminiApiKey/getGroqApiKey each used to fetch the whole
@@ -140,6 +162,9 @@ export async function runChannel(
     // Between targets only, never after the last — see the matching comment in main/refreshAgent.ts.
     if (i < targets.length - 1) await sleep(PROVIDER_PACING_MS);
   }
+  // One search per target regardless of whether it errored — an error can happen after the provider
+  // call already went out (e.g. in filterRelevant or merge), so it still counts. No-op for the owner.
+  await recordSearches(userId, targets.length);
 
   const rateLimitedProviders = getProviderStatus()
     .filter((p) => p.configured && p.rateLimited)

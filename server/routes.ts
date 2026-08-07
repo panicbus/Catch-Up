@@ -9,7 +9,11 @@
  * setSettings — a native-desktop-window concept with no web equivalent. */
 
 import { Router, type Request, type Response } from 'express';
-import { resolveUser } from './auth';
+import { resolveUser, getPublicUser, UnauthorizedError } from './auth';
+import { verifyGoogleCredential } from './auth/google';
+import { createSession, deleteSession, setSessionCookie, clearSessionCookie, SESSION_COOKIE } from './auth/session';
+import { RateLimitedError } from './stores/providerBudget';
+import { prisma } from './db';
 import { runChannel, runAll } from './refreshAgent';
 import { getProviderStatus } from '../main/providers/registry';
 import { pingModel, pingGroq } from '../main/providers/classifier';
@@ -35,10 +39,65 @@ function handle(fn: (userId: string, req: Request) => Promise<unknown>) {
       res.json(result ?? { ok: true });
     } catch (err) {
       console.error('[routes]', req.method, req.path, err);
+      // Distinct status codes, not just message text, so the frontend can react to each without
+      // sniffing strings: 401 flips the app to signed-out (see src/services/api.ts's
+      // onUnauthorized), 429 carries a resetsAt the frontend formats into "resets in ...".
+      if (err instanceof UnauthorizedError) {
+        res.status(401).json({ error: err.message });
+        return;
+      }
+      if (err instanceof RateLimitedError) {
+        res.status(429).json({ error: err.message, resetsAt: err.resetsAt.toISOString() });
+        return;
+      }
       res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
     }
   };
 }
+
+// --- Auth --------------------------------------------------------------------------------------
+//
+// The only routes that don't go through handle()'s resolveUser() — /auth/google is how a session
+// gets minted in the first place, and /auth/logout destroys one, so neither has (or needs) one yet
+// when it starts. /auth/me is the exception: it's an ordinary authenticated read, so it reuses
+// handle() exactly like every other route.
+
+router.get('/auth/me', handle((userId) => getPublicUser(userId)));
+
+router.post('/auth/google', async (req: Request, res: Response) => {
+  try {
+    const { sub, email, name, picture } = await verifyGoogleCredential(req.body?.credential);
+
+    // One transaction: a user that ends up without Settings or Streak 400s on every future route
+    // (both are read with findUniqueOrThrow elsewhere), so a partial failure here can't be allowed
+    // to leave an account half-created. isOwner is deliberately absent from `update` — signing in
+    // must never be able to change who the exempt account is, in either direction.
+    const user = await prisma.$transaction(async (tx) => {
+      const u = await tx.user.upsert({
+        where: { email },
+        update: { googleId: sub, authProvider: 'google', avatarUrl: picture, displayName: name ?? undefined },
+        create: { email, googleId: sub, authProvider: 'google', avatarUrl: picture, displayName: name },
+      });
+      await tx.settings.upsert({ where: { userId: u.id }, update: {}, create: { userId: u.id } });
+      await tx.streak.upsert({ where: { userId: u.id }, update: {}, create: { userId: u.id } });
+      return u;
+    });
+
+    const { token, expiresAt } = await createSession(user.id, req);
+    setSessionCookie(res, token, expiresAt);
+    res.json({ id: user.id, email: user.email, displayName: user.displayName, avatarUrl: user.avatarUrl });
+  } catch (err) {
+    console.error('[routes] POST /auth/google', err);
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+router.post('/auth/logout', async (req: Request, res: Response) => {
+  const raw = req.cookies?.[SESSION_COOKIE];
+  if (typeof raw === 'string' && raw.length > 0) await deleteSession(raw).catch(() => {});
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
 
 // --- Onboarding ------------------------------------------------------------------------------
 

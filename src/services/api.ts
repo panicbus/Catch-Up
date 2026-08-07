@@ -68,23 +68,49 @@ const electronApi: CatchUpApi = {
 
 const API_BASE = `${import.meta.env.VITE_API_BASE_URL ?? ''}/api`;
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+// Fired on any 401 from any endpoint, at any time — not just from a login-related call. The site
+// and the API are on different domains, so a session cookie can look present in the browser yet the
+// server may no longer honor it (signed out elsewhere, expired). src/services/auth.ts subscribes at
+// module load and flips its store to signed-out, which is what actually swaps the app over to the
+// sign-in screen — this file has no notion of what "signed out" looks like on screen, only that it
+// happened. Deliberately not a reload-and-retry loop like the old shared-password gate had.
+const unauthorizedListeners = new Set<() => void>();
+export function onUnauthorized(fn: () => void): () => void {
+  unauthorizedListeners.add(fn);
+  return () => unauthorizedListeners.delete(fn);
+}
+
+/** Thrown for a 429 instead of a bare Error, so a caller that cares (the refresh UI) can read
+ * `resetsAt` without parsing it back out of a message string. Everyone else can still just read
+ * `.message` like any other error. */
+export class RateLimitError extends Error {
+  readonly resetsAt: string | undefined;
+  constructor(message: string, resetsAt: string | undefined) {
+    super(message);
+    this.name = 'RateLimitError';
+    this.resetsAt = resetsAt;
+  }
+}
+
+export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
+    // Required for the session cookie to be sent at all — the site (Vercel) and this API (Render)
+    // are different origins, and fetch() doesn't include cookies cross-origin by default.
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...options.headers,
     },
   });
-  // A 401 used to mean "the stored shared password was rejected", and this cleared it and reloaded
-  // so the gate could re-prompt. With no gate there's nothing to re-prompt for, and reloading on
-  // every failed call would spin forever — so a 401 is now just an error like any other status.
   const body = await res.json().catch(() => ({}));
+  if (res.status === 401) for (const fn of unauthorizedListeners) fn();
+  if (res.status === 429) throw new RateLimitError(body?.error || 'Rate limited.', body?.resetsAt);
   if (!res.ok) throw new Error(body?.error || `Request failed: ${res.status}`);
   return body as T;
 }
 
-function post<T>(path: string, body?: unknown): Promise<T> {
+export function post<T>(path: string, body?: unknown): Promise<T> {
   return request<T>(path, { method: 'POST', body: body !== undefined ? JSON.stringify(body) : undefined });
 }
 

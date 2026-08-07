@@ -10,15 +10,21 @@ datasource db {
   provider = "postgresql"
 }
 
-// Every table below is scoped by userId from day one, even though only one User row exists for
-// now (the founder's own account) — see the approved web-deployment plan. Real sign-in later only
-// changes how a request resolves its acting user, not any of this shape.
+// Every table below is scoped by userId from day one — that was true before real sign-in existed
+// (only the founder's row) and is what made adding Google sign-in a change to how a request
+// resolves its acting user, not a reshaping of any of this.
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
   displayName  String?  @map("display_name")
-  passwordHash String?  @map("password_hash") // nullable/unused this phase — real accounts later
-  authProvider String?  @map("auth_provider") // nullable/unused this phase
+  passwordHash String?  @map("password_hash") // unused — sign-in is Google-only, no local passwords
+  authProvider String?  @map("auth_provider") // 'google' for every account created by sign-in
+  googleId     String?  @unique @map("google_id") // Google's stable `sub` claim
+  avatarUrl    String?  @map("avatar_url") // Google profile picture, shown by the account menu
+  // NOT vestigial: this is the usage-cap exemption flag. The founder's own account is never
+  // counted or capped (see server/stores/providerBudget.ts), so guests sharing the app can't
+  // consume the shared news-provider quotas out from under it. Deliberately never written by the
+  // sign-in upsert — signing in must never be able to demote the owner.
   isOwner      Boolean  @default(false) @map("is_owner")
   createdAt    DateTime @default(now()) @map("created_at")
 
@@ -29,10 +35,31 @@ model User {
   bookmarks              Bookmark[]
   settings               Settings?
   streak                 Streak?
+  sessions               Session[]
   classificationVerdicts ClassificationCache[]
   classificationBudgets  ClassificationDailyBudget[]
+  providerBudgets        ProviderDailyBudget[]
 
   @@map("users")
+}
+
+// One row per live sign-in. `id` is the sha256 hash of the random token held in the session
+// cookie — never the token itself, so a leaked backup or a stray log line yields unusable hashes
+// rather than working sessions. Rows are real, so a session can be revoked instantly by deleting
+// one (which is what signing out does), unlike a stateless token that stays valid until it expires.
+model Session {
+  id        String   @id
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  userAgent String?  @map("user_agent")
+  ipAddress String?  @map("ip_address")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
 model Channel {
@@ -186,4 +213,24 @@ model ClassificationDailyBudget {
 
   @@id([userId, date])
   @@map("classification_daily_budget")
+}
+
+// Same shape and same reasoning as ClassificationDailyBudget above, for a different metered
+// resource: the news-provider fetches (NewsData/Guardian/GNews/NYTimes). Those API keys are
+// app-level and SHARED across every account, so without a per-account ceiling a handful of guests
+// could exhaust the day's quota for everyone. Rows are only ever written for non-owner accounts —
+// the founder's own usage is never counted (see server/stores/providerBudget.ts), which is what
+// keeps sharing the app from degrading the founder's own use of it.
+//
+// `date` is a UTC DATE, so the budget resets at midnight UTC — that's what the "resets in ..."
+// message shown to a capped guest is computed from.
+model ProviderDailyBudget {
+  userId String   @map("user_id")
+  date   DateTime @db.Date
+  count  Int      @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, date])
+  @@map("provider_daily_budget")
 }

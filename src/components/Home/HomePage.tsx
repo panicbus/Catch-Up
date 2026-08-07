@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useChannels } from '../../hooks/useChannels';
 import { useChannelCounts } from '../../hooks/useChannelCounts';
 import { useStreak } from '../../hooks/useStreak';
@@ -12,38 +11,15 @@ import { StreakCard } from '../Layout/StreakCard';
 import dinerBg from '../../assets/diner-bg.png';
 import './HomePage.css';
 
-function PersonIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" />
-    </svg>
-  );
-}
-
 /** Mobile-only — desktop reaches the brand mark and streak card through the sidebar, which is
- * hidden below 767px (see AppShell.css), so both need a mobile home for them. There's no account
- * system yet (the site has no auth at all right now — see server/index.ts), so "Sign in" is a
- * placeholder for the future per-user auth phase — it renders as designed but only ever shows a
- * short note that accounts are coming, never a real sign-in flow. */
+ * hidden below 767px (see AppShell.css), so both need a mobile home for them. Used to also hold a
+ * "Sign in" placeholder button; that's now the real AccountMenu (src/components/Auth/AccountMenu.tsx),
+ * rendered once by AppShell as shared chrome on every route rather than Home-only, so it was removed
+ * from here rather than left as a second, competing affordance. */
 function MobileTopBar() {
-  const [noteVisible, setNoteVisible] = useState(false);
-
-  const showNote = () => {
-    setNoteVisible(true);
-    window.setTimeout(() => setNoteVisible(false), 3000);
-  };
-
   return (
     <div className="home-page__mobile-topbar">
-      <div className="home-page__mobile-topbar-row">
-        <Logo withWordmark wordmarkLayout="inline" size={34} />
-        <button type="button" className="home-page__sign-in" onClick={showNote}>
-          <PersonIcon />
-          Sign in
-        </button>
-      </div>
-      {noteVisible && <p className="home-page__sign-in-note">Accounts are coming soon.</p>}
+      <Logo withWordmark wordmarkLayout="inline" size={34} />
     </div>
   );
 }

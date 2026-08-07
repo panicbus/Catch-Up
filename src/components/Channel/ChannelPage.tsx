@@ -15,8 +15,9 @@ import { Button } from '../common/Button';
 import { PauseChannelControl, isChannelPaused } from '../common/PauseChannelControl';
 import { OverflowMenu } from '../common/OverflowMenu';
 import { ChannelPausedScreen } from './ChannelPausedScreen';
-import { api, revalidateNow } from '../../services/api';
+import { api, revalidateNow, RateLimitError } from '../../services/api';
 import * as channelsStore from '../../services/channelsStore';
+import { formatTimeUntil } from '../../services/formatters';
 import './ChannelPage.css';
 
 function ArchiveIcon() {
@@ -186,7 +187,30 @@ export function ChannelPage() {
     refreshSlowTimerRef.current = setTimeout(() => {
       if (channelIdRef.current === requestedChannelId) setRefreshSlow(true);
     }, 2500);
-    const result = await api.refreshChannel(requestedChannelId);
+    let result;
+    try {
+      result = await api.refreshChannel(requestedChannelId);
+    } catch (e) {
+      // The only case refreshChannel can actually throw rather than come back with `errors`
+      // populated: a guest account out of daily refreshes (server/stores/providerBudget.ts) — the
+      // API answers with a 429 before running any provider search at all, which api.ts's request()
+      // surfaces as a RateLimitError instead of a normal result. The owner's account is never
+      // capped, so this path never applies to it.
+      if (refreshSlowTimerRef.current) clearTimeout(refreshSlowTimerRef.current);
+      if (channelIdRef.current === requestedChannelId) {
+        setRefreshSlow(false);
+        setRefreshing(false);
+        setRefreshNote(
+          e instanceof RateLimitError
+            ? `Daily refresh limit reached — resets in ${formatTimeUntil(e.resetsAt ?? '')}.`
+            : 'Refresh failed — try again.'
+        );
+        noteTimerRef.current = setTimeout(() => {
+          if (channelIdRef.current === requestedChannelId) setRefreshNote(null);
+        }, 4000);
+      }
+      return;
+    }
     if (refreshSlowTimerRef.current) clearTimeout(refreshSlowTimerRef.current);
     // Navigated to a different channel while this was in flight — its result no longer belongs on
     // screen. The channel-change effect above already reset refreshing/refreshSlow/refreshNote and

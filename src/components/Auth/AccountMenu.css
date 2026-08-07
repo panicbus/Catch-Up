@@ -1,0 +1,92 @@
+/* Fixed to the viewport corner, not the sidebar or the mobile top bar — one element that serves
+   both breakpoints identically, which is what makes this real shared chrome (rendered once by
+   AppShell.tsx) rather than the old per-route "Sign in" stub it replaces. z-index above the sidebar/
+   bottom nav but below Modal.tsx's own portal (100), matching NewsFeed's toast (55) for the same
+   "above normal chrome, below a real dialog" slot. */
+.account-menu-wrap {
+  position: fixed;
+  top: 14px;
+  right: 16px;
+  z-index: 60;
+}
+
+.account-menu__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+}
+
+.account-menu__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border-strong);
+}
+
+.account-menu__avatar--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.account-menu__menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  min-width: 200px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.account-menu__identity {
+  padding: 6px 10px 8px;
+}
+
+.account-menu__name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.account-menu__email {
+  font-size: 12px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu__divider {
+  margin: 6px 4px;
+  border-top: 1px solid var(--border);
+}
+
+.account-menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+}
+.account-menu__item:hover {
+  background: var(--surface-hover);
+}

@@ -34,11 +34,13 @@ export function ChannelManageList() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [addError, setAddError] = useState<string | null>(null);
   const { pendingChannel, requestDelete, cancel, confirm } = useDeleteChannelFlow(channels);
 
   const addChannel = () => {
     const trimmed = draft.trim();
     if (!trimmed) return;
+    setAddError(null);
     // Optimistic: a temporary placeholder row appears immediately (matching the server's own name
     // capitalization/slugging, so nothing visibly changes when the real record lands), then gets
     // swapped for the server's real record as soon as the create call resolves — not on the next
@@ -68,7 +70,12 @@ export function ChannelManageList() {
         }
       )
       .then(() => revalidateNow())
-      .catch(() => {});
+      .catch((e: unknown) => {
+        // channelsStore.mutate already rolled the optimistic row back and re-synced on failure —
+        // this is just the user-visible half of that, which was previously silent (a cap error, in
+        // particular, would otherwise look like the button just didn't work).
+        setAddError(e instanceof Error ? e.message : 'Could not create that channel — try again.');
+      });
     setDraft('');
   };
 
@@ -115,6 +122,7 @@ export function ChannelManageList() {
           Add
         </Button>
       </div>
+      {addError && <p className="channel-manage__add-error">{addError}</p>}
 
       <div className="channel-manage__box">
         <button

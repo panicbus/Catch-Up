@@ -6,10 +6,19 @@
 import 'dotenv/config';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { router } from './routes';
 
 const PORT = Number(process.env.PORT) || 3001;
+
+// Every route now requires a real signed-in session (see server/auth.ts) — verifying that session
+// means verifying a Google ID token, which needs this. Checked at boot, not per-request: a missing
+// var here means NO ONE can ever sign in, which should fail loudly and immediately rather than
+// quietly deploy into a state where every user just sees an unexplained 401.
+if (!process.env.GOOGLE_CLIENT_ID) {
+  throw new Error('GOOGLE_CLIENT_ID is not set — sign-in cannot work without it.');
+}
 
 // Local dev origins, used ONLY as the fallback when ALLOWED_ORIGINS is unset. Deliberately NOT a
 // wildcard, even though there's no auth in front of the API right now — an unset variable in a real
@@ -32,7 +41,12 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(express.json({ limit: '1mb' }));
-app.use(cors({ origin: allowedOrigins }));
+app.use(cookieParser());
+// credentials: true is required for the session cookie to be sent/received on cross-origin calls
+// at all (the site and this API are on different domains) — safe alongside the existing explicit
+// origin list, which is never a wildcard, since credentialed CORS requires an explicit origin
+// anyway (the spec forbids pairing credentials with `*`).
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 
 // Broad ceiling on total traffic. Sized well above real use (the web app polls every ~20s and
 // fans out per channel) so it only catches genuine runaway/abusive volume. With the shared-password
@@ -48,12 +62,12 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-// No authentication in front of the router. Deliberate and temporary: the shared password was
-// removed because it was pure friction for a single-owner site while providing little real
-// protection (the API address is discoverable in the public repo and in the site's own network
-// traffic). Real Google sign-in is the planned replacement — until it ships, anyone who finds this
-// address can read and modify this account's channels and stories. Provider API keys are still
-// safe: they live in Settings and are never returned to any client.
+// Every route under here requires a real signed-in session — see server/auth.ts's resolveUser(),
+// which every route calls first via routes.ts's handle() wrapper. (The shared-password gate this
+// used to have was removed for being pure friction on a single-owner site with no real signup —
+// now that anyone can sign in, a real per-account session replaces it properly rather than being a
+// blanket gate in front of the router.) Provider API keys stay safe regardless: they live in
+// Settings and are never returned to any client, signed in or not.
 app.use('/api', router);
 
 // Last-resort handler so a throw anywhere in the stack becomes a clean 500 instead of a dangling

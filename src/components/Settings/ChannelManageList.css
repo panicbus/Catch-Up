@@ -9,6 +9,12 @@
   margin-bottom: 16px;
 }
 
+.channel-manage__add-error {
+  margin: -10px 0 16px;
+  color: var(--accent-strong);
+  font-size: 13px;
+}
+
 .channel-manage__input {
   flex: 1;
   padding: 10px 12px;
