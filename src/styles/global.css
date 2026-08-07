@@ -24,3 +24,16 @@ h1, h2, h3 {
   border-radius: 8px;
   border: 2px solid var(--bg);
 }
+
+/* Applied to <body> for the duration of a touch that might become a long-press on a Home channel
+   tile (see ChannelTabGrid.tsx's raw touch effect) — suppresses iOS Safari's native text-selection/
+   magnifier gesture. Deliberately GLOBAL rather than scoped to the tile itself: confirmed live that
+   once the tile refuses to be selected, iOS reaches for the nearest selectable text instead (e.g.
+   HomePage's own headings sitting just above the grid), so nothing on the page can be a substitute
+   target for the whole time this class is applied. */
+.catch-up-suppress-select,
+.catch-up-suppress-select * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
