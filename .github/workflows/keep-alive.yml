@@ -1,0 +1,20 @@
+name: Keep backend warm
+
+# Render's free tier fully suspends the backend after ~15 minutes with no incoming requests, and
+# the next real request then pays a 20-30+ second cold-start penalty (see OnboardingGate.tsx's
+# notice for the user-facing side of this). Pinging /health often enough — a plain 200 with no
+# database call, see server/index.ts — keeps it from ever going idle that long. Uses GitHub's own
+# free scheduler, same reasoning as refresh.yml: no billing, no new infrastructure.
+#
+# 10 minutes, not 15 — leaves margin for GitHub's scheduled-workflow delivery not being exact
+# (documented as best-effort, can run a few minutes late under load).
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --max-time 30 https://catch-up-dcti.onrender.com/health
