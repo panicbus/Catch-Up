@@ -133,4 +133,12 @@
     flex: 1 1 100%;
     justify-content: flex-end;
   }
+
+  /* iOS Safari auto-zooms the whole page on focusing any input styled under 16px — these are 14px,
+     so tapping either field zoomed the screen in (matches the same fix already applied to
+     SubchannelManagePanel.css's identical pair of inputs). */
+  .channel-manage__input,
+  .channel-manage__row-name-input {
+    font-size: 16px;
+  }
 }

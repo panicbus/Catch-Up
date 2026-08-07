@@ -54,3 +54,12 @@
 .channel-picker__chip-remove:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* iOS Safari auto-zooms the whole page on focusing any input styled under 16px — this is 15px, so
+   tapping it during onboarding zoomed the whole screen in (same fix already applied elsewhere — see
+   SubchannelManagePanel.css and ChannelManageList.css for the identical issue). */
+@media (max-width: 767px) {
+  .channel-picker__input {
+    font-size: 16px;
+  }
+}

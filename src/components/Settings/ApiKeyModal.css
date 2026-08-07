@@ -91,3 +91,14 @@
   font-size: 12px;
   line-height: 1.4;
 }
+
+/* iOS Safari auto-zooms the whole page on focusing any input styled under 16px — this is 14px, so
+   pasting a key zoomed the whole screen in (same fix already applied elsewhere — see
+   SubchannelManagePanel.css and ChannelManageList.css for the identical issue). Shared with
+   OllamaModal's own text input, which reuses this class — harmless there, since that field is
+   desktop/Electron-only and never actually hits iOS's zoom behavior in the first place. */
+@media (max-width: 767px) {
+  .api-key-modal__input {
+    font-size: 16px;
+  }
+}

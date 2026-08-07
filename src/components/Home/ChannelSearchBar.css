@@ -60,3 +60,12 @@
   font-size: 12.5px;
   color: var(--accent-strong);
 }
+
+/* iOS Safari auto-zooms the whole page on focusing any input styled under 16px — this is 14.5px,
+   so tapping "Add a topic..." zoomed the whole Home screen in and stuck that way (same fix already
+   applied to SubchannelManagePanel.css and ChannelManageList.css's own text inputs). */
+@media (max-width: 767px) {
+  .channel-search__input {
+    font-size: 16px;
+  }
+}
