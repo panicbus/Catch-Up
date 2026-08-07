@@ -1,5 +1,14 @@
 *, *::before, *::after {
   box-sizing: border-box;
+  /* Kills the gray tap-highlight overlay mobile browsers paint on any tapped link/button (tiles,
+     pills, nav icons, the back arrow, bookmark buttons — anything clickable app-wide). Not
+     inherited reliably across engines, so this is set on every element directly via the universal
+     selector rather than just html/body — the same "confirmed live, don't trust inheritance alone"
+     lesson this app has already hit more than once with other -webkit-* mobile properties. Without
+     it, the highlight can outlast the tap itself and still be visibly fading in on the NEXT screen
+     after a route change, since the tapped element's paint state doesn't necessarily reset just
+     because React swapped what's mounted there. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 html, body, #root {
