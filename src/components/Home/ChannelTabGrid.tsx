@@ -125,6 +125,10 @@ type TouchTrack =
       lastX: number;
       lastY: number;
       timerId: number;
+      /** .app-shell__main's scrollTop at the instant this hold began — lets the scroll listener
+       * below tell "the page actually moved" from "startAutoScroll is moving it during an unrelated
+       * drag" apart from a false read during momentum scroll deceleration. See cancelHoldWatch. */
+      startScrollTop: number;
     }
   | { kind: 'tap-watch'; touchId: number; startX: number; startY: number };
 
@@ -138,21 +142,27 @@ function sameOrder(a: string[], b: string[]): boolean {
 const AUTO_SCROLL_EDGE_PX = 60;
 const AUTO_SCROLL_SPEED_PX = 12;
 
-// How long a touch has to hold still before it commits to a drag, and how far it's allowed to
-// wander during that hold before it reads as a scroll intent instead (cancelling the hold and
-// leaving native scrolling completely alone — the hold never calls preventDefault/setPointerCapture
-// until it actually fires).
-//
-// Was 420ms/10px, then 600ms/14px — both still false-positived into drag mode on a scroll that
-// starts slowly, because the tolerance was loose enough that a slow-building swipe could still be
-// under it when the timer fired. Correct framing, per direct feedback: the long-press duration
-// itself (now a full second, easy to feel as deliberate) is already right — what needed fixing was
-// the tolerance, which should be near-zero. ANY real movement during that second should read as a
-// scroll and cancel the hold immediately; only a genuinely stationary press should ever arm a drag.
-// 6px is just enough to absorb touch-contact jitter (the reported ellipse shifting slightly as a
-// finger settles), not real motion.
+// How long a touch has to hold still before it commits to a drag. Was tuned twice (420ms/10px, then
+// 600ms/14px) chasing scrolling that still felt hesitant/sticky on iOS — neither round helped, because
+// the tolerance was never the real cause. The actual bug: onTouchMove used to call preventDefault()
+// on every touchmove still inside this tolerance, and on WebKit, preventing a touchmove BEFORE the
+// native pan has started tells iOS the page is handling the whole gesture — the pan recognizer is
+// never armed for the rest of that touch, even once movement later clears the tolerance and this
+// listener stops touching the event. A slow, deliberate scroll (most real ones) spends its first few
+// frames under any reasonable tolerance, so it died every time; a fast flick cleared it on frame one
+// and survived — exactly the "doesn't grab every time" symptom. That preventDefault is gone now (see
+// onTouchMove below); the browser's own pan recognizer decides, and this code only ever REACTS once
+// it has, via a raw pointercancel or the .app-shell__main scroll listener actually observing
+// movement (see cancelHoldWatch). This tolerance is now just a backstop for a finger that wanders
+// without either of those firing first.
 const LONG_PRESS_MS = 1000;
-const LONG_PRESS_MOVE_TOLERANCE_PX = 6;
+const LONG_PRESS_MOVE_TOLERANCE_PX = 10;
+
+// Separate from the tolerance above: how far a TAP is allowed to wander and still count as one, used
+// only by the tap-to-exit-rearranging paths (finishDrag's isTapToExit, and the tap-watch branch
+// below). Split out so either can be retuned without moving the other — this has nothing to do with
+// the scroll-vs-drag decision.
+const TAP_SLOP_PX = 10;
 
 // Applied to document.body (not scoped to this grid — see the raw touch effect's onTouchStart for
 // why) for the duration of a touch that might be a long-press, to suppress iOS's native text-
@@ -318,7 +328,16 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
   ) => {
     const gridEl = tileEl.closest<HTMLDivElement>('.channel-grid');
     if (!gridEl) return;
-    gridEl.setPointerCapture(pointerId);
+    // The pointer can already be dead by the time a hold-watch timer fires — the browser may have
+    // claimed it for its own pan (pointercancel) or the page may have scrolled out from under it a
+    // moment earlier (see cancelHoldWatch below); either normally cancels the pending timer first,
+    // but the two can race. setPointerCapture on a no-longer-active pointerId throws NotFoundError —
+    // bail cleanly rather than let that escape uncaught from inside a setTimeout and blank the app.
+    try {
+      gridEl.setPointerCapture(pointerId);
+    } catch {
+      return;
+    }
     const rect = tileEl.getBoundingClientRect();
     // Freeze the grid's geometry for the whole gesture. Nothing is laid out or re-measured again
     // until the drop: the DOM order stays put and tiles are moved with transforms, so these cells
@@ -355,7 +374,12 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
     if (!t || e.pointerId !== t.pointerId) return;
     if (t.rafId) cancelAnimationFrame(t.rafId);
     stopAutoScroll();
-    t.captureEl.releasePointerCapture(e.pointerId);
+    // See armDrag's matching try/catch — the pointer can already be invalid by the time this fires.
+    try {
+      t.captureEl.releasePointerCapture(e.pointerId);
+    } catch {
+      // Already released/invalid; nothing left to clean up on the capture side.
+    }
     // A drag that (a) was armed by touching a tile while ALREADY rearranging — not the long-press
     // that turned rearranging on in the first place, which must NOT instantly turn it back off on
     // its own release — and (b) never actually moved is the "tap to put everything down" gesture:
@@ -363,7 +387,7 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
     // opening it. Read BEFORE dragRef is cleared below. Mouse can never reach this — armedWhileRearranging
     // is only ever set true from the touch continuation path.
     const totalMove = Math.hypot(t.pendingOffset.x, t.pendingOffset.y);
-    const isTapToExit = t.armedWhileRearranging && totalMove <= LONG_PRESS_MOVE_TOLERANCE_PX;
+    const isTapToExit = t.armedWhileRearranging && totalMove <= TAP_SLOP_PX;
     dragRef.current = null;
     // Swallow the click the browser is about to fire right after this pointerup — but only THAT
     // one: self-clears shortly after in case no click ever actually arrives to consume it (some
@@ -400,16 +424,30 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
   // different answers about the same gesture frame to frame, which is what made both the magnifier
   // suppression and the scroll-vs-drag call feel inconsistent. Now there is exactly one.
   //
-  // Raw (non-React) listeners are required, not a style choice: PointerEvent.preventDefault() does
-  // NOT reliably cancel iOS's native long-press text-selection/callout gesture — confirmed live —
-  // only preventDefault() on the real underlying TouchEvent does. And this listener must never call
-  // it on touchstart or touchend: doing that unconditionally, for every touch landing on a tile, was
-  // ALSO confirmed live to break scrolling that starts on a tile until an unrelated tap "resets" it
-  // — a real WebKit behavior, not a bug in the reasoning that touch-action: pan-y should make it
-  // harmless. So touchmove is the only event this ever calls preventDefault() on, and only within
-  // LONG_PRESS_MOVE_TOLERANCE_PX of where a hold started — a real scroll swipe crosses that almost
-  // immediately, at which point this stops touching the event and native scrolling takes over
-  // exactly as if this listener wasn't here.
+  // Raw (non-React) listeners are used because React's Pointer Events don't cleanly expose the
+  // per-touch Touch.identifier this needs to track one physical finger across events, and because
+  // this needs to distinguish "hold" from "scroll" from raw touch data before either has happened.
+  //
+  // Nothing in this effect ever calls preventDefault(), on ANY event — touchstart, touchmove, or
+  // touchend. It used to, on touchmove, to hold the movement tolerance and (incidentally) suppress
+  // iOS's text-selection/magnifier gesture during a pending hold. That's exactly what broke
+  // scrolling: WebKit's "does the page want this gesture" decision is made once, early in the touch
+  // sequence, and calling preventDefault on a touchmove BEFORE the native pan has actually started
+  // answers that "yes" for the rest of the touch — even once later movement clears the tolerance and
+  // this code stops touching the event. A slow, deliberate scroll (most real ones) spends its first
+  // few frames under any reasonable tolerance, so it died every time; only a fast flick that cleared
+  // the tolerance on its very first delivered touchmove survived. Confirmed live, and matches
+  // src/hooks/useSwipeToDismiss.ts's working pattern for the identical tension: do nothing while a
+  // gesture is undecided, only ever preventDefault after committing to a direction.
+  //
+  // So the browser's own pan recognizer is now the sole authority on scroll-vs-not, full stop — this
+  // code only ever REACTS once it has decided, via a raw pointercancel (the browser claimed the
+  // gesture) or the .app-shell__main scroll listener actually observing the page move (belt-and-
+  // suspenders, in case pointercancel doesn't fire reliably here — see cancelHoldWatch, both
+  // registered below). The magnifier/text-selection suppression that touchmove's preventDefault used
+  // to also provide is unaffected — it never depended on that call in the first place: it's carried
+  // by NO_SELECT_CLASS (added at touchstart, before any touchmove could fire, so a dead-still hold
+  // is already covered) plus the CSS's -webkit-touch-callout/-webkit-user-select rules.
   //
   // dragRef.current is the handoff signal: the FIRST line of onTouchMove bails once a drag is live,
   // because from that instant the grid's own onPointerMove (above) owns the gesture completely.
@@ -427,6 +465,24 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
   useEffect(() => {
     const gridEl = gridRef.current;
     if (!gridEl) return;
+    // The real scroll container (see AppShell.css) — used both to snapshot scrollTop when a hold
+    // begins and to listen for the page actually moving. Optional-chained everywhere below rather
+    // than bailing the whole effect if it's ever missing, matching startAutoScroll's own defensive
+    // `if (!scrollRoot) return` for the same lookup.
+    const scrollRoot = gridEl.closest<HTMLElement>('.app-shell__main');
+
+    // Shared cleanup for every path that can end a hold-watch WITHOUT it becoming a drag: the
+    // move-tolerance check in onTouchMove below, native pan takeover (the raw pointercancel
+    // listener), the page actually scrolling (the scrollRoot listener), and touchend/touchcancel.
+    // Centralized so a future cancel path can't forget the class removal and leave the document
+    // unselectable, or forget the timer and let a stale hold still fire.
+    const cancelHoldWatch = () => {
+      const tr = touchTrackRef.current;
+      if (tr?.kind !== 'hold-watch') return;
+      window.clearTimeout(tr.timerId);
+      touchTrackRef.current = null;
+      document.body.classList.remove(NO_SELECT_CLASS);
+    };
 
     const onTouchStart = (e: TouchEvent) => {
       const target = e.target as HTMLElement;
@@ -486,6 +542,7 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
         lastX: touch.clientX,
         lastY: touch.clientY,
         timerId,
+        startScrollTop: scrollRoot?.scrollTop ?? 0,
       };
     };
 
@@ -499,32 +556,30 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
 
       if (tr.kind === 'hold-watch') {
         if (moved > LONG_PRESS_MOVE_TOLERANCE_PX) {
-          // Reads as a scroll now — let it go entirely. Nothing further is prevented for this
-          // gesture, so native scrolling resumes exactly as if this listener wasn't here.
-          window.clearTimeout(tr.timerId);
-          touchTrackRef.current = null;
+          // Reads as a scroll now — let it go entirely. Nothing here has ever called preventDefault,
+          // so native scrolling was never touched and is free to already be under way.
+          cancelHoldWatch();
           return;
         }
         tr.lastX = touch.clientX;
         tr.lastY = touch.clientY;
-        e.preventDefault();
         return;
       }
 
       // tap-watch: nothing to suppress off-tile — just stop treating this as a possible tap once
       // it's wandered enough to read as a page pan instead (which stays free to work normally).
-      if (moved > LONG_PRESS_MOVE_TOLERANCE_PX) touchTrackRef.current = null;
+      if (moved > TAP_SLOP_PX) touchTrackRef.current = null;
     };
 
     const onTouchEnd = (e: TouchEvent) => {
       document.body.classList.remove(NO_SELECT_CLASS);
       const tr = touchTrackRef.current;
       if (!tr || ![...e.changedTouches].some((t) => t.identifier === tr.touchId)) return;
-      touchTrackRef.current = null;
       if (tr.kind === 'hold-watch') {
-        window.clearTimeout(tr.timerId);
+        cancelHoldWatch();
         return;
       }
+      touchTrackRef.current = null;
       // tap-watch ended without ever exceeding tolerance (otherwise onTouchMove would already have
       // cleared it) — this is the deliberate tap that puts everything back down.
       setRearranging(false);
@@ -534,21 +589,52 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
       document.body.classList.remove(NO_SELECT_CLASS);
       const tr = touchTrackRef.current;
       if (!tr || ![...e.changedTouches].some((t) => t.identifier === tr.touchId)) return;
+      if (tr.kind === 'hold-watch') {
+        cancelHoldWatch();
+        return;
+      }
       touchTrackRef.current = null;
-      if (tr.kind === 'hold-watch') window.clearTimeout(tr.timerId);
       // No exit on cancel — the OS taking the gesture for something else (an incoming call, e.g.)
       // isn't the user's deliberate "done rearranging" tap.
     };
 
+    // The browser claimed this pointer for its own gesture (a pan, most likely) — iOS's definitive
+    // "this is not a long press" signal. Only relevant during hold-watch: once a drag is live,
+    // pointercancel is instead the React onPointerCancel={finishDrag} handler's job (below).
+    const onPointerCancelRaw = (e: PointerEvent) => {
+      const tr = touchTrackRef.current;
+      if (tr?.kind === 'hold-watch' && e.pointerId === tr.pointerId) cancelHoldWatch();
+    };
+
+    // Belt-and-suspenders alongside pointercancel above, in case it doesn't fire reliably for pan
+    // takeover in every context this runs in (confirmed live only for the failure mode this whole
+    // fix addresses, not for the takeover signal itself) — if the page has actually moved, whatever
+    // caused that, the pending hold is no longer a long press. Guarded against startAutoScroll's own
+    // scrollBy calls (only ever active during a live drag, where there's no hold-watch left to
+    // cancel anyway) and against momentum-scroll deceleration settling under a stationary finger
+    // (the 2px slack below), neither of which should cancel a genuine hold.
+    const onScroll = () => {
+      if (dragRef.current) return;
+      const tr = touchTrackRef.current;
+      if (tr?.kind !== 'hold-watch' || !scrollRoot) return;
+      if (Math.abs(scrollRoot.scrollTop - tr.startScrollTop) > 2) cancelHoldWatch();
+    };
+
     gridEl.addEventListener('touchstart', onTouchStart, { passive: true });
-    gridEl.addEventListener('touchmove', onTouchMove, { passive: false });
+    // passive: true now that nothing here ever calls preventDefault — non-passive would otherwise
+    // force the browser to wait on this listener before it's even allowed to start scrolling.
+    gridEl.addEventListener('touchmove', onTouchMove, { passive: true });
     gridEl.addEventListener('touchend', onTouchEnd, { passive: true });
     gridEl.addEventListener('touchcancel', onTouchCancel, { passive: true });
+    gridEl.addEventListener('pointercancel', onPointerCancelRaw, { passive: true });
+    scrollRoot?.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       gridEl.removeEventListener('touchstart', onTouchStart);
       gridEl.removeEventListener('touchmove', onTouchMove);
       gridEl.removeEventListener('touchend', onTouchEnd);
       gridEl.removeEventListener('touchcancel', onTouchCancel);
+      gridEl.removeEventListener('pointercancel', onPointerCancelRaw);
+      scrollRoot?.removeEventListener('scroll', onScroll);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -185,18 +185,20 @@
      callout/text-selection UI, which visually looks like something responded, but then owns the
      rest of the touch sequence, so no pointermove ever reaches ChannelTabGrid.tsx and the drag goes
      nowhere. pan-y (not none) deliberately still lets a normal vertical scroll that happens to start
-     on a tile work natively — a real scroll exceeds the long-press move tolerance well within the
-     420ms hold, which cancels the pending hold before it ever arms, so the two never actually fight
-     over the same gesture. Matches NewsCard.css's swipe-to-dismiss tiles, which have the identical
-     tension.
+     on a tile work natively — and ChannelTabGrid.tsx's raw touch effect never calls preventDefault
+     on ANY event while a hold is pending (touchstart, touchmove, or touchend), specifically because
+     doing so on a touchmove that fires before the native pan has started was confirmed live to kill
+     scrolling for the rest of that whole touch, even once later movement would otherwise have
+     cancelled the pending hold. The browser's own pan recognizer decides untouched; that code only
+     ever reacts once it has (a raw pointercancel, or the page actually having scrolled — see
+     cancelHoldWatch there). Matches NewsCard.css's swipe-to-dismiss tiles, which have the identical
+     tension and the same discipline: never preventDefault before the gesture is decided.
 
-     Confirmed live that this CSS alone isn't enough — see ChannelTabGrid.tsx's raw touch effect and
-     the global .catch-up-suppress-select class (src/styles/global.css) it toggles on document.body,
-     which is what actually closes the remaining gap: a dead-still hold fires no touchmove at all, so
-     anything relying only on a touchmove-time preventDefault has a real dead spot; the global class
-     doesn't depend on any event firing. Never touchstart or touchend — confirmed live that
-     preventDefault there, even with pan-y set here, can suppress scrolling for the whole rest of
-     that touch sequence on iOS. */
+     Confirmed live that the CSS above isn't enough on its own to stop the magnifier/callout — see
+     ChannelTabGrid.tsx's raw touch effect and the global .catch-up-suppress-select class
+     (src/styles/global.css) it toggles on document.body for the whole pending hold, added at
+     touchstart rather than move-driven, so it also covers a perfectly dead-still hold that fires no
+     touchmove at all. */
   .channel-tile-wrap {
     touch-action: pan-y;
     -webkit-touch-callout: none;
