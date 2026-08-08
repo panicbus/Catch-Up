@@ -45,17 +45,31 @@ export async function deleteSession(rawToken: string): Promise<void> {
   await prisma.session.deleteMany({ where: { id: hashSessionToken(rawToken) } });
 }
 
-/** Cookie attributes here are load-bearing for this specific deployment shape: the site (Vercel)
- * and the API (Render) are on DIFFERENT domains, so every API call is a cross-site request.
- * `sameSite: 'none'` is required for the browser to send the cookie at all on those calls — the
- * default ('lax') would silently drop it and every request would look signed-out. `none` in turn
- * requires `secure`, which is fine since both are HTTPS. httpOnly keeps it unreadable from
- * JavaScript, which is the main reason this is a cookie rather than a token in localStorage. */
+/** Cookie attributes here are load-bearing.
+ *
+ * `sameSite: 'lax'` works because the site (usecatchup.app) and the API (api.usecatchup.app) are
+ * now subdomains of the same registrable domain — a "same-site" pair, even though they're different
+ * origins. That's specifically what fixed sign-in inside the iOS home-screen app: standalone/
+ * installed web apps on iOS apply much stricter cookie rules to genuinely CROSS-site requests
+ * (confirmed live — sign-in worked in a normal Safari tab but silently failed to persist from the
+ * home-screen icon), and 'lax' only ever needs to survive a same-site request, so it clears that bar
+ * even in the more locked-down standalone context.
+ *
+ * This was 'none' when the site (Vercel) and the API (Render) were on two unrelated domains
+ * (`*.vercel.app` / `*.onrender.com`) — that combination is genuinely cross-site, and 'lax' would
+ * have silently dropped the cookie on every API call. Both still work as plain HTTPS addresses
+ * (Render's own subdomain stays enabled alongside the custom domain), but signing in through THAT
+ * old pairing no longer persists now that this is 'lax' — accepted, since real use has already moved
+ * to the custom domain.
+ *
+ * `secure` (HTTPS-only) and `httpOnly` (unreadable from JavaScript, the main reason this is a
+ * cookie rather than a token in localStorage) are unrelated to any of the above and stay on
+ * regardless. */
 function cookieOptions(expiresAt?: Date) {
   return {
     httpOnly: true,
     secure: true,
-    sameSite: 'none' as const,
+    sameSite: 'lax' as const,
     path: '/',
     ...(expiresAt ? { expires: expiresAt } : {}),
   };
