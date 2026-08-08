@@ -2,6 +2,12 @@
   position: relative;
   overflow: hidden;
   height: 100vh;
+  /* iOS Safari's address bar grows/shrinks the visual viewport without resizing 100vh (which stays
+     pinned to the LARGEST possible viewport), so 100vh is taller than what's actually visible and
+     the page scrolls to reveal that extra space at the bottom. dvh tracks the real, current viewport
+     instead. Kept as a second declaration (not a replacement) so browsers without dvh support keep
+     the 100vh fallback rather than getting no height at all. */
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -3,7 +3,6 @@ import { Sidebar } from './Sidebar';
 import { BottomNav } from './BottomNav';
 import { OnboardingGate } from '../Onboarding/OnboardingGate';
 import { AuthGate } from '../Auth/AuthGate';
-import { AccountMenu } from '../Auth/AccountMenu';
 import './AppShell.css';
 
 export function AppShell() {
@@ -12,13 +11,14 @@ export function AppShell() {
     // (getOnboardingStatus) now needs a signed-in session to succeed at all, so auth has to resolve
     // first. On desktop AuthGate is a pure passthrough (see its own file) — this nesting costs
     // Electron nothing.
+    //
+    // AccountMenu is NOT rendered here — it used to be global fixed-position chrome on every route,
+    // but now lives inline in HomePage's own header row (see HomePage.tsx), scrolling out of view
+    // with the rest of Home's content instead of floating over every page. Sign out is reachable
+    // from Settings instead (AccountSection.tsx) for every OTHER route. The one gap this reopens:
+    // there's no sign-out affordance while OnboardingWizard is showing (before Home or Settings is
+    // reachable at all) — accepted, matches what was asked for.
     <AuthGate>
-      {/* Inside AuthGate (never shown pre-login) but outside OnboardingGate (stays visible and
-          usable — in particular, Sign Out stays reachable — through the onboarding wizard, not
-          just after it). One instance serves every route at both breakpoints; see AccountMenu.css
-          for the fixed corner positioning that makes that possible without touching Sidebar or
-          BottomNav. */}
-      <AccountMenu />
       <OnboardingGate>
         <div className="app-shell">
           <Sidebar />

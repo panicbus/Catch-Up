@@ -142,8 +142,16 @@ const AUTO_SCROLL_SPEED_PX = 12;
 // wander during that hold before it reads as a scroll intent instead (cancelling the hold and
 // leaving native scrolling completely alone — the hold never calls preventDefault/setPointerCapture
 // until it actually fires).
-const LONG_PRESS_MS = 420;
-const LONG_PRESS_MOVE_TOLERANCE_PX = 10;
+//
+// Was 420ms / 10px — confirmed live to still false-positive into drag mode on a scroll that starts
+// slowly (a real swipe often has near-zero velocity for its first ~100-200ms as the finger commits
+// to the gesture, so cumulative movement can still be under 10px right as the old, shorter timer
+// fired). Both bumped up to give a genuine scroll more time and more room to clear the tolerance
+// before the hold commits, at the cost of a real long-press needing to hold slightly longer/stiller
+// — needs on-device confirmation that this actually clears up the false positives without making
+// intentional rearranging feel sluggish to trigger.
+const LONG_PRESS_MS = 600;
+const LONG_PRESS_MOVE_TOLERANCE_PX = 14;
 
 // Applied to document.body (not scoped to this grid — see the raw touch effect's onTouchStart for
 // why) for the duration of a touch that might be a long-press, to suppress iOS's native text-

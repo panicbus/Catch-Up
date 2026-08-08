@@ -8,14 +8,15 @@ import { RollTheDiceButton } from './RollTheDiceButton';
 import { EmptyState } from '../common/EmptyState';
 import { Logo } from '../Layout/Logo';
 import { StreakCard } from '../Layout/StreakCard';
+import { AccountMenu } from '../Auth/AccountMenu';
 import dinerBg from '../../assets/diner-bg.png';
 import './HomePage.css';
 
 /** Mobile-only — desktop reaches the brand mark and streak card through the sidebar, which is
  * hidden below 767px (see AppShell.css), so both need a mobile home for them. Used to also hold a
- * "Sign in" placeholder button; that's now the real AccountMenu (src/components/Auth/AccountMenu.tsx),
- * rendered once by AppShell as shared chrome on every route rather than Home-only, so it was removed
- * from here rather than left as a second, competing affordance. */
+ * "Sign in" placeholder button; the real AccountMenu now lives in the utility bar below (alongside
+ * ChannelSearchBar) instead, so it was removed from here rather than left as a second, competing
+ * affordance. */
 function MobileTopBar() {
   return (
     <div className="home-page__mobile-topbar">
@@ -39,6 +40,7 @@ export function HomePage() {
 
       <div className="home-page__utility-bar">
         <ChannelSearchBar />
+        <AccountMenu />
       </div>
 
       {/* Desktop shows this in the sidebar; mobile has no sidebar, so it needs its own copy here.

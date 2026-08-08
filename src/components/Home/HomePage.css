@@ -38,6 +38,7 @@
 .home-page__utility-bar {
   display: flex;
   align-items: center;
+  gap: 12px;
   margin-bottom: 22px;
 }
 

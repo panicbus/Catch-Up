@@ -1,13 +1,11 @@
-/* Fixed to the viewport corner, not the sidebar or the mobile top bar — one element that serves
-   both breakpoints identically, which is what makes this real shared chrome (rendered once by
-   AppShell.tsx) rather than the old per-route "Sign in" stub it replaces. z-index above the sidebar/
-   bottom nav but below Modal.tsx's own portal (100), matching NewsFeed's toast (55) for the same
-   "above normal chrome, below a real dialog" slot. */
+/* Sits inline in Home's own search-bar row (see HomePage.tsx) — normal document flow, not fixed to
+   the viewport, so it scrolls away with the rest of Home's content instead of floating over every
+   route. `position: relative` is only here so the dropdown below can anchor to IT (`position:
+   absolute`) rather than the viewport. flex-shrink:0 keeps the avatar circle from being squeezed by
+   the search input beside it, which is flex:1. */
 .account-menu-wrap {
-  position: fixed;
-  top: 14px;
-  right: 16px;
-  z-index: 60;
+  position: relative;
+  flex-shrink: 0;
 }
 
 .account-menu__trigger {

@@ -4,6 +4,7 @@ import { RollTheDiceSettings } from './RollTheDiceSettings';
 import { MaxStoriesSetting } from './MaxStoriesSetting';
 import { AiFilteringSetting } from './AiFilteringSetting';
 import { LocationSetting } from './LocationSetting';
+import { AccountSection } from '../Auth/AccountSection';
 import './SettingsPage.css';
 
 export function SettingsPage() {
@@ -40,6 +41,10 @@ export function SettingsPage() {
         <h2 className="settings-section__title">News providers</h2>
         <ProviderStatusPanel />
       </section>
+
+      {/* Renders its own section wrapper (or nothing at all, on desktop / before a user loads) —
+          see AccountSection.tsx. */}
+      <AccountSection />
     </div>
   );
 }
