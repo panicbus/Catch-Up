@@ -234,6 +234,43 @@
   text-decoration: underline;
 }
 
+/* Reader-eligible cards (web, unpaywalled — see NewsCard.tsx's readerEligible) get this row instead
+   of the plain link above: "Read here" (opens ReaderOverlay in-app) as the obvious primary action,
+   "Open original" demoted to a small secondary link beside it — still one tap away, both as an
+   escape hatch if extraction fails and for anyone who just prefers the real site. */
+.news-card__read-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.news-card__read-here {
+  padding: 7px 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.news-card__read-here:hover {
+  background: var(--accent-strong);
+}
+
+/* Same link, smaller and quieter than the standalone .news-card__read-link above — it's the
+   secondary action here, not the only one. */
+.news-card__read-link--secondary {
+  margin-top: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+.news-card__read-link--secondary:hover {
+  color: var(--accent-strong);
+}
+
 /* List view: headline always shows in full, uncapped — only the snippet clamps (1 line, collapsed
    only — expanded overrides via --full). */
 .news-feed__list .news-card__snippet:not(.news-card__snippet--full) {

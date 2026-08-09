@@ -1,6 +1,6 @@
 {
   "name": "catch-up",
-  "version": "0.16.5",
+  "version": "0.17.0",
   "private": true,
   "description": "Your topics. Your pace. All caught up.",
   "author": "Catch Up contributors",
@@ -31,6 +31,7 @@
     "node": ">=20 <25"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "cookie-parser": "^1.4.7",
@@ -39,6 +40,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.6.1",
     "google-auth-library": "^11.0.0",
+    "linkedom": "^0.18.13",
     "pg": "^8.22.0",
     "prisma": "^7.9.1",
     "react": "^18.3.1",

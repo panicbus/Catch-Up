@@ -3,6 +3,11 @@ import './ErrorBoundary.css';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
+  /** Overrides the default whole-app "Reload" panel below — for a boundary scoped to one feature
+   * (e.g. ReaderOverlay), reloading the entire page is a worse recovery than just letting that
+   * feature's own fallback UI take over. Receives the caught error so a scoped fallback can, in
+   * principle, use it; ReaderOverlay's doesn't need to. */
+  fallback?: (error: Error) => ReactNode;
 }
 
 interface ErrorBoundaryState {
@@ -31,6 +36,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   render() {
     if (this.state.error) {
+      if (this.props.fallback) return this.props.fallback(this.state.error);
       return (
         <div className="error-boundary" role="alert">
           <p className="error-boundary__title">Something went wrong.</p>

@@ -3,6 +3,7 @@ import { Sidebar } from './Sidebar';
 import { BottomNav } from './BottomNav';
 import { OnboardingGate } from '../Onboarding/OnboardingGate';
 import { AuthGate } from '../Auth/AuthGate';
+import { ReaderOverlay } from '../Reader/ReaderOverlay';
 import './AppShell.css';
 
 export function AppShell() {
@@ -38,6 +39,11 @@ export function AppShell() {
             <BottomNav />
           </div>
         </div>
+        {/* Mounted once here (not per-page) so Channel, Pool, Bookmarks and Roll-the-Dice all share
+            it — see ReaderOverlay.tsx. Driven entirely by the read/readChannel search params on
+            whatever route is current, not a route of its own, so it renders nothing (null) until a
+            card actually opens it. Web-only, like AuthGate/AccountMenu — a no-op on desktop. */}
+        <ReaderOverlay />
       </OnboardingGate>
     </AuthGate>
   );

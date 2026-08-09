@@ -20,6 +20,7 @@ import { pingModel, pingGroq } from '../main/providers/classifier';
 import { resolveCity } from '../main/locality/gazetteer';
 import * as dataStore from './stores/dataStore';
 import * as articlesCache from './stores/articlesCache';
+import { getReaderContent } from './reader';
 
 export const router = Router();
 
@@ -221,6 +222,16 @@ router.get('/bookmarks', handle((userId) => dataStore.getBookmarksByChannel(user
 
 router.post('/articles/:articleId/read', handle((userId, req) => dataStore.markRead(userId, param(req, 'articleId'))));
 router.post('/articles/:articleId/unread', handle((userId, req) => dataStore.markUnread(userId, param(req, 'articleId'))));
+
+// The reader view (see server/reader/). channelId is a query param, not part of the path, since
+// Article's real primary key is (channelId, id) — same requirement as the bookmark toggle route
+// above. Deliberately returns 200 with { ok: false, reason } for every "couldn't extract this"
+// outcome rather than throwing — see server/reader/index.ts's header comment for why a hard-to-
+// scrape site isn't an application error.
+router.get(
+  '/articles/:articleId/reader',
+  handle((userId, req) => getReaderContent(userId, (req.query.channelId as string) ?? '', param(req, 'articleId')))
+);
 
 router.get(
   '/random-article',

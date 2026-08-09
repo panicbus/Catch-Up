@@ -71,6 +71,61 @@ export interface ArticleSnapshot {
   imageUrl: string | null;
 }
 
+// --- Reader view (web only) -----------------------------------------------------------------
+//
+// Types only — deliberately NOT added to CatchUpApi below. There is no Electron path for this
+// (see server/reader/'s own header comment for why); the web build calls GET
+// /articles/:articleId/reader directly via src/services/api.ts's fetchReaderContent(), following
+// the same outside-CatchUpApi precedent as revalidateNow() and the auth functions in
+// src/services/auth.ts. Living here rather than a separate reader-contract.ts costs nothing extra
+// to build (this file is already in every tsconfig's `include`) and this is already the de facto
+// shared-type module — server/stores/articlesCache.ts imports Article from here today.
+//
+// The server never sends third-party HTML — see server/reader/extract.ts. It sends this small
+// block model instead, which the renderer maps straight to real elements (ReaderBlocks.tsx), so
+// there is no dangerouslySetInnerHTML anywhere in this path.
+
+export interface ReaderRun {
+  text: string;
+  href?: string;
+  em?: boolean;
+  strong?: boolean;
+}
+
+export type ReaderBlock =
+  | { type: 'p' | 'h2' | 'h3' | 'blockquote' | 'li'; runs: ReaderRun[] }
+  | { type: 'img'; src: string; alt: string | null; caption: string | null };
+
+export interface ReaderContent {
+  ok: true;
+  articleId: string;
+  url: string;
+  title: string;
+  source: string;
+  sourceDomain: string;
+  byline: string | null;
+  publishedAt: string;
+  leadImageUrl: string | null;
+  wordCount: number;
+  blocks: ReaderBlock[];
+  tier: 'guardian' | 'readability';
+  /** Hit the block/char cap in extract.ts — the UI should end with "Continue on {source} ↗". */
+  truncated: boolean;
+  /** A soft-paywall marker ("subscribe to continue", etc.) was detected in the extracted text —
+   * the UI should lead with Open original rather than presenting this as the complete story. */
+  partial: boolean;
+}
+
+/** Every reason renders the same shape in ReaderOverlay: the article's existing snippet (already
+ * on the card, no extra fetch) plus a one-line explanation plus a prominent Open original link.
+ * There is no dead end in this path — see server/reader/index.ts for where each is thrown. */
+export interface ReaderUnavailable {
+  ok: false;
+  reason: 'paywalled' | 'blocked' | 'unsupported' | 'too-short' | 'failed' | 'busy';
+}
+
+export type ReaderResponse = ReaderContent | ReaderUnavailable;
+
 export interface BookmarkEntry {
   id: string;
   channelId: string;

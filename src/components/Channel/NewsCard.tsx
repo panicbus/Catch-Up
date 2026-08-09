@@ -1,4 +1,5 @@
 import { memo, useCallback, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { NewBadge } from './NewBadge';
 import { PaywallBadge } from './PaywallBadge';
 import { DismissButton, type DismissVariant } from './DismissButton';
@@ -11,9 +12,14 @@ import { getStoryCardColor } from '../../utils/storyCardColor';
 import { getTileColor } from '../../utils/channelColor';
 import './NewsCard.css';
 
+// Same guard used throughout Auth/ — no shared isWeb() utility exists in this codebase, see
+// AuthGate.tsx's own comment for why it's repeated inline rather than imported.
+const isWeb = typeof window !== 'undefined' && !window.api;
+
 // Points down at collapsed cards to invite a tap; points up once expanded, echoing every other
 // expand/collapse control in the app (see NewsFeed's read-archive toggle). Distinct from the
-// "Read full story ↗" link's arrow on purpose — ↗ means "leaves the app", this means "opens here".
+// "Read full story ↗" / "Open original ↗" arrow on purpose — ↗ means "leaves the app", this means
+// "opens here".
 function PreviewChevron() {
   return (
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -41,6 +47,13 @@ export interface NewsCardData {
   paywalled: boolean;
   bookmarked: boolean;
   read: boolean;
+  /** Drives the reader view's eligibility check (see readerEligible below) — 'googlenewsrss'
+   * cards get "Open original" only, since their link is an opaque redirect token the reader can't
+   * follow server-side. Optional because BookmarksPage builds cards from ArticleSnapshot, which
+   * has no provider field; those fall through to reader-eligible and get a graceful "can't preview
+   * this link" panel instead of being pre-filtered, which is an acceptable rare case rather than
+   * something worth widening ArticleSnapshot for. */
+  provider?: string;
   /** Owning channel — every mark-read/bookmark call and the resulting readState/bookmarks
    * broadcast go out under this id, so it must be the article's REAL channel, not a container
    * page's id. Lives on the article itself (rather than a single channelId prop on the feed)
@@ -157,6 +170,12 @@ function NewsCardComponent({
   const [exitReason, setExitReason] = useState<ExitReason>(null);
   const [imageFailed, setImageFailed] = useState(false);
   const isMobile = useIsMobile();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Paywalled and Google-News-RSS stories skip straight to "Open original" — see server/reader/
+  // index.ts's own gates A and C, which the reader endpoint enforces regardless; checking here too
+  // means those cards never show a "Read here" button that's certain to fail.
+  const readerEligible = isWeb && !article.paywalled && article.provider !== 'googlenewsrss';
 
   const commitDismiss = useCallback(
     (delayMs: number, viaSwipe?: boolean) => {
@@ -214,13 +233,42 @@ function NewsCardComponent({
     commitDismiss(BUTTON_DISMISS_MS);
   }, [exitReason, dismissVariant, article.id, article.channelId, staysInPlace, commitDismiss, onArchiveReadInPlace]);
 
+  const markRead = useCallback(() => {
+    void api.markArticleRead(article.id, article.channelId);
+    revalidateNow();
+  }, [article.id, article.channelId]);
+
   const handleReadFullStory = useCallback(
     (e: MouseEvent<HTMLAnchorElement>) => {
       e.stopPropagation();
-      void api.markArticleRead(article.id, article.channelId);
-      revalidateNow();
+      markRead();
     },
-    [article.id, article.channelId]
+    [markRead]
+  );
+
+  // Opens ReaderOverlay (mounted once in AppShell.tsx) via search params on the CURRENT route,
+  // rather than navigating to one — see ReaderOverlay.tsx's own comment for why: it keeps this
+  // page mounted underneath (scroll position and feed state survive) and makes the phone's back
+  // gesture close the reader instead of leaving the app. router `state` carries what this card
+  // already knows so the overlay's header is never blank while its own fetch is in flight.
+  const handleReadHere = useCallback(
+    (e: MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      markRead();
+      const next = new URLSearchParams(searchParams);
+      next.set('read', article.id);
+      next.set('readChannel', article.channelId);
+      setSearchParams(next, {
+        state: {
+          title: article.title,
+          source: article.source,
+          imageUrl: article.imageUrl,
+          snippet: article.snippet,
+          url: article.url,
+        },
+      });
+    },
+    [markRead, searchParams, setSearchParams, article.id, article.channelId, article.title, article.source, article.imageUrl, article.snippet, article.url]
   );
 
   const onKeyDown = useCallback(
@@ -234,6 +282,42 @@ function NewsCardComponent({
   );
 
   const surfaceProps = swipeHandlers ?? (canExpand ? { onClick: onToggleExpand } : {});
+
+  // Shared by both render sites below (the expandable card's reveal panel and the always-visible
+  // standalone link) so eligibility can't drift between them. `standalone` only matters for the
+  // ineligible branch, which must stay byte-identical to what rendered here before this feature —
+  // the new eligible row has no distinct standalone styling need yet.
+  function renderReadControls(standalone: boolean) {
+    if (!readerEligible) {
+      return (
+        <a
+          className={`news-card__read-link ${standalone ? 'news-card__read-link--standalone' : ''}`}
+          href={article.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleReadFullStory}
+        >
+          Read full story ↗
+        </a>
+      );
+    }
+    return (
+      <div className="news-card__read-row">
+        <button type="button" className="news-card__read-here" onClick={handleReadHere}>
+          Read here
+        </button>
+        <a
+          className="news-card__read-link news-card__read-link--secondary"
+          href={article.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleReadFullStory}
+        >
+          Open original ↗
+        </a>
+      </div>
+    );
+  }
 
   const mobileStyle =
     isMobile && phase !== 'idle'
@@ -359,30 +443,14 @@ function NewsCardComponent({
                 onError={() => setImageFailed(true)}
               />
             )}
-            <a
-              className="news-card__read-link"
-              href={article.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={handleReadFullStory}
-            >
-              Read full story ↗
-            </a>
+            {renderReadControls(false)}
           </div>
         </div>
       ) : (
         // No snippet, no image — nothing an expand step would reveal, so the link that would
         // otherwise be hidden behind one is just always visible instead. This is the entire point:
         // a card that can't preview its story shouldn't cost a click to find that out.
-        <a
-          className="news-card__read-link news-card__read-link--standalone"
-          href={article.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={handleReadFullStory}
-        >
-          Read full story ↗
-        </a>
+        renderReadControls(true)
       )}
 
       <div className="news-card__footer">

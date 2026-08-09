@@ -4,6 +4,7 @@ import type {
   CatchUpApi,
   Channel,
   DataChangeEvent,
+  ReaderResponse,
 } from '../../ipc-contract';
 import * as channelsStore from './channelsStore';
 
@@ -296,6 +297,20 @@ const webApi: CatchUpApi = {
 
   onDataChanged: webOnDataChanged,
 };
+
+// --- Reader view (web only) ---------------------------------------------------------------------
+//
+// Outside CatchUpApi, same precedent as revalidateNow() above — there's no Electron path for this
+// (see server/reader/'s header comment), so adding it to the shared interface would only force a
+// dead desktop stub. Only ever called from src/components/Reader/ReaderOverlay.tsx, which is itself
+// gated on isWeb, so this never runs on desktop in practice.
+//
+// `request()` already does the right thing here with no changes: every "couldn't extract this"
+// outcome comes back as a 200 with `{ ok: false, reason }` in the body (see server/reader/index.ts),
+// which `request()` just returns as data — only a genuine 401/429/5xx throws.
+export function fetchReaderContent(articleId: string, channelId: string): Promise<ReaderResponse> {
+  return request<ReaderResponse>(`/articles/${articleId}/reader?channelId=${encodeURIComponent(channelId)}`);
+}
 
 // --- Pick the right implementation once, at module load ----------------------------------------
 
