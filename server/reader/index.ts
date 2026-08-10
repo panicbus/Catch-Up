@@ -13,7 +13,7 @@ import { isReaderBlockedDomain } from './blockedDomains';
 import { tryGuardianBody } from './guardianBody';
 import { fetchPage } from './fetchPage';
 import { extractReadable } from './extract';
-import type { ReaderResponse } from '../../ipc-contract';
+import type { ReaderBlock, ReaderResponse } from '../../ipc-contract';
 
 // One extraction in flight at a time, per process — the real memory-safety mechanism on Render's
 // 512MB free tier. Two concurrent Readability parses of a ~1.5MB page is the realistic OOM
@@ -40,6 +40,18 @@ function releaseSlot(): void {
   active--;
   const next = waiters.shift();
   if (next) next();
+}
+
+/** Readability (and, less often, the Guardian API's own `body` HTML) commonly repeats the
+ * article's featured/thumbnail image as literally the first element of the content it returns —
+ * the same image already shown separately as the hero above the title (leadImageUrl, sourced from
+ * the article row's own thumbnail). Left alone that reads as two copies of the same photo stacked
+ * on top of each other — confirmed live, reported after this feature first shipped. Only trims when
+ * a hero is actually about to render; with no thumbnail at all, a genuine first body image is the
+ * only image available and stays. */
+function stripLeadingDuplicateImage(blocks: ReaderBlock[], leadImageUrl: string | null): ReaderBlock[] {
+  if (!leadImageUrl) return blocks;
+  return blocks[0]?.type === 'img' ? blocks.slice(1) : blocks;
 }
 
 export async function getReaderContent(userId: string, channelId: string, articleId: string): Promise<ReaderResponse> {
@@ -74,7 +86,7 @@ export async function getReaderContent(userId: string, channelId: string, articl
         publishedAt: row.publishedAt.toISOString(),
         leadImageUrl: row.imageUrl,
         wordCount: guardian.wordCount,
-        blocks: guardian.blocks,
+        blocks: stripLeadingDuplicateImage(guardian.blocks, row.imageUrl),
         tier: 'guardian',
         truncated: guardian.truncated,
         partial: false,
@@ -83,10 +95,22 @@ export async function getReaderContent(userId: string, channelId: string, articl
 
     // Tier 2: fetch the real page and run it through Readability.
     const fetched = await fetchPage(row.url);
-    if (!fetched.ok) return { ok: false, reason: 'failed' };
+    if (!fetched.ok) {
+      // Granular cause (blocked-host/too-large/not-html/http-error/timeout/network) — logged here,
+      // not in fetchPage.ts itself, so every failure for a given article is one line next to its
+      // URL. The client only ever sees the flattened 'failed' reason (see ReaderUnavailable's
+      // taxonomy) — this is purely for reading Render's logs to see which cause actually dominates
+      // in production, which can differ from local testing (e.g. a publisher's bot-detection
+      // treating Render's datacenter IP differently than a residential one).
+      console.warn('[reader] fetchPage failed', { url: row.url, reason: fetched.reason, status: fetched.status });
+      return { ok: false, reason: 'failed' };
+    }
 
     const extracted = extractReadable(fetched.html, fetched.finalUrl);
-    if (!extracted.ok) return { ok: false, reason: extracted.reason };
+    if (!extracted.ok) {
+      console.warn('[reader] extraction too short', { url: row.url, finalUrl: fetched.finalUrl });
+      return { ok: false, reason: extracted.reason };
+    }
 
     return {
       ok: true,
@@ -99,7 +123,7 @@ export async function getReaderContent(userId: string, channelId: string, articl
       publishedAt: row.publishedAt.toISOString(),
       leadImageUrl: row.imageUrl,
       wordCount: extracted.wordCount,
-      blocks: extracted.blocks,
+      blocks: stripLeadingDuplicateImage(extracted.blocks, row.imageUrl),
       tier: 'readability',
       truncated: extracted.truncated,
       partial: extracted.partial,

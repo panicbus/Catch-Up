@@ -1,4 +1,4 @@
-import { memo, useCallback, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { memo, useCallback, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { NewBadge } from './NewBadge';
 import { PaywallBadge } from './PaywallBadge';
@@ -283,6 +283,31 @@ function NewsCardComponent({
 
   const surfaceProps = swipeHandlers ?? (canExpand ? { onClick: onToggleExpand } : {});
 
+  // Same fix BookmarkButton.tsx and DismissButton.tsx already established for this exact card, PLUS
+  // one more: the mobile swipe hook arms its drag/tap tracking at POINTERDOWN (see
+  // useSwipeToDismiss.ts), which bubbles up from any nested control before React ever gets to a
+  // 'click' handler — so stopping propagation only on click is too late, exactly as those two
+  // buttons' own comments already say.
+  //
+  // But stopping only pointerdown isn't enough HERE specifically, unlike for those two (always-
+  // visible) buttons: useSwipeToDismiss's finish() — bound to the card's onPointerUp — only bails
+  // when its tracked pointerId is still -1 (its untouched initial value); it never checks that this
+  // particular pointerup's id matches the one it last saw. "Read here"/"Open original" only ever
+  // become tappable AFTER a prior tap has already expanded the card, which means that ref has
+  // already been set to a real (non -1) value by the time either is tapped — so a pointerup that
+  // bubbles up from them, even with pointerdown's propagation stopped, still passes finish()'s only
+  // guard and re-fires onTap(), toggling the card straight back closed. Confirmed live as exactly
+  // the "does nothing, just closes the open item" bug reported after this feature first shipped.
+  // Bookmark/Dismiss don't hit this because they're reachable as a card's very first interaction,
+  // while that ref is still genuinely -1. Fixed here by stopping every stage of the pointer
+  // sequence, not just the first, without touching the shared (already fragile) hook itself.
+  const stopPointerBubble = useCallback((e: PointerEvent<HTMLElement>) => e.stopPropagation(), []);
+  const readControlPointerProps = {
+    onPointerDown: stopPointerBubble,
+    onPointerUp: stopPointerBubble,
+    onPointerCancel: stopPointerBubble,
+  };
+
   // Shared by both render sites below (the expandable card's reveal panel and the always-visible
   // standalone link) so eligibility can't drift between them. `standalone` only matters for the
   // ineligible branch, which must stay byte-identical to what rendered here before this feature —
@@ -296,6 +321,7 @@ function NewsCardComponent({
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleReadFullStory}
+          {...readControlPointerProps}
         >
           Read full story ↗
         </a>
@@ -303,7 +329,7 @@ function NewsCardComponent({
     }
     return (
       <div className="news-card__read-row">
-        <button type="button" className="news-card__read-here" onClick={handleReadHere}>
+        <button type="button" className="news-card__read-here" onClick={handleReadHere} {...readControlPointerProps}>
           Read here
         </button>
         <a
@@ -312,6 +338,7 @@ function NewsCardComponent({
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleReadFullStory}
+          {...readControlPointerProps}
         >
           Open original ↗
         </a>

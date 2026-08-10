@@ -15,14 +15,22 @@
  * the actual risk. Said here rather than implied. */
 
 const TIMEOUT_MS = 8_000;
-const MAX_BYTES = 1_500_000;
+// Was 1.5MB — confirmed live after shipping that real, ordinary article pages (not pathological
+// ones) routinely run ~2-2.1MB decompressed (techradar.com, guitarworld.com, cyclingnews.com all
+// measured right around there) and were hitting this cap, accounting for a real slice of reported
+// failures. Verified the actual memory cost before raising it: fetching and parsing a real 2.1MB
+// page (fetch + linkedom + Readability) cost only ~18MB of RSS above baseline — on a 512MB box with
+// the single-extraction mutex in index.ts ensuring nothing else runs concurrently, 3MB has wide
+// margin. `content-length` is NOT what this bounds against — it reports the compressed transfer
+// size; a page can look small there and still decompress to 2MB+, which is exactly what happened.
+const MAX_BYTES = 3_000_000;
 const MAX_REDIRECTS = 3;
 const USER_AGENT =
   'Mozilla/5.0 (compatible; CatchUpReader/0.16; +https://usecatchup.app) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36';
 
 export type FetchPageResult =
   | { ok: true; html: string; finalUrl: string }
-  | { ok: false; reason: 'blocked-host' | 'too-large' | 'not-html' | 'http-error' | 'timeout' | 'network' };
+  | { ok: false; reason: 'blocked-host' | 'too-large' | 'not-html' | 'http-error' | 'timeout' | 'network'; status?: number };
 
 const PRIVATE_HOSTNAME_SUFFIXES = ['.local', '.internal', '.localhost'];
 
@@ -119,7 +127,7 @@ export async function fetchPage(startUrl: string): Promise<FetchPageResult> {
         continue;
       }
 
-      if (!res.ok) return { ok: false, reason: 'http-error' };
+      if (!res.ok) return { ok: false, reason: 'http-error', status: res.status };
 
       const contentType = res.headers.get('content-type') ?? '';
       if (!contentType.includes('html')) return { ok: false, reason: 'not-html' };

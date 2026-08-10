@@ -48,7 +48,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
-  font-size: 13px;
+  font-family: var(--font-body);
+  font-size: 15px;
   font-weight: 700;
   color: var(--text-muted);
 }
@@ -61,12 +62,13 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  color: var(--accent-strong);
-  font-size: 17px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 20px;
   font-weight: 700;
 }
 .reader-overlay__open-original:hover {
-  background: var(--surface-hover);
+  background: var(--accent-strong);
 }
 
 /* Balances the close button's width so the source name stays visually centered when there's no
@@ -118,9 +120,14 @@
 }
 
 /* The actual product — see ReaderOverlay.tsx's own comment. Measure and line-height tuned for
-   sustained reading, not the app's usual UI type scale. */
+   sustained reading, not the app's usual UI type scale. Explicit font-family (not just inherited
+   from body's own global rule) as a defensive baseline — confirmed live that some extracted
+   paragraphs were rendering in the serif display font; the real cause was walkBlocks in
+   extract.ts mis-tagging long publisher "standfirst" paragraphs as headings (now fixed there), but
+   this stays as a belt-and-suspenders guarantee that prose never silently inherits the wrong face. */
 .reader-overlay__body {
   max-width: 68ch;
+  font-family: var(--font-body);
   font-size: 17px;
   line-height: 1.65;
   color: var(--text);

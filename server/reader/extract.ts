@@ -18,6 +18,10 @@ import type { ReaderBlock, ReaderRun } from '../../ipc-contract';
 const MIN_TEXT_LENGTH = 800;
 const MAX_BLOCKS = 400;
 const MAX_CHARS = 60_000;
+// Above this, an <h2>-<h6> is almost certainly a publisher's stylistic wrapper around a real
+// lede/deck PARAGRAPH (a common CMS "standfirst"/drop-cap pattern), not a genuine short subheading
+// — see walkBlocks' use of this below.
+const HEADING_MAX_CHARS = 140;
 
 // Phrases that show up in the *visible* extracted text of a metered/soft-paywalled page even when
 // Readability successfully found "an article" — the extraction succeeded but what it found is a
@@ -122,7 +126,18 @@ function walkBlocks(root: Element, finalUrl: string, out: ReaderBlock[]): void {
     const mapped = BLOCK_TAG_MAP[tag];
     if (mapped) {
       const runs = walkInline(el, finalUrl, {});
-      if (runs.some((r) => r.text.trim())) out.push({ type: mapped, runs });
+      if (!runs.some((r) => r.text.trim())) continue;
+      let type = mapped;
+      if (mapped === 'h2' || mapped === 'h3') {
+        // Publishers routinely wrap a full lede/deck PARAGRAPH in a heading tag purely for
+        // stylistic emphasis, not as a genuine short subheading — left alone, that renders as a
+        // paragraph of running prose in the serif display font real headings use, which is exactly
+        // the "body copy randomly switches to the header font" inconsistency reported live. Real
+        // headings/subheads are almost always short.
+        const textLength = runs.reduce((n, r) => n + r.text.length, 0);
+        if (textLength > HEADING_MAX_CHARS) type = 'p';
+      }
+      out.push({ type, runs });
       continue;
     }
     if (tag === 'li') {
