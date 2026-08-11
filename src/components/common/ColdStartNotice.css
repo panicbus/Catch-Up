@@ -12,18 +12,27 @@
   background: var(--bg);
 }
 
-/* A plain ring — no hands, no numbers, transparent center — the bottle spins inside it rather than
-   the bottle alone implying a clock face on its own. Sized generously bigger than the 64px logo so
-   the sweep reads as happening INSIDE the face, not just next to it. */
+/* Positioning context for the face (fills it) and the bottle (centered on top of it) — a plain ring
+   read as just "a circle," not "a clock," so the face itself now carries real tick marks (see
+   ClockFace in the .tsx) instead of standing in for one with a bare border. Sized generously bigger
+   than the 64px logo so the sweep reads as happening INSIDE the face, not just next to it. */
 .cold-start-notice__clock {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 108px;
   height: 108px;
-  border-radius: 50%;
-  border: 2.5px solid var(--border-strong);
-  background: transparent;
+}
+
+.cold-start-notice__clock-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  stroke: var(--border-strong);
+  stroke-linecap: round;
+  fill: none;
 }
 
 /* The ketchup bottle (Logo) spinning like a clock hand that hesitates at 12 rather than a
