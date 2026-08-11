@@ -80,8 +80,22 @@
   .pool-page {
     padding: 8px 16px 24px;
   }
+  /* Same fix as BookmarksPage's identical header shape: on mobile the header's only other child is
+     the back button, and justify-content: space-between (set above, for desktop's title+toggle
+     pair) pushes a lone second child all the way to the end instead of centering it — confirmed
+     live as the title floating off to the right. Taken out of flow and centered against the header
+     itself instead, the same fixed-centering technique ChannelPage's refresh-status text uses. */
+  .pool-page__header {
+    position: relative;
+  }
   .pool-page__title {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
     font-size: 22px;
+    pointer-events: none;
   }
   .pool-page__back {
     display: flex;

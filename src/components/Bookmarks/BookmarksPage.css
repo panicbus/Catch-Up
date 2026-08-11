@@ -54,7 +54,21 @@
     background: var(--surface-hover);
     color: var(--text);
   }
+  /* On mobile the header's only other child is the back button, and justify-content: space-between
+     (set above, for desktop's title+toggle pair) pushes a lone second child all the way to the
+     end instead of centering it — confirmed live as the title floating off to the right. Taking it
+     out of flow and centering it against the header itself sidesteps that regardless of how wide
+     the back button is, the same fixed-centering technique ChannelPage's refresh-status text uses. */
+  .bookmarks-page__header {
+    position: relative;
+  }
   .bookmarks-page__title {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
     font-size: 22px;
+    pointer-events: none;
   }
 }

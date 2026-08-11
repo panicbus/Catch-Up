@@ -5,6 +5,27 @@
   margin-bottom: 20px;
 }
 
+/* Nothing here wraps or shrinks these tabs, and a real channel list easily has more of them than a
+   phone screen is wide (5 tabs — All plus 4 real channels — already overflowed one in testing).
+   With no overflow boundary anywhere between this row and the page, that overflow escaped all the
+   way out to .app-shell__main and made the ENTIRE Bookmarks view horizontally scrollable, not just
+   this row — confirmed live. Scrolling horizontally within the tab strip itself is the fix, not
+   just a style patch: it's the same swipeable-tab-bar pattern already familiar from other apps. */
+@media (max-width: 767px) {
+  .bookmarks-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .bookmarks-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .bookmarks-tabs__tab {
+    flex-shrink: 0;
+  }
+}
+
 .bookmarks-tabs__tab {
   padding: 10px 16px;
   background: none;

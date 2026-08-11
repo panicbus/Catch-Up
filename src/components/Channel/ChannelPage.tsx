@@ -151,8 +151,7 @@ export function ChannelPage() {
   );
 
   // The sticky controls bar picks up the channel name once the page's own title has scrolled
-  // behind it — same threshold, since the sticky bar sits at top: 0, exactly where the title
-  // disappears.
+  // behind it.
   useEffect(() => {
     setTitleScrolledOut(false);
     if (!titleNode) return;
@@ -160,9 +159,18 @@ export function ChannelPage() {
     // .app-shell__main div is the actual scroll container, so it must be passed explicitly or the
     // observer never fires.
     const scrollRoot = titleNode.closest<HTMLElement>('.app-shell__main');
+    // NOT just `threshold: 0` against the root's raw bounds (that was the original approach) — the
+    // sticky bar visually covers the top of the root once it pins, but the observer has no idea
+    // that overlay exists; without telling it, "intersecting" briefly disagrees with "actually
+    // visible" right at the crossover point, which is exactly the flicker reported live (a sliver
+    // of the real title peeking out to the left of the sticky pill, sometimes correcting itself on
+    // the next scroll tick). Same fix, same measured-height approach useScrollCatchUp.ts already
+    // uses for this identical problem on the article cards below this bar.
+    const navHeight = scrollRoot?.querySelector<HTMLElement>('[data-sticky-nav]')?.getBoundingClientRect().height ?? 0;
     const observer = new IntersectionObserver(([entry]) => setTitleScrolledOut(!entry.isIntersecting), {
       root: scrollRoot,
       threshold: 0,
+      rootMargin: `-${Math.round(navHeight)}px 0px 0px 0px`,
     });
     observer.observe(titleNode);
     return () => observer.disconnect();
