@@ -52,6 +52,14 @@
 @media (max-width: 767px) {
   .channel-page__refresh-status {
     left: 50%;
+    /* Desktop's wide content pane fits the longest message ("No new stories about... every 30
+       min.") on one line, which is what the nowrap/single-line design above was tuned for — a
+       phone screen doesn't, and nowrap at that width meant the text ran off both edges instead of
+       wrapping (confirmed live). Capped and wrapped instead; translateX(-50%) still centers the
+       now-multi-line block correctly since it re-centers on the box's own (now capped) width. */
+    max-width: calc(100vw - 32px);
+    white-space: normal;
+    line-height: 1.4;
   }
 }
 

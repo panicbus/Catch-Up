@@ -105,8 +105,32 @@ export function SubchannelManagePanel({ channel, onClose }: SubchannelManagePane
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
+          // iOS's own keyboard-accessory "Done"/checkmark (distinct from the Return key, which
+          // onKeyDown above already handles) just blurs the field by default — it doesn't fire a
+          // key event at all, so without this, tapping it silently dropped whatever was typed
+          // (confirmed live). Safe to fire unconditionally: addSubchannel no-ops on an empty/
+          // whitespace draft, so blurring for any other reason (tapping elsewhere) costs nothing.
+          onBlur={() => addSubchannel(draft)}
           aria-label={`Add subchannel to ${channel.name}`}
         />
+        <button
+          type="button"
+          className="subchannel-panel__add-submit"
+          // Without this, tapping the button would first blur the input (moving focus off it),
+          // which fires onBlur's OWN addSubchannel(draft) call before this button's onClick even
+          // runs — not incorrect (both are guarded/idempotent), but relying on React's re-render
+          // landing between the two native events in every browser is fragile. Preventing the
+          // default mousedown behavior keeps focus in the input, so onBlur never fires here at all
+          // and this button is the only thing that commits.
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => addSubchannel(draft)}
+          disabled={!draft.trim()}
+          aria-label="Add subchannel"
+        >
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 10.5l4 4 8-9" />
+          </svg>
+        </button>
       </div>
 
       {suggestions.length > 0 && (

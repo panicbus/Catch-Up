@@ -83,8 +83,14 @@
    fixed so it participates in normal layout until it actually needs to pin, and breaks out to the
    full bleed width (matching .home-page's own horizontal padding with a negative margin, the same
    technique ChannelPage's sticky toolbar uses) so it reads as a real top bar once stuck instead of
-   an inset block floating over the content. */
-.home-page__mobile-topbar {
+   an inset block floating over the content.
+   `.home-page > ` (not the bare class) is load-bearing, not stylistic — `.home-page > *:not(...)`
+   above also sets `position` (to relative, for the z-index stacking fix) at the SAME specificity
+   as a bare class selector would give this rule; without matching that specificity here, source
+   order made the generic rule win, silently discarding `position: sticky` back to `relative` and
+   letting this scroll away like ordinary content. Confirmed live as exactly that: the header never
+   actually stuck. */
+.home-page > .home-page__mobile-topbar {
   position: sticky;
   top: 0;
   z-index: 5;

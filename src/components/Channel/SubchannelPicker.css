@@ -21,14 +21,25 @@
 
 /* Normal document flow, full width — pushes whatever comes after it (the story list) down rather
    than floating over it. The grid-rows trick (0fr/1fr) animates height without JS measuring, same
-   pattern as NewsCard's own expand/collapse. */
+   pattern as NewsCard's own expand/collapse.
+   visibility is a belt-and-suspenders addition on top of that trick, not decorative: some WebKit
+   versions don't collapse a 0fr row track to a true, exact 0px (a sub-pixel rounding residue), which
+   used to be invisible when this panel was plain bare-text rows but became a visible sliver of a
+   bold, filled pill's rounded top edge peeking out once the items became pill chips (confirmed
+   live). Delaying `visibility: hidden` until AFTER the collapse transition finishes still lets the
+   height animate smoothly on close, then guarantees nothing is left showing at rest regardless of
+   whatever the track sizing actually resolved to. Opening flips visibility back immediately (0s
+   delay) so the growing panel is visible from the very first frame. */
 .subchannel-picker__panel {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.2s ease;
+  visibility: hidden;
+  transition: grid-template-rows 0.2s ease, visibility 0s linear 0.2s;
 }
 .subchannel-picker__panel--open {
   grid-template-rows: 1fr;
+  visibility: visible;
+  transition: grid-template-rows 0.2s ease, visibility 0s linear 0s;
 }
 /* Pill chips (matching SubchannelBar's desktop chips — see that CSS), not a bare-text list: a plain
    row of text read as informational rather than as a set of tappable controls (confirmed live,

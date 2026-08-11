@@ -29,17 +29,17 @@
 }
 
 .subchannel-panel__close {
-  background: none;
-  border: 1px solid var(--border-strong);
+  background: var(--accent);
+  border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   padding: 4px 10px;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
+  font-weight: 700;
+  color: #fff;
 }
 .subchannel-panel__close:hover {
-  background: var(--surface);
-  color: var(--text);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
 }
 
 .subchannel-panel__add-row {
@@ -60,6 +60,30 @@
 .subchannel-panel__input:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* Explicit "commit this" affordance next to the field — the Enter key (onKeyDown) and iOS's own
+   keyboard-accessory checkmark (onBlur) both already commit, but neither is visible/discoverable
+   as a control on its own, especially on a device with no physical Enter key in view. */
+.subchannel-panel__add-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+}
+.subchannel-panel__add-submit:hover {
+  background: var(--accent-strong);
+}
+.subchannel-panel__add-submit:disabled {
+  background: var(--border-strong);
+  color: var(--text-faint);
 }
 
 .subchannel-panel__suggestions {
@@ -112,12 +136,13 @@
 .subchannel-panel__row-delete {
   background: none;
   border: none;
-  color: var(--text-faint);
+  color: var(--accent-strong);
   font-size: 13px;
+  font-weight: 600;
   padding: 2px 6px;
 }
 .subchannel-panel__row-delete:hover {
-  color: var(--accent-strong);
+  color: var(--accent);
 }
 
 .subchannel-panel__empty {
