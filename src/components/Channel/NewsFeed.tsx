@@ -513,6 +513,26 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     onReachedBottom,
   });
 
+  // If the tapped card's top edge is scrolled above the visible area — e.g. it was already
+  // partially scrolled past when tapped, only its lower portion in view — opening it left the title
+  // and everything above the fold with no way to see them without scrolling up manually first
+  // (confirmed live). Brings the card's top back into view instead, offset by the sticky toolbar's
+  // real measured height (same [data-sticky-nav] convention as ChannelPage's own title-echo
+  // detection and useScrollCatchUp's read-trigger offset) so it doesn't land tucked directly
+  // underneath it. A no-op whenever the top is already visible.
+  const scrollExpandedCardIntoView = (articleId: string) => {
+    const container = feedRef.current;
+    const scrollRoot = container?.closest<HTMLElement>('.app-shell__main');
+    const cardEl = container?.querySelector<HTMLElement>(`[data-article-id="${CSS.escape(articleId)}"]`);
+    if (!scrollRoot || !cardEl) return;
+    const navHeight = scrollRoot.querySelector<HTMLElement>('[data-sticky-nav]')?.getBoundingClientRect().height ?? 0;
+    const visibleTop = scrollRoot.getBoundingClientRect().top + navHeight + 8;
+    const cardTop = cardEl.getBoundingClientRect().top;
+    if (cardTop < visibleTop) {
+      scrollRoot.scrollBy({ top: cardTop - visibleTop, behavior: 'smooth' });
+    }
+  };
+
   const toggleExpand = (articleId: string) => {
     const willOpen = expandedArticleId !== articleId;
     // Opening a card counts as reading it — but marking read fires a data reload, and doing that up
@@ -523,6 +543,13 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
       const a = byId.get(articleId);
       if (a && !a.read) markReadInPlace(a.id, a.channelId);
     };
+    // Runs alongside markReadOnOpen, at the same "settled" point, for the same reason: measuring
+    // position before a pending reflow (another card collapsing back down, in grid's case a full
+    // view-transition reposition) could read a stale, not-yet-final card position.
+    const settleOnOpen = () => {
+      markReadOnOpen();
+      if (willOpen) requestAnimationFrame(() => scrollExpandedCardIntoView(articleId));
+    };
     const apply = () => setExpandedArticleId((prev) => (prev === articleId ? null : articleId));
     // Only grid view has a reflow worth animating (list view already expands smoothly in place, no
     // grid-column snap involved) — see GridSection's animateReflow/NewsCard's view-transition-name.
@@ -530,10 +557,10 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     // startViewTransition requires to capture an accurate "after" snapshot.
     if (viewMode === 'grid' && document.startViewTransition) {
       const transition = document.startViewTransition(() => flushSync(apply));
-      transition.finished.finally(markReadOnOpen);
+      transition.finished.finally(settleOnOpen);
     } else {
       apply();
-      markReadOnOpen();
+      settleOnOpen();
     }
   };
 
