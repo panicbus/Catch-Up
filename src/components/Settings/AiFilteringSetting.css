@@ -94,3 +94,13 @@
   display: block;
   margin-top: 12px;
 }
+
+/* The "your key is already saved" replace link specifically (not the Ollama standalone "Change
+   model" button, which shares the base class but isn't about a key at all) — bold, red, and
+   underlined by default rather than only on hover, so it reads as the one actionable thing in an
+   otherwise plain status line instead of blending into it. */
+.ai-filtering__replace--key {
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-decoration: underline;
+}

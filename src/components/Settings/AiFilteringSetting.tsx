@@ -105,17 +105,17 @@ export function AiFilteringSetting() {
 
       {config.provider === 'gemini' && (
         <p className="ai-filtering__key-status">
-          API key set.{' '}
-          <button type="button" className="ai-filtering__replace" onClick={() => setOpenModal('gemini')}>
-            Replace
+          API key is set.{' '}
+          <button type="button" className="ai-filtering__replace ai-filtering__replace--key" onClick={() => setOpenModal('gemini')}>
+            Replace it here.
           </button>
         </p>
       )}
       {config.provider === 'groq' && (
         <p className="ai-filtering__key-status">
-          API key set.{' '}
-          <button type="button" className="ai-filtering__replace" onClick={() => setOpenModal('groq')}>
-            Replace
+          API key is set.{' '}
+          <button type="button" className="ai-filtering__replace ai-filtering__replace--key" onClick={() => setOpenModal('groq')}>
+            Replace it here.
           </button>
         </p>
       )}

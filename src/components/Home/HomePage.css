@@ -35,6 +35,17 @@
   z-index: 2;
 }
 
+/* Higher still: AccountMenu's open dropdown lives in this row (EARLIER in DOM order than the
+   streak card, which sits right below it) and its own internal z-index (40, see AccountMenu.css)
+   can't do anything about that on its own — a child's z-index only competes within its OWN parent's
+   stacking context, and this row's context was tied with every other plain child at 1, well below
+   the streak card's 2. Confirmed live: the "Sign out" dropdown rendered behind the streak box.
+   Bumping the whole row above the streak card's 2 fixes it at the source (the ancestor comparison),
+   not by chasing ever-higher z-index numbers on the dropdown itself, which couldn't have worked. */
+.home-page > .home-page__utility-bar {
+  z-index: 3;
+}
+
 .home-page__utility-bar {
   display: flex;
   align-items: center;
@@ -98,7 +109,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 -20px 18px -14px;
+  margin: 0 -20px 12px -14px;
   padding: 6px 20px 6px 14px;
   background: var(--bg);
   transition: padding 0.2s ease;
