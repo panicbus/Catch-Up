@@ -151,7 +151,15 @@ export function ChannelPage() {
   );
 
   // The sticky controls bar picks up the channel name once the page's own title has scrolled
-  // behind it.
+  // behind it. Plain threshold: 0 against the root's raw bounds, deliberately with no rootMargin
+  // offset for the sticky bar's own height — a rootMargin correction was tried here and reverted:
+  // the title sits IMMEDIATELY above the sticky bar with no content between them (unlike the
+  // article cards further down, which useScrollCatchUp DOES need to offset for), so the title
+  // finishes scrolling out of raw view at essentially the same scroll position the sticky bar pins
+  // at anyway — there's no real gap to correct for. Offsetting it anyway made titleScrolledOut turn
+  // true immediately at rest (before any scrolling at all), which showed the small sticky-bar title
+  // and the real page title at the same time and kept re-triggering the reveal transition —
+  // confirmed live as exactly that regression.
   useEffect(() => {
     setTitleScrolledOut(false);
     if (!titleNode) return;
@@ -159,18 +167,9 @@ export function ChannelPage() {
     // .app-shell__main div is the actual scroll container, so it must be passed explicitly or the
     // observer never fires.
     const scrollRoot = titleNode.closest<HTMLElement>('.app-shell__main');
-    // NOT just `threshold: 0` against the root's raw bounds (that was the original approach) — the
-    // sticky bar visually covers the top of the root once it pins, but the observer has no idea
-    // that overlay exists; without telling it, "intersecting" briefly disagrees with "actually
-    // visible" right at the crossover point, which is exactly the flicker reported live (a sliver
-    // of the real title peeking out to the left of the sticky pill, sometimes correcting itself on
-    // the next scroll tick). Same fix, same measured-height approach useScrollCatchUp.ts already
-    // uses for this identical problem on the article cards below this bar.
-    const navHeight = scrollRoot?.querySelector<HTMLElement>('[data-sticky-nav]')?.getBoundingClientRect().height ?? 0;
     const observer = new IntersectionObserver(([entry]) => setTitleScrolledOut(!entry.isIntersecting), {
       root: scrollRoot,
       threshold: 0,
-      rootMargin: `-${Math.round(navHeight)}px 0px 0px 0px`,
     });
     observer.observe(titleNode);
     return () => observer.disconnect();
@@ -383,19 +382,6 @@ export function ChannelPage() {
               counts={subchannelCounts}
               totalUnread={totalUnread}
             />
-            {/* Desktop's pill row (SubchannelBar's chips, hidden on mobile — see its CSS) uses
-                flex-wrap, which stacks badly at phone width. This trigger + the full-width panel
-                below are the mobile stand-in, sharing the exact same counts/selection state;
-                SubchannelBar's manage toggle (the "+Add subchannels" / "Manage subchannels" pill)
-                stays visible on both. */}
-            {isMobile && (
-              <SubchannelPickerTrigger
-                subchannels={channel.subchannels}
-                open={subchannelPickerOpen}
-                onToggle={() => setSubchannelPickerOpen((v) => !v)}
-                onManageClick={() => setManagingSubchannels((v) => !v)}
-              />
-            )}
           </div>
           <div className="channel-page__controls-right">
             <button
@@ -416,6 +402,25 @@ export function ChannelPage() {
             )}
           </div>
         </div>
+
+        {/* Its own full-width row below the title/archive row, not squeezed in beside them — sharing
+            that row with the sticky-title echo meant a long channel name (e.g. "Unemployment") left
+            this pill almost no width, wrapping its label onto two lines and visually colliding with
+            Archive read next to it. Desktop's pill row (SubchannelBar's chips, hidden on mobile —
+            see its CSS) uses flex-wrap, which stacks badly at phone width; this trigger + the panel
+            below are the mobile stand-in, sharing the exact same counts/selection state.
+            SubchannelBar's manage toggle (the "+Add subchannels" / "Manage subchannels" pill) stays
+            visible on both. */}
+        {isMobile && (
+          <div className="channel-page__subchannel-row">
+            <SubchannelPickerTrigger
+              subchannels={channel.subchannels}
+              open={subchannelPickerOpen}
+              onToggle={() => setSubchannelPickerOpen((v) => !v)}
+              onManageClick={() => setManagingSubchannels((v) => !v)}
+            />
+          </div>
+        )}
 
         {isMobile && (
           <SubchannelPickerPanel

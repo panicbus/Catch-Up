@@ -253,9 +253,20 @@
   /* Same echo-the-scrolled-away-title behavior as desktop, just narrower: the mobile header's own
      title is regular in-flow content too, so it scrolls behind this sticky bar exactly like
      desktop's does. Capped width (rather than desktop's uncapped natural width) so a long channel
-     name can't shove the subchannel trigger off the row on a narrow phone screen. */
+     name can't shove Archive read off the row on a narrow phone screen. */
   .channel-page__sticky-title-inner {
-    max-width: 34vw;
+    max-width: 40vw;
     text-overflow: ellipsis;
+  }
+
+  /* Its own row, full width, instead of squeezed in beside the sticky-title echo — see the JSX
+     comment above this element for why (a long channel name left it almost no room, wrapping its
+     label onto two lines and visually colliding with Archive read next to it). */
+  .channel-page__subchannel-row {
+    margin-top: 10px;
+  }
+  .channel-page__subchannel-row .subchannel-picker__trigger {
+    width: 100%;
+    justify-content: space-between;
   }
 }
