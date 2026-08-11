@@ -1,0 +1,68 @@
+.app-info-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+}
+.app-info-button:hover {
+  background: var(--surface-hover);
+}
+
+.app-info-modal {
+  text-align: center;
+}
+
+.app-info-modal__intro {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+  margin: 0 0 16px;
+}
+
+.app-info-modal__credit {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.app-info-modal__copyright {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin: 2px 0 18px;
+}
+
+.app-info-modal__links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-info-modal__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  color: var(--accent-strong);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.app-info-modal__link:hover {
+  text-decoration: underline;
+}
+
+.app-info-modal__share {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.app-info-modal__share:hover {
+  color: var(--accent-strong);
+}

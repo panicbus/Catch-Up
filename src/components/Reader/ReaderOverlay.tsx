@@ -26,7 +26,7 @@ const REASON_COPY: Record<ReaderUnavailableReason, string> = {
   blocked: "This publisher doesn't allow in-app reading.",
   unsupported: "This link can't be previewed here.",
   'too-short': "Couldn't pull a readable version of this story.",
-  failed: 'Something went wrong loading this story.',
+  failed: 'This story is not available to read on Catch Up. Visit the site instead.',
   busy: 'The reader is busy right now — try again in a moment.',
 };
 
@@ -98,9 +98,15 @@ function ReaderOverlayInner() {
     next.delete('readChannel');
     // Not navigate(-1): a deep-linked or refreshed `?read=` URL may have nothing to go back TO
     // inside the app, and (-1) could exit the PWA entirely. Removing the params directly always
-    // lands on the same page with the reader closed, matching what pressing the phone's own back
-    // button already does when it pops this same history entry.
-    setSearchParams(next);
+    // lands on the same page with the reader closed.
+    // replace: true is load-bearing, not cosmetic — without it this PUSHES a new history entry
+    // on top of the one "Read here" already pushed to open the reader. That leaves the opened
+    // (`?read=X`) entry sitting one step further back in history, so a single subsequent press of
+    // the phone's real back button doesn't exit to wherever the user was before opening the story —
+    // it resurrects that stale entry and reopens the same story, re-running the fetch (confirmed
+    // live as an infinite reopen loop on stories that fail to load). Replacing collapses the "open"
+    // entry in place instead of leaving it behind, so back always exits forward, never back into it.
+    setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {

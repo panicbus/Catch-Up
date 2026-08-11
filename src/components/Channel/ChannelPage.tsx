@@ -313,14 +313,17 @@ export function ChannelPage() {
             {activeSubchannel && <span className="channel-page__title-sub"> · {activeSubchannel.name}</span>}
           </h1>
           <div className="channel-page__header-actions">
+            {/* Icon-only read as "what does a circular arrow even mean" (confirmed live) — desktop's
+                equivalent Button always pairs the icon with the word "Refresh"; this mirrors that
+                instead of leaving mobile as the one place the icon has to speak for itself. */}
             <button
               type="button"
-              className="channel-page__icon-btn"
+              className="channel-page__refresh-mobile"
               onClick={handleRefresh}
               disabled={refreshing}
-              aria-label={refreshing ? 'Refreshing' : 'Refresh'}
             >
               <RefreshIcon spinning={refreshing} />
+              {refreshing ? 'Refreshing…' : 'Refresh'}
             </button>
             <OverflowMenu channelId={channel.id} onMarkAllRead={handleClear} markAllReadDisabled={totalUnread === 0} />
           </div>

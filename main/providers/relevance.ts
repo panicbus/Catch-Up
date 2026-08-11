@@ -61,14 +61,19 @@ const W = {
   // = 5, since include IS the name for topic channels), so anything weaker than -6 leaves a
   // wrong-sense story net-positive and it survives. Verified, not assumed.
   wrongSenseHit: -6,
-  // Topic/entity channels only (see GateContext.locality) — a nearby mentioned place is a mild
-  // positive, a distant one a clear negative. For a topic channel's own main feed the channel's
-  // term is scored twice over (once as a specificTerm, once as profile.include — same word, both
-  // paths), so the weakest kept case (the term named ONLY in the snippet) actually floors at +3
-  // (termSnippet 2 + includeSnippet 1), not +2 — verified empirically, not assumed. -4 tips that
-  // floor below KEEP_SCORE when the story's nearest mentioned place is far away, while a title or
-  // tag match (floors at +5) survives regardless of distance — strong on-topic evidence should
-  // never be overridden by geography alone.
+  // Applies whenever a home location is configured (topic/entity channels AND category channels —
+  // see GateContext.locality) — a nearby mentioned place is a mild positive, a distant one a clear
+  // negative. For a topic channel's own main feed the channel's term is scored twice over (once as
+  // a specificTerm, once as profile.include — same word, both paths), so the weakest kept case (the
+  // term named ONLY in the snippet) actually floors at +3 (termSnippet 2 + includeSnippet 1), not
+  // +2 — verified empirically, not assumed. -4 tips that floor below KEEP_SCORE when the story's
+  // nearest mentioned place is far away, while a title or tag match (floors at +5) survives
+  // regardless of distance — strong on-topic evidence should never be overridden by geography
+  // alone. A lenient CATEGORY channel's floor is lower still (a single include-keyword hit, +1 to
+  // +2, or even a bare 0 with no signal at all), so this is where the penalty does its real work:
+  // dropping the weak-evidence hyperlocal-foreign long tail (a specific country's local politician,
+  // a district-level story) while a well-covered story — matched by a real section field or a
+  // strong keyword hit — keeps enough score to survive.
   localityNear: 1,
   localityFar: -4,
 };
@@ -186,8 +191,15 @@ function buildGateContext(ctx: RelevanceContext): GateContext {
   const ambiguous =
     ctx.profile.type === 'category' ? new Set(buildQueryTerms(ctx.channelName).terms) : new Set<string>();
   const specificTerms = allTerms.filter((t) => !ambiguous.has(t));
-  const localityEligible =
-    ctx.profile.type === 'topic' && ctx.homeLocation != null && !looksLikePlaceChannel(ctx.channelName);
+  // Locality used to be topic/entity channels only. Broadened to CATEGORY channels too (a Politics
+  // or World channel, not just a "Wildfires"-style topic) after real, repeated user reports of
+  // hyperlocal foreign political stories (a district-level story about a politician in India, then
+  // "other places" too) drowning out a broad channel that has no other way to gauge global interest.
+  // Safe to broaden rather than special-case just 'politics': this signal is additive, not a hard
+  // filter — a genuinely significant far-away story still keeps its section-match/include-keyword
+  // evidence and stays net-positive (see the design note above W.localityFar), so this only trims
+  // the weak-evidence long tail, exactly the "uninteresting" stories being reported, in any category.
+  const localityEligible = ctx.homeLocation != null && !looksLikePlaceChannel(ctx.channelName);
   return {
     specificTerms,
     include: ctx.profile.include,

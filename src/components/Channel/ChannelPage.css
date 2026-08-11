@@ -70,6 +70,13 @@
   margin: 0 -40px 8px;
   padding: 14px 40px;
   z-index: 3;
+  /* Forces its own GPU compositing layer — a well-known mitigation for a real iOS Safari bug where a
+     `position: sticky` element whose own height changes (the subchannel manage panel opening/closing
+     inside this same box) can visually detach from the stuck position during the top-of-scroll
+     rubber-band bounce and render way down the page under the title until the next scroll tick
+     forces a recompute. Confirmed live as an intermittent mobile-only bug. Harmless on every other
+     browser — this is a no-op there. */
+  transform: translateZ(0);
 }
 
 .channel-page__controls {
@@ -207,6 +214,26 @@
     opacity: 0.4;
   }
 
+  /* Icon + label, not icon-only like the back/overflow buttons either side of it — the one action
+     in this row a bare glyph doesn't unambiguously explain on its own. */
+  .channel-page__refresh-mobile {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border: none;
+    border-radius: 999px;
+    background: var(--surface-hover);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .channel-page__refresh-mobile:disabled {
+    opacity: 0.6;
+  }
+
   /* .channel-page's side padding just changed above, so the sticky bar's full-bleed negative
      margin (tuned for desktop's 40px) has to match it here or the toolbar's background stops
      reaching the screen edges. */
@@ -215,11 +242,12 @@
     padding: 12px 16px;
   }
 
-  /* No second-row echo of the title on mobile — the header's own title never scrolls under the
-     sticky bar the way desktop's does (the mobile header isn't part of the scrolling content in
-     the same visual sense), and there's little enough width here without a duplicate label. The
-     underlying IntersectionObserver keeps running either way; this only hides its output. */
-  .channel-page__sticky-title {
-    display: none;
+  /* Same echo-the-scrolled-away-title behavior as desktop, just narrower: the mobile header's own
+     title is regular in-flow content too, so it scrolls behind this sticky bar exactly like
+     desktop's does. Capped width (rather than desktop's uncapped natural width) so a long channel
+     name can't shove the subchannel trigger off the row on a narrow phone screen. */
+  .channel-page__sticky-title-inner {
+    max-width: 34vw;
+    text-overflow: ellipsis;
   }
 }

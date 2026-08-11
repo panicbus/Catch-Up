@@ -39,8 +39,9 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
           <p className="onboarding__tagline">Your news. Your pace. All caught up.</p>
         </div>
 
-        <p className="onboarding__prompt">Pick a few topics to start. Anything goes!</p>
+        <p className="onboarding__prompt">Add three topics that interest you.</p>
         <OnboardingChannelPicker names={names} onChange={setNames} />
+        <p className="onboarding__hint">For more local stories add your location in Settings.</p>
 
         <div className="onboarding__footer">
           <Button variant="success" disabled={names.length === 0 || submitting} onClick={handleContinue}>

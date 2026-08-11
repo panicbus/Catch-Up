@@ -3,6 +3,7 @@ import { Logo } from './Logo';
 import { ThemeToggle } from './ThemeToggle';
 import { StreakCard } from './StreakCard';
 import { HomeIcon, PoolIcon, BookmarkIcon, SettingsIcon } from './NavIcons';
+import { AppInfoButton } from '../common/AppInfoButton';
 import { useChannels } from '../../hooks/useChannels';
 import { useStreak } from '../../hooks/useStreak';
 import './Sidebar.css';
@@ -33,9 +34,12 @@ export function Sidebar() {
           interactive. */}
       <div className="sidebar__drag-region" />
       <div className="sidebar__brand">
-        <NavLink to="/" className="sidebar__brand-link" aria-label="Go to home">
-          <Logo withWordmark size={52} />
-        </NavLink>
+        <div className="sidebar__brand-row">
+          <NavLink to="/" className="sidebar__brand-link" aria-label="Go to home">
+            <Logo withWordmark size={52} />
+          </NavLink>
+          <AppInfoButton />
+        </div>
         <p className="sidebar__tagline">Your news. Your pace. All caught up.</p>
         {streak && streak.current > 0 && <StreakCard current={streak.current} />}
       </div>

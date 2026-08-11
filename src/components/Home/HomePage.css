@@ -72,8 +72,46 @@
   color: var(--text-faint);
 }
 
+/* 1px, in normal flow (not absolutely positioned out of it) — imperceptible, but real height an
+   IntersectionObserver can reliably report on/off screen for (a true zero-height node has flaky
+   intersection behavior in some browsers). See HomePage.tsx for how this drives the shrink below. */
+.home-page__topbar-sentinel {
+  height: 1px;
+}
+
+/* Home view only (this component only ever renders here — see HomePage.tsx) — sticky rather than
+   fixed so it participates in normal layout until it actually needs to pin, and breaks out to the
+   full bleed width (matching .home-page's own horizontal padding with a negative margin, the same
+   technique ChannelPage's sticky toolbar uses) so it reads as a real top bar once stuck instead of
+   an inset block floating over the content. */
 .home-page__mobile-topbar {
-  margin-bottom: 18px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 -20px 18px -14px;
+  padding: 6px 20px 6px 14px;
+  background: var(--bg);
+  transition: padding 0.2s ease;
+}
+
+.home-page__mobile-topbar .logo {
+  transform-origin: left center;
+  transition: transform 0.2s ease;
+}
+
+/* The actual "gets a little smaller" — a transform scale, not a change to the logo's own size prop
+   (see MobileTopBar's doc comment): transforms transition smoothly, changing SVG width/height
+   attributes just snaps. */
+.home-page__mobile-topbar--stuck .logo {
+  transform: scale(0.8);
+}
+.home-page__mobile-topbar--stuck {
+  padding-top: 3px;
+  padding-bottom: 3px;
 }
 
 .home-page__mobile-streak {

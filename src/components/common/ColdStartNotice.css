@@ -12,13 +12,27 @@
   background: var(--bg);
 }
 
+/* A plain ring — no hands, no numbers, transparent center — the bottle spins inside it rather than
+   the bottle alone implying a clock face on its own. Sized generously bigger than the 64px logo so
+   the sweep reads as happening INSIDE the face, not just next to it. */
+.cold-start-notice__clock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  border: 2.5px solid var(--border-strong);
+  background: transparent;
+}
+
 /* The ketchup bottle (Logo) spinning like a clock hand that hesitates at 12 rather than a
-   constant-speed spin: slow leaving 12, fast through the rest of the sweep (roughly the 12:10-to-
-   12:50 stretch of the rotation), slow again coming back into 12. Built as three keyframe segments
-   with the SLOW ones covering only a small arc (each ~1/6 of the rotation) and the FAST one covering
-   the rest (~2/3) — a small arc over a normal time-slice already reads as slow, a big arc over the
-   same time-slice already reads as fast, and the per-stop timing-functions round off the velocity
-   change at each handoff instead of leaving a visible kink. */
+   constant-speed spin: slow leaving 12, fast through the middle of the sweep (the 20%-80% marks),
+   slow again coming back into 12. Built as three keyframe segments with the SLOW ones covering only
+   a small arc (15deg each) and the FAST one covering the rest (330deg) — a small arc over a normal
+   time-slice already reads as slow, a big arc over the same time-slice already reads as fast, and
+   the per-stop timing-functions round off the velocity change at each handoff instead of leaving a
+   visible kink. */
 .cold-start-notice__spinner {
   display: inline-flex;
   animation: cold-start-notice-spin 1.8s infinite;
@@ -29,12 +43,13 @@
     transform: rotate(0deg);
     animation-timing-function: ease-in; /* leaving the 12 o'clock hesitation, picking up speed */
   }
-  16.6% {
-    transform: rotate(25deg); /* 12:10 */
-    animation-timing-function: linear; /* the fast sweep */
+  20% {
+    transform: rotate(15deg);
+    animation-timing-function: linear; /* the fast sweep — a little quicker through here than the
+      hesitation stretches either side, more degrees covered per % of the timeline */
   }
-  83.3% {
-    transform: rotate(335deg); /* 12:50 */
+  80% {
+    transform: rotate(345deg);
     animation-timing-function: ease-out; /* slowing back into the 12 o'clock hesitation */
   }
   100% {

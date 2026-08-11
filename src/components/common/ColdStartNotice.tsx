@@ -8,8 +8,10 @@ import './ColdStartNotice.css';
 export function ColdStartNotice() {
   return (
     <div className="cold-start-notice" role="status">
-      <div className="cold-start-notice__spinner">
-        <Logo size={64} />
+      <div className="cold-start-notice__clock">
+        <div className="cold-start-notice__spinner">
+          <Logo size={64} />
+        </div>
       </div>
       <p>Waking up the server. This can take up to 30 seconds on the first load.</p>
     </div>

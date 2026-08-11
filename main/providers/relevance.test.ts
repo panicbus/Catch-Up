@@ -175,13 +175,6 @@ describe('locality signal — main topic channel (no subchannel)', () => {
 });
 
 describe('locality signal — scope guards', () => {
-  it('never applies to a broad category channel, regardless of home location', () => {
-    const profile = channelProfile('Politics');
-    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile, homeLocation: LA };
-    const a = article({ title: 'Senate votes on new immigration policy near Banff-adjacent riding', section: 'politics' });
-    expect(keeps(a, ctx)).toBe(true);
-  });
-
   it('never applies to a topic channel that is itself a place (e.g. "Ukraine")', () => {
     const profile = channelProfile('Ukraine');
     const ctx: RelevanceContext = { topic: 'Ukraine', channelName: 'Ukraine', subchannelName: null, profile, homeLocation: LA };
@@ -189,6 +182,40 @@ describe('locality signal — scope guards', () => {
       title: 'Ukraine reports new strikes overnight, dozens injured',
       snippet: 'Officials in Kyiv confirmed the strikes on residential buildings.',
     });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+});
+
+describe('locality signal — broad CATEGORY channels (Politics, World, ...)', () => {
+  // Real user report: hyperlocal foreign political stories (a district-level story about a
+  // politician in India, "and other places") crowding out a broad Politics/World channel that
+  // previously had no way to gauge global interest at all.
+  it('drops a weak-evidence, far-away local political story with no other signal', () => {
+    const profile = channelProfile('Politics');
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'Jaipur civic body elects new local council chief amid protests' });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+
+  it('keeps the same shape of story when home is actually near the mentioned place', () => {
+    const profile = channelProfile('Politics');
+    const jaipur = resolveCity('Jaipur, Rajasthan')!;
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile, homeLocation: jaipur };
+    const a = article({ title: 'Jaipur civic body elects new local council chief amid protests' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  it('keeps a far, well-covered story — a real section match plus a keyword hit outweighs the locality penalty', () => {
+    const profile = channelProfile('Politics');
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'Senate votes on new immigration policy near Jaipur-adjacent riding', section: 'politics' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  it('is unaffected when the story mentions no resolvable place at all', () => {
+    const profile = channelProfile('Politics');
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'Lawmakers debate new voting legislation ahead of recess' });
     expect(keeps(a, ctx)).toBe(true);
   });
 });
