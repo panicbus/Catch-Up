@@ -4,19 +4,44 @@
 }
 
 /* The main way into a channel's subchannels on mobile (SubchannelBar's own chip row is desktop-
-   only — see its CSS) — accent-tinted rather than a plain neutral pill, so it reads as the primary
-   control it is instead of blending into the row like a disabled/inert element. */
+   only — see its CSS) — the red-tinted background stays (it reads as the primary control it is,
+   not a blended-in inert element), but the border and label text match the app's normal neutral
+   border/text tokens rather than the accent red, which read as an error/warning state rather than
+   just "the primary action here" (confirmed live). */
 .subchannel-picker__trigger {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
   border-radius: 999px;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--border-strong);
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--text);
   font-size: 13px;
   font-weight: 700;
+}
+
+.subchannel-picker__trigger-label {
+  flex-shrink: 0;
+}
+
+/* The quick "what's in here" reminder — unbold and muted so it stays clearly secondary to the
+   label, ellipsizing (mid-word if it has to) instead of wrapping since this is a single-line
+   button. min-width: 0 is load-bearing on a flex item for text-overflow to ever kick in at all. */
+.subchannel-picker__trigger-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-weight: 400;
+  color: var(--text-faint);
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+.subchannel-picker__trigger-preview--hidden {
+  opacity: 0;
 }
 
 /* Normal document flow, full width — pushes whatever comes after it (the story list) down rather

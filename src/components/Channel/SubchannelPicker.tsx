@@ -41,9 +41,15 @@ interface SubchannelPickerTriggerProps {
  * from SubchannelPickerPanel below — the panel needs to render full-width, breaking out of the
  * narrow flex column this trigger sits in, so ChannelPage places the two in different parts of its
  * layout while sharing one `open` state. Always reads "Subchannels (N)", not the active selection —
- * this is the picker itself, not a value display. */
+ * this is the picker itself, not a value display.
+ * A comma-joined preview of the subchannel names themselves sits between that label and the
+ * chevron — a quick reminder of what's actually in there before tapping, since "Subchannels (4)"
+ * alone doesn't say which four. Truncates (ellipsis, mid-word if it has to) rather than wrapping —
+ * this is a single-line button — and fades out while the panel is open (there's nothing to preview
+ * once you can already see the real list) and back in once it closes. */
 export function SubchannelPickerTrigger({ subchannels, open, onToggle, onManageClick }: SubchannelPickerTriggerProps) {
   const hasSubchannels = subchannels.length > 0;
+  const preview = subchannels.map((s) => s.name).join(', ');
   return (
     <button
       type="button"
@@ -52,7 +58,16 @@ export function SubchannelPickerTrigger({ subchannels, open, onToggle, onManageC
       aria-expanded={hasSubchannels && open}
       aria-label="Subchannels"
     >
-      Subchannels{hasSubchannels ? ` (${subchannels.length})` : ''}
+      <span className="subchannel-picker__trigger-label">
+        Subchannels{hasSubchannels ? ` (${subchannels.length})` : ''}
+      </span>
+      {hasSubchannels && (
+        <span
+          className={`subchannel-picker__trigger-preview ${open ? 'subchannel-picker__trigger-preview--hidden' : ''}`}
+        >
+          {preview}
+        </span>
+      )}
       <ChevronIcon open={hasSubchannels && open} />
     </button>
   );
