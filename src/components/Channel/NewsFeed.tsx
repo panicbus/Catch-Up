@@ -20,6 +20,11 @@ const hasReadableContent = (a: NewsCardData) => !!(a.snippet && a.snippet.trim()
  * since that's the unit the underlying prune logic actually uses. */
 const READ_ARCHIVE_DAYS = 10;
 
+/** Must match (and comfortably exceed) NewsCard.css's `.news-card__expand` transition duration
+ * (0.3s) — see toggleExpand's scroll-into-view logic below for why this can't just be a
+ * requestAnimationFrame. */
+const CARD_EXPAND_TRANSITION_MS = 340;
+
 interface NewsFeedProps {
   articles: NewsCardData[];
   channelName: string;
@@ -546,9 +551,20 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     // Runs alongside markReadOnOpen, at the same "settled" point, for the same reason: measuring
     // position before a pending reflow (another card collapsing back down, in grid's case a full
     // view-transition reposition) could read a stale, not-yet-final card position.
+    //
+    // A single requestAnimationFrame here (the original approach) genuinely wasn't enough: when a
+    // DIFFERENT card was already open, switching to this one collapses that one back down at the
+    // same time this one opens, and that collapse is a CSS transition — grid-template-rows 0.3s ease
+    // (see .news-card__expand in NewsCard.css) — not an instant layout change. One frame in, the
+    // collapsing card has barely started shrinking, so the tapped card's measured position was still
+    // mid-reflow and would keep drifting for another ~300ms after the scroll already ran. That's
+    // exactly why this "usually" didn't work in practice — switching between cards, not opening the
+    // very first one, is the common case. CATCH_UP_EXPAND_MS below matches that 0.3s transition
+    // (plus a small buffer) so the position is read only after both the open AND any collapse have
+    // actually finished settling.
     const settleOnOpen = () => {
       markReadOnOpen();
-      if (willOpen) requestAnimationFrame(() => scrollExpandedCardIntoView(articleId));
+      if (willOpen) window.setTimeout(() => scrollExpandedCardIntoView(articleId), CARD_EXPAND_TRANSITION_MS);
     };
     const apply = () => setExpandedArticleId((prev) => (prev === articleId ? null : articleId));
     // Only grid view has a reflow worth animating (list view already expands smoothly in place, no
