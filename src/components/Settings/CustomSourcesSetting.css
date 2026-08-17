@@ -1,0 +1,120 @@
+.custom-sources {
+  display: flex;
+  flex-direction: column;
+}
+
+.custom-sources__hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.custom-sources__add-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.custom-sources__add-error {
+  margin: 0 0 16px;
+  color: var(--accent-strong);
+  font-size: 13px;
+}
+
+.custom-sources__input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  background: var(--surface);
+  color: var(--text);
+}
+.custom-sources__input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.custom-sources__input:disabled {
+  opacity: 0.6;
+}
+
+/* Same bordered box + divided rows as ChannelManageList — no collapsible toggle here, unlike that
+   one, since this list is capped at 10 and short enough to just always show. */
+.custom-sources__list {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.custom-sources__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.custom-sources__row:last-child {
+  border-bottom: none;
+}
+
+.custom-sources__row-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.custom-sources__row-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.custom-sources__row-url {
+  font-size: 12px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-sources__row-status {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.custom-sources__row-status--error {
+  color: var(--accent-strong);
+}
+
+.custom-sources__row-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+@media (max-width: 767px) {
+  /* Same wrap fix as ChannelManageList's identical row shape — label/url/status plus two buttons
+     all fighting for one line ran the buttons off the right edge. */
+  .custom-sources__row {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  .custom-sources__row-main {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .custom-sources__row-actions {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+
+  /* iOS Safari auto-zooms the whole page on focusing any input styled under 16px — same fix
+     already applied to ChannelManageList's and SubchannelManagePanel's own inputs. */
+  .custom-sources__input {
+    font-size: 16px;
+  }
+}

@@ -18,6 +18,12 @@ const MAX_COUNT = 300;
 const MAX_UNREAD_PER_CHANNEL = 100;
 const MAX_GOOGLE_NEWS_RSS_PER_CHANNEL = 15;
 const GOOGLE_NEWS_RSS_PROVIDER_ID = 'googlenewsrss';
+// Same reasoning as the Google-News-RSS cap just above, generalized: a user's own custom sources
+// (server/customSources/) are tagged `custom:<sourceId>`, and this caps ALL of them combined per
+// channel, not per individual source — one very prolific feed (or several modest ones together)
+// shouldn't be able to dominate a channel's list any more than the RSS fallback can.
+const MAX_CUSTOM_SOURCE_ARTICLES_PER_CHANNEL = 20;
+const CUSTOM_SOURCE_PROVIDER_PREFIX = 'custom:';
 
 /** Exactly the columns toArticle() below reads — deliberately NOT the whole row. Notably excludes
  * `titleDedupeKey` (internal to prune's fuzzy collapse) and `userId` (the caller already knows it),
@@ -277,6 +283,17 @@ async function prune(userId: string, channelId: string): Promise<Set<string>> {
         .map((a) => a.id)
     );
     deduped = deduped.filter((a) => a.provider !== GOOGLE_NEWS_RSS_PROVIDER_ID || rssKeepIds.has(a.id));
+  }
+
+  const custom = deduped.filter((a) => a.provider.startsWith(CUSTOM_SOURCE_PROVIDER_PREFIX));
+  if (custom.length > MAX_CUSTOM_SOURCE_ARTICLES_PER_CHANNEL) {
+    const customKeepIds = new Set(
+      [...custom]
+        .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())
+        .slice(0, MAX_CUSTOM_SOURCE_ARTICLES_PER_CHANNEL)
+        .map((a) => a.id)
+    );
+    deduped = deduped.filter((a) => !a.provider.startsWith(CUSTOM_SOURCE_PROVIDER_PREFIX) || customKeepIds.has(a.id));
   }
 
   const survivingIds = new Set(deduped.map((a) => a.id));

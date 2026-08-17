@@ -1,8 +1,10 @@
 import type {
+  AddCustomSourceResult,
   Article,
   ArticleListParams,
   CatchUpApi,
   Channel,
+  CustomSource,
   DataChangeEvent,
   ReaderResponse,
 } from '../../ipc-contract';
@@ -310,6 +312,28 @@ const webApi: CatchUpApi = {
 // which `request()` just returns as data — only a genuine 401/429/5xx throws.
 export function fetchReaderContent(articleId: string, channelId: string): Promise<ReaderResponse> {
   return request<ReaderResponse>(`/articles/${articleId}/reader?channelId=${encodeURIComponent(channelId)}`);
+}
+
+// --- Custom sources (web only) -------------------------------------------------------------------
+//
+// Same "outside CatchUpApi, no Electron path" precedent as fetchReaderContent above — a user's own
+// added sources are stored server-side against their account (server/customSources/), which has no
+// desktop equivalent. Only ever called from Settings, itself web-gated the same way.
+//
+// addCustomSource's every failure mode (invalid-url, not-found, duplicate, ...) comes back as a
+// normal 200 with `{ ok: false, reason }`, same reasoning as fetchReaderContent's own comment — an
+// unreadable site isn't a server error, so request() just returns it as data.
+export function getCustomSources(): Promise<CustomSource[]> {
+  return request<CustomSource[]>('/custom-sources');
+}
+export function addCustomSource(url: string): Promise<AddCustomSourceResult> {
+  return post<AddCustomSourceResult>('/custom-sources', { url });
+}
+export function retryCustomSource(id: string): Promise<void> {
+  return post<void>(`/custom-sources/${id}/retry`);
+}
+export function deleteCustomSource(id: string): Promise<void> {
+  return request<void>(`/custom-sources/${id}`, { method: 'DELETE' });
 }
 
 // --- Pick the right implementation once, at module load ----------------------------------------

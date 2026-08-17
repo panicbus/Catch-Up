@@ -21,8 +21,17 @@ import { resolveCity } from '../main/locality/gazetteer';
 import * as dataStore from './stores/dataStore';
 import * as articlesCache from './stores/articlesCache';
 import { getReaderContent } from './reader';
+import { discoverFeed } from './customSources/discover';
+import { mergeCustomArticles, refreshOneCustomSourceNow, CUSTOM_PROVIDER_PREFIX } from './customSources/refresh';
+import type { AddCustomSourceResult } from '../ipc-contract';
 
 export const router = Router();
+
+// Runtime cost, not the shared-provider-quota concern MAX_CHANNELS_PER_USER-style caps exist for
+// (custom sources never touch that budget — see refreshAgent.ts) — a ceiling on how many feeds one
+// account can make the scheduled round fetch and sort every cycle. Applies to every account,
+// including the owner, for exactly that reason.
+const MAX_CUSTOM_SOURCES_PER_USER = 10;
 
 // Express 5 types a route param as `string | string[]` (to cover repeated/wildcard segments) even
 // though none of these routes use those — every param here is genuinely always a single string.
@@ -261,6 +270,74 @@ router.post(
 router.get('/settings', handle((userId) => dataStore.getSettings(userId)));
 router.post('/settings', handle((userId, req) => dataStore.setSettings(userId, req.body)));
 router.post('/settings/resolve-location', handle(async (_userId, req) => resolveCity(req.body.query)));
+
+// --- Custom sources --------------------------------------------------------------------------
+// A user's own added news sources — global to the account (see server/customSources/), which is
+// why these live next to Settings rather than under /channels the way subchannels do.
+
+router.get('/custom-sources', handle((userId) => dataStore.getCustomSources(userId)));
+
+router.post(
+  '/custom-sources',
+  handle(async (userId, req): Promise<AddCustomSourceResult> => {
+    const url = typeof req.body.url === 'string' ? req.body.url : '';
+    // Checked before doing any network work — a request that's going to be rejected regardless
+    // shouldn't pay for a discovery round trip first. addCustomSource below re-checks the same cap
+    // atomically with the insert, since this early check and that insert are two separate round
+    // trips a concurrent second request could slip between.
+    const count = await dataStore.countCustomSources(userId);
+    if (count >= MAX_CUSTOM_SOURCES_PER_USER) return { ok: false, reason: 'limit-reached' };
+
+    const discovered = await discoverFeed(url);
+    if (!discovered.ok) return discovered;
+
+    let created;
+    try {
+      created = await dataStore.addCustomSource(
+        userId,
+        {
+          feedUrl: discovered.feedUrl,
+          siteUrl: url,
+          label: discovered.title || new URL(discovered.feedUrl).hostname,
+          etag: discovered.validators.etag,
+          lastModified: discovered.validators.lastModified,
+        },
+        MAX_CUSTOM_SOURCES_PER_USER
+      );
+    } catch (e) {
+      if (e instanceof dataStore.CustomSourceLimitError) return { ok: false, reason: 'limit-reached' };
+      throw e;
+    }
+    if (!created) return { ok: false, reason: 'duplicate' };
+
+    // Fire-and-forget, same .catch()-is-not-optional reasoning as POST /channels — but merging the
+    // articles discovery already fetched, not re-fetching: discoverFeed's own validation fetch IS
+    // this source's first real fetch, so doing it again here would just be a redundant round trip.
+    void mergeCustomArticles(
+      userId,
+      discovered.articles.map((a) => ({ ...a, source: created.label, provider: `${CUSTOM_PROVIDER_PREFIX}${created.id}` }))
+    ).catch((err) => console.error('[routes] background custom-source merge failed', err));
+
+    return { ok: true, source: created };
+  })
+);
+
+router.post(
+  '/custom-sources/:id/retry',
+  handle(async (userId, req) => {
+    const id = param(req, 'id');
+    await dataStore.retryCustomSource(userId, id);
+    // See retryCustomSource's own doc comment: clearing the disabled state and actually checking
+    // the source again are two separate steps on purpose, and a one-tap Retry needs both, not just
+    // the first — an immediate on-demand fetch, not a wait for whenever the next scheduled round
+    // happens to land. A 404 here (source deleted between the two calls, or never belonged to this
+    // user) surfaces as a normal thrown error, same as everywhere else `handle()` wraps.
+    const result = await refreshOneCustomSourceNow(userId, id);
+    if (result === null) throw new Error('Custom source not found');
+  })
+);
+
+router.delete('/custom-sources/:id', handle((userId, req) => dataStore.deleteCustomSource(userId, param(req, 'id'))));
 
 // --- AI relevance filtering --------------------------------------------------------------------
 

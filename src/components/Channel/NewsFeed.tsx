@@ -559,12 +559,20 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     // collapsing card has barely started shrinking, so the tapped card's measured position was still
     // mid-reflow and would keep drifting for another ~300ms after the scroll already ran. That's
     // exactly why this "usually" didn't work in practice — switching between cards, not opening the
-    // very first one, is the common case. CATCH_UP_EXPAND_MS below matches that 0.3s transition
-    // (plus a small buffer) so the position is read only after both the open AND any collapse have
-    // actually finished settling.
-    const settleOnOpen = () => {
+    // very first one, is the common case. CARD_EXPAND_TRANSITION_MS below matches that 0.3s
+    // transition (plus a small buffer) so the position is read only after both the open AND any
+    // collapse have actually finished settling.
+    //
+    // `alreadySettled` distinguishes the two call sites below: the grid path's flushSync + view
+    // transition has ALREADY fully settled by the time transition.finished resolves (that promise
+    // is exactly the "everything's repositioned" signal), so waiting the CSS-transition buffer on
+    // top of it too would just add latency for nothing — only the plain-CSS list path (no view
+    // transition to wait on) actually needs the timeout.
+    const settleOnOpen = (alreadySettled: boolean) => {
       markReadOnOpen();
-      if (willOpen) window.setTimeout(() => scrollExpandedCardIntoView(articleId), CARD_EXPAND_TRANSITION_MS);
+      if (!willOpen) return;
+      if (alreadySettled) scrollExpandedCardIntoView(articleId);
+      else window.setTimeout(() => scrollExpandedCardIntoView(articleId), CARD_EXPAND_TRANSITION_MS);
     };
     const apply = () => setExpandedArticleId((prev) => (prev === articleId ? null : articleId));
     // Only grid view has a reflow worth animating (list view already expands smoothly in place, no
@@ -573,10 +581,10 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     // startViewTransition requires to capture an accurate "after" snapshot.
     if (viewMode === 'grid' && document.startViewTransition) {
       const transition = document.startViewTransition(() => flushSync(apply));
-      transition.finished.finally(settleOnOpen);
+      transition.finished.finally(() => settleOnOpen(true));
     } else {
       apply();
-      settleOnOpen();
+      settleOnOpen(false);
     }
   };
 

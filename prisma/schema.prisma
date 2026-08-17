@@ -39,6 +39,7 @@ model User {
   classificationVerdicts ClassificationCache[]
   classificationBudgets  ClassificationDailyBudget[]
   providerBudgets        ProviderDailyBudget[]
+  customSources          CustomSource[]
 
   @@map("users")
 }
@@ -175,6 +176,32 @@ model Settings {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("settings")
+}
+
+// A user's own added news source (a feed URL they pasted in Settings) — global to the account, not
+// scoped to one channel, since a source like ProPublica or AP isn't specific to any single topic.
+// Every channel's own relevance gate decides what (if anything) from it actually fits — see
+// main/providers/relevance.ts's FALLBACK_PROVIDER-style strict handling, extended to cover these.
+model CustomSource {
+  id                  String    @id @default(uuid())
+  userId              String    @map("user_id")
+  feedUrl             String    @map("feed_url") // the resolved, actually-parseable feed URL
+  siteUrl             String    @map("site_url") // what the user actually pasted, for display
+  label               String // from the feed's own <title> at add time; user-editable after
+  createdAt           DateTime  @default(now()) @map("created_at")
+  lastFetchedAt        DateTime? @map("last_fetched_at") // drives the ~hourly throttle
+  // Conditional-GET validators from the last successful fetch — lets a re-check skip the download
+  // entirely (a 304) when the feed hasn't changed, which is the common case for a once-an-hour poll.
+  etag                 String?   @map("etag")
+  lastModified         String?   @map("last_modified")
+  consecutiveFailures  Int       @default(0) @map("consecutive_failures")
+  lastError            String?   @map("last_error")
+  disabledAt           DateTime? @map("disabled_at") // null = active; set after repeated failures
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, feedUrl])
+  @@map("custom_sources")
 }
 
 model Streak {

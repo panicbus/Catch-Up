@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react';
+import { useRef, useState, type KeyboardEvent } from 'react';
 import { api, revalidateNow } from '../../services/api';
 import * as channelsStore from '../../services/channelsStore';
 import { suggestSubchannels } from '../../utils/subchannelSuggestions';
@@ -15,6 +15,9 @@ export function SubchannelManagePanel({ channel, onClose }: SubchannelManagePane
   const [draft, setDraft] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  // Set true for one tick on any pointerdown inside this panel, then cleared — see the add-input's
+  // onBlur below for why this exists.
+  const insidePanelPressRef = useRef(false);
 
   const suggestions = suggestSubchannels(channel.name).filter(
     (s) => !channel.subchannels.some((sc) => sc.name.toLowerCase() === s.toLowerCase())
@@ -58,6 +61,20 @@ export function SubchannelManagePanel({ channel, onClose }: SubchannelManagePane
     }
   };
 
+  // A pointerdown anywhere else in this panel (a suggestion pill, Done, an existing row) fires just
+  // before the blur it causes on the add-input, and is the actual signal that this blur isn't a
+  // genuine "leave the field" — relatedTarget alone can't be trusted for that: desktop Safari
+  // doesn't always focus a clicked button, which would leave relatedTarget null even for a same-
+  // panel click and defeat a relatedTarget-based check. Capture phase so a child stopping
+  // propagation elsewhere can't hide its own press from this. Reset a tick later, after the blur
+  // AND the click that caused it have both already run synchronously off this same press.
+  const onPanelPointerDown = () => {
+    insidePanelPressRef.current = true;
+    window.setTimeout(() => {
+      insidePanelPressRef.current = false;
+    }, 0);
+  };
+
   const startEdit = (id: string, currentName: string) => {
     setEditingId(id);
     setEditValue(currentName);
@@ -85,7 +102,7 @@ export function SubchannelManagePanel({ channel, onClose }: SubchannelManagePane
   };
 
   return (
-    <div className="subchannel-panel">
+    <div className="subchannel-panel" onPointerDownCapture={onPanelPointerDown}>
       <div className="subchannel-panel__header">
         <span className="subchannel-panel__title">Subchannels of "{channel.name}"</span>
         <button
@@ -108,21 +125,21 @@ export function SubchannelManagePanel({ channel, onClose }: SubchannelManagePane
           // iOS's own keyboard-accessory "Done"/checkmark (distinct from the Return key, which
           // onKeyDown above already handles) just blurs the field by default — it doesn't fire a
           // key event at all, so without this, tapping it silently dropped whatever was typed
-          // (confirmed live). Safe to fire unconditionally: addSubchannel no-ops on an empty/
-          // whitespace draft, so blurring for any other reason (tapping elsewhere) costs nothing.
-          onBlur={() => addSubchannel(draft)}
+          // (confirmed live). NOT unconditional, though: without the insidePanelPressRef guard,
+          // clicking a suggestion pill or Done while a partial/exploratory draft was still sitting
+          // here would ALSO silently commit that leftover text as a real subchannel (a real API
+          // call, not just a UI glitch) — caught in code review, not live, but traced through the
+          // exact event sequence and verified. Only a blur with no in-panel press behind it (the
+          // keyboard checkmark, or genuinely tapping away from the whole panel) actually commits.
+          onBlur={() => {
+            if (insidePanelPressRef.current) return;
+            addSubchannel(draft);
+          }}
           aria-label={`Add subchannel to ${channel.name}`}
         />
         <button
           type="button"
           className="subchannel-panel__add-submit"
-          // Without this, tapping the button would first blur the input (moving focus off it),
-          // which fires onBlur's OWN addSubchannel(draft) call before this button's onClick even
-          // runs — not incorrect (both are guarded/idempotent), but relying on React's re-render
-          // landing between the two native events in every browser is fragile. Preventing the
-          // default mousedown behavior keeps focus in the input, so onBlur never fires here at all
-          // and this button is the only thing that commits.
-          onMouseDown={(e) => e.preventDefault()}
           onClick={() => addSubchannel(draft)}
           disabled={!draft.trim()}
           aria-label="Add subchannel"

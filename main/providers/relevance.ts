@@ -16,8 +16,11 @@
  *     that happens to mention a film).
  *   - MAIN channels are LENIENT: keep unless the score goes net-negative (a clear off-topic signal).
  *     No positive is required — this preserves primary-source stories that never repeat the channel
- *     word (a real music story rarely says "music"). The lone exception is the loose Google-News RSS
- *     fallback, which must still show SOME positive evidence (it's the main source of wrong-sense junk).
+ *     word (a real music story rarely says "music"). The exception is any LOOSE source — the Google
+ *     News RSS fallback, and a user's own added custom sources (see customSourcePrefix below) — which
+ *     must still show SOME positive evidence. Both share the same root problem: neither one's results
+ *     are narrowed by the channel's own topic search the way every other provider's are, so nothing
+ *     upstream of this gate has already done any relevance work on their behalf.
  *   - SUBCHANNELS are STRICT: the specific subchannel/entity term must appear, plus the same
  *     negative-signal drops. Subchannels are precise, so "when in doubt, keep out" applies there.
  *
@@ -34,6 +37,18 @@ import type { FetchedArticle } from './types';
 
 // The loose, last-resort fallback provider (see registry.ts). Held to extra strictness below.
 const FALLBACK_PROVIDER_ID = 'googlenewsrss';
+// A user's own added source (server/customSources/) is tagged `custom:<sourceId>` — every one of
+// them is loose in exactly the same sense as the Google News fallback (see isLooseProvider below):
+// its results are a site's own general feed, never narrowed by a per-channel topic search, so it
+// gets the same extra-strictness treatment regardless of which specific source it is.
+const CUSTOM_PROVIDER_PREFIX = 'custom:';
+
+/** A provider whose results were never narrowed by the channel's own topic search, and so need to
+ * show real positive evidence of being on-topic rather than just "not clearly off-topic" — see the
+ * file-level comment above and this function's one call site in keepArticle. */
+function isLooseProvider(provider: string): boolean {
+  return provider === FALLBACK_PROVIDER_ID || provider.startsWith(CUSTOM_PROVIDER_PREFIX);
+}
 
 // Tiny stopword set so a multi-word topic ("The Pool", "de France") isn't matched on filler words.
 // Deliberately minimal — we only want to avoid matching on words that carry no topic meaning.
@@ -61,19 +76,20 @@ const W = {
   // = 5, since include IS the name for topic channels), so anything weaker than -6 leaves a
   // wrong-sense story net-positive and it survives. Verified, not assumed.
   wrongSenseHit: -6,
-  // Applies whenever a home location is configured (topic/entity channels AND category channels —
-  // see GateContext.locality) — a nearby mentioned place is a mild positive, a distant one a clear
-  // negative. For a topic channel's own main feed the channel's term is scored twice over (once as
-  // a specificTerm, once as profile.include — same word, both paths), so the weakest kept case (the
-  // term named ONLY in the snippet) actually floors at +3 (termSnippet 2 + includeSnippet 1), not
-  // +2 — verified empirically, not assumed. -4 tips that floor below KEEP_SCORE when the story's
-  // nearest mentioned place is far away, while a title or tag match (floors at +5) survives
-  // regardless of distance — strong on-topic evidence should never be overridden by geography
-  // alone. A lenient CATEGORY channel's floor is lower still (a single include-keyword hit, +1 to
-  // +2, or even a bare 0 with no signal at all), so this is where the penalty does its real work:
-  // dropping the weak-evidence hyperlocal-foreign long tail (a specific country's local politician,
-  // a district-level story) while a well-covered story — matched by a real section field or a
-  // strong keyword hit — keeps enough score to survive.
+  // Applies whenever a home location is configured, for topic/entity channels AND the Politics
+  // category channel specifically (see GateContext.locality / buildGateContext's localityEligible)
+  // — a nearby mentioned place is a mild positive, a distant one a clear negative. For a topic
+  // channel's own main feed the channel's term is scored twice over (once as a specificTerm, once
+  // as profile.include — same word, both paths), so the weakest kept case (the term named ONLY in
+  // the snippet) actually floors at +3 (termSnippet 2 + includeSnippet 1), not +2 — verified
+  // empirically, not assumed. -4 tips that floor below KEEP_SCORE when the story's nearest
+  // mentioned place is far away, while a title or tag match (floors at +5) survives regardless of
+  // distance — strong on-topic evidence should never be overridden by geography alone. The lenient
+  // Politics channel's floor is lower still (a single include-keyword hit, +1 to +2, or even a bare
+  // 0 with no signal at all), so this is where the penalty does its real work: dropping the weak-
+  // evidence hyperlocal-foreign long tail (a specific country's local politician, a district-level
+  // story) while a well-covered story — matched by a real section field or a strong keyword hit —
+  // keeps enough score to survive.
   localityNear: 1,
   localityFar: -4,
 };
@@ -156,10 +172,30 @@ function urlCategorySignal(url: string, category: NewsCategory): 'match' | 'fore
 
 interface ScoredSignals {
   score: number;
-  /** A specific (non-ambiguous) term appeared — the gate for strict subchannel keeps. */
+  /** EVERY specific term appeared (somewhere across title/tag/snippet, not necessarily together) —
+   * the gate for strict subchannel/topic keeps. Deliberately ALL, not ANY: a multi-word entity name
+   * like "Spider-Man" tokenizes to ["spider","man"], and requiring only one of those let a story
+   * merely starting with "Man ..." match on the bare word "man" alone — confirmed live as a real
+   * false positive once a source had no topic search narrowing its results to begin with. Genuine
+   * coverage of a multi-word entity names the whole thing, so this costs nothing there. */
   hasSpecificTerm: boolean;
+  /** AT LEAST ONE specific term appeared (not necessarily all) — narrower than hasPositive (which
+   * also counts include-keyword/section evidence), used to detect the "some but not all words of a
+   * multi-word entity" borderline case for AI rescue — see judgeArticle. */
+  hasAnySpecificTerm: boolean;
   /** ANY on-topic evidence appeared — the gate for keeping a loose RSS-fallback result. */
   hasPositive: boolean;
+  /** How many DISTINCT category include-keywords were found — not just "at least one." Used to
+   * require multiple independent topical words from a loose source (see isLooseProvider's extra
+   * gate below): a single generic word match (e.g. "teams" in "street crisis teams") is cheap and
+   * common outside its category entirely, while genuine coverage routinely uses more than one
+   * on-topic word (confirmed live: "...politicians' campaign finance loophole" hits both
+   * "politicians" AND "campaign"). */
+  includeHitCount: number;
+  /** A real section-field match specifically — not the weaker URL-path guess, and not an include
+   * keyword — the publisher's own structured categorization, trustworthy enough on its own even for
+   * a loose source with no topic search behind it. */
+  hasSectionMatch: boolean;
 }
 
 interface GateContext {
@@ -191,15 +227,23 @@ function buildGateContext(ctx: RelevanceContext): GateContext {
   const ambiguous =
     ctx.profile.type === 'category' ? new Set(buildQueryTerms(ctx.channelName).terms) : new Set<string>();
   const specificTerms = allTerms.filter((t) => !ambiguous.has(t));
-  // Locality used to be topic/entity channels only. Broadened to CATEGORY channels too (a Politics
-  // or World channel, not just a "Wildfires"-style topic) after real, repeated user reports of
-  // hyperlocal foreign political stories (a district-level story about a politician in India, then
-  // "other places" too) drowning out a broad channel that has no other way to gauge global interest.
-  // Safe to broaden rather than special-case just 'politics': this signal is additive, not a hard
-  // filter — a genuinely significant far-away story still keeps its section-match/include-keyword
-  // evidence and stays net-positive (see the design note above W.localityFar), so this only trims
-  // the weak-evidence long tail, exactly the "uninteresting" stories being reported, in any category.
-  const localityEligible = ctx.homeLocation != null && !looksLikePlaceChannel(ctx.channelName);
+  // Locality used to be topic/entity channels only. Broadened to the POLITICS category channel too
+  // (not just a "Wildfires"-style topic) after real, repeated user reports of hyperlocal foreign
+  // political stories (a district-level story about a politician in India, then "other places" too)
+  // drowning out a broad Politics channel that had no other way to gauge global interest.
+  // Deliberately NOT broadened to every category, despite the signal being additive rather than a
+  // hard filter: 'world' has an empty CATEGORY_RULES include list (see channelProfiles.ts — "world
+  // channels are broad and stay lenient" is the whole point of that category), so a World-channel
+  // story with no section tag would have had ZERO way to earn the score back and got dropped purely
+  // for being far away — exactly backwards for a channel whose entire purpose is far-away news
+  // (caught in review, not live — see the reverted broader version's test coverage gap). The other
+  // categories (sports/business/science/health/entertainment/technology) were never part of the
+  // actual report either, and geographic distance isn't a meaningful relevance signal for most of
+  // them (an away game, a study from anywhere, are normal expected content, not "uninteresting").
+  const localityEligible =
+    ctx.homeLocation != null &&
+    !looksLikePlaceChannel(ctx.channelName) &&
+    (ctx.profile.type === 'topic' || ctx.profile.category === 'politics');
   return {
     specificTerms,
     include: ctx.profile.include,
@@ -218,27 +262,38 @@ function scoreArticle(article: FetchedArticle, gate: GateContext): ScoredSignals
   // curated signal — a story tagged "Taylor Swift"/"Music" is on-topic even when the headline hides it.
   const tags = article.tags && article.tags.length ? normalizeTitle(article.tags.join(' ')) : '';
   let score = 0;
-  let hasSpecificTerm = false;
   let hasPositive = false;
 
-  // Specific terms (the entity, or the subchannel's narrowing words) — count once, best source wins.
+  // Specific terms (the entity, or the subchannel's narrowing words) — each term scores once, best
+  // source wins, but hasSpecificTerm itself requires ALL of them found somewhere (not just one) —
+  // see ScoredSignals' own doc comment for why.
+  let allSpecificTermsFound = true;
+  let anySpecificTermFound = false;
   for (const t of gate.specificTerms) {
+    let found = false;
     if (hasWord(title, t)) {
       score += W.termTitle;
-      hasSpecificTerm = true;
-      hasPositive = true;
+      found = true;
     } else if (hasWord(tags, t)) {
       score += W.termTag;
-      hasSpecificTerm = true;
-      hasPositive = true;
+      found = true;
     } else if (hasWord(snippet, t)) {
       score += W.termSnippet;
-      hasSpecificTerm = true;
+      found = true;
+    }
+    if (found) {
       hasPositive = true;
+      anySpecificTermFound = true;
+    } else {
+      allSpecificTermsFound = false;
     }
   }
+  const hasSpecificTerm = gate.specificTerms.length > 0 && allSpecificTermsFound;
+  const hasAnySpecificTerm = gate.specificTerms.length > 0 && anySpecificTermFound;
 
-  // Category disambiguating keywords — count once, best source wins (title > tag > snippet).
+  // Category disambiguating keywords — count once, best source wins (title > tag > snippet), same
+  // as before, PLUS a distinct count (see includeHitCount's own doc comment) that doesn't collapse
+  // once the first hit is found — every distinct word in gate.include that appears anywhere counts.
   if (hasAnyWord(title, gate.include)) {
     score += W.includeTitle;
     hasPositive = true;
@@ -249,6 +304,9 @@ function scoreArticle(article: FetchedArticle, gate: GateContext): ScoredSignals
     score += W.includeSnippet;
     hasPositive = true;
   }
+  const includeHitCount = gate.include.filter(
+    (t) => hasWord(title, t) || hasWord(tags, t) || hasWord(snippet, t)
+  ).length;
 
   // Anti-topic keywords — a clear negative, in the title, a tag, or the snippet.
   if (hasAnyWord(title, gate.exclude) || hasAnyWord(tags, gate.exclude) || hasAnyWord(snippet, gate.exclude)) {
@@ -277,11 +335,13 @@ function scoreArticle(article: FetchedArticle, gate: GateContext): ScoredSignals
 
   // Section evidence (category channels only). Prefer the provider's real section field; only if it's
   // absent do we fall back to a URL-path hint.
+  let hasSectionMatch = false;
   if (gate.category) {
     if (article.section) {
       if (sectionMatchesCategory(article.section, gate.category)) {
         score += W.sectionMatch;
         hasPositive = true;
+        hasSectionMatch = true;
       } else if (sectionIsForeign(article.section, gate.category)) {
         score += W.foreignSection;
       }
@@ -314,10 +374,22 @@ function scoreArticle(article: FetchedArticle, gate: GateContext): ScoredSignals
     }
   }
 
-  return { score, hasSpecificTerm, hasPositive };
+  return { score, hasSpecificTerm, hasAnySpecificTerm, hasPositive, includeHitCount, hasSectionMatch };
 }
 
-function keepArticle(article: FetchedArticle, gate: GateContext): boolean {
+type Verdict = 'keep' | 'reject' | 'borderline';
+
+/** Three-way, not a boolean keep/reject — 'borderline' is a NEW category: a story the strict
+ * keyword rules reject, but only for a reason that's about PRECISION of matching, not genuine
+ * lack of evidence (a real exclude-keyword hit, a foreign section, or literally zero on-topic
+ * signal still reject outright as 'reject', never 'borderline'). aiRelevance.ts gives 'borderline'
+ * stories a second, semantic look from the AI classifier when one is configured — genuine coverage
+ * that just uses a short form ("Giants win 5-2" for a "San Francisco Giants" channel, missing two
+ * of its three words) or a real topical connection a single generic keyword can't prove on its own
+ * gets a chance to be rescued there, while a user with no AI configured simply keeps the strict
+ * result, same as before. See judgeArticle's two 'borderline' branches for exactly which cases
+ * qualify. */
+function judgeArticle(article: FetchedArticle, gate: GateContext): Verdict {
   const signals = scoreArticle(article, gate);
 
   if (gate.requireSpecificTerm) {
@@ -325,14 +397,39 @@ function keepArticle(article: FetchedArticle, gate: GateContext): boolean {
     // named (in the title, a provider tag, or the snippet), and the story must not be net-negative.
     // This is what keeps a Star-Trek or generic-marketing story out of a "Phish" channel — a real
     // Phish story names Phish, so a story that never does is dropped.
-    return signals.hasSpecificTerm && signals.score >= KEEP_SCORE;
+    if (signals.hasSpecificTerm && signals.score >= KEEP_SCORE) return 'keep';
+    // Borderline: SOME (not all) of a multi-word entity's words appeared, and nothing else already
+    // torpedoed the score — this is exactly the "San Francisco Giants" case, real coverage that
+    // just says "Giants," not confidently off-topic content.
+    if (signals.hasAnySpecificTerm && signals.score >= KEEP_SCORE) return 'borderline';
+    return 'reject';
   }
 
-  // Lenient tier (a CATEGORY channel's main feed only): keep unless net-negative. The loose RSS fallback additionally needs some
-  // positive evidence (its keyword search is the main source of wrong-sense noise, e.g. "Virginia
-  // Tech" for a Tech channel — which now scores nothing, since "tech" is the ambiguous channel word).
-  if (article.provider === FALLBACK_PROVIDER_ID && !signals.hasPositive) return false;
-  return signals.score >= KEEP_SCORE;
+  // Lenient tier (a CATEGORY channel's main feed only): keep unless net-negative. Any loose source
+  // (the RSS fallback, or a user's own custom source) additionally needs real evidence — without a
+  // topic search narrowing what it hands back, a channel's leniency alone would let through whatever
+  // that source published recently regardless of fit. "tech" itself never counts as that evidence
+  // either way, since it's the ambiguous channel word — that's what keeps "Virginia Tech" out.
+  //
+  // A single include-keyword hit is NOT enough on its own here — confirmed live as a real failure
+  // mode: a general local-news story ("S.F. removes peer counselors from street crisis TEAMS")
+  // matched a Sports channel purely because "teams" is in that category's include list, a word that
+  // shows up constantly outside sports entirely. A real section-field match is trustworthy on its
+  // own (the publisher's own structured categorization, not a coincidental word), but a bare
+  // keyword hit needs a SECOND, distinct one alongside it — genuine coverage routinely has that
+  // (confirmed live: "...politicians' campaign finance loophole" hits both "politicians" and
+  // "campaign"), while a coincidental single-word collision essentially never does.
+  if (isLooseProvider(article.provider)) {
+    const structurallyStrong = signals.hasSectionMatch || signals.includeHitCount >= 2;
+    if (!structurallyStrong) {
+      // Borderline: exactly one distinct keyword hit and nothing structural — genuinely uncertain
+      // without more context (could be a real but thinly-worded match, could be a coincidence),
+      // worth an AI opinion when one's available rather than a flat reject.
+      if (signals.includeHitCount === 1 && signals.score >= KEEP_SCORE) return 'borderline';
+      return 'reject';
+    }
+  }
+  return signals.score >= KEEP_SCORE ? 'keep' : 'reject';
 }
 
 /** Drop off-topic stories from a freshly-fetched batch, keeping the rest in their original order (the
@@ -342,10 +439,29 @@ function keepArticle(article: FetchedArticle, gate: GateContext): boolean {
 export function filterByRelevance(articles: FetchedArticle[], ctx: RelevanceContext): FetchedArticle[] {
   try {
     const gate = buildGateContext(ctx);
-    return articles.filter((a) => keepArticle(a, gate));
+    return articles.filter((a) => judgeArticle(a, gate) === 'keep');
   } catch (err) {
     console.warn('[relevance] filter error, keeping batch unfiltered', err);
     return articles;
+  }
+}
+
+/** The 'borderline' set from judgeArticle — stories the strict rules reject on a precision-only
+ * technicality (see judgeArticle's own doc comment), worth a second, semantic look from the AI
+ * classifier rather than a flat reject. Deliberately a SEPARATE function from filterByRelevance,
+ * not a combined return shape — filterByRelevance's existing callers (e.g.
+ * server/customSources/sort.ts, which has no AI step downstream at all) shouldn't have to change to
+ * keep getting exactly what they already get today. Only worth calling when AI classification is
+ * actually configured — see aiRelevance.ts, the only caller. Defensive like filterByRelevance
+ * itself: any scoring error returns no borderline candidates rather than throwing, since this is
+ * strictly a bonus pass, never load-bearing for a refresh to complete. */
+export function borderlineArticles(articles: FetchedArticle[], ctx: RelevanceContext): FetchedArticle[] {
+  try {
+    const gate = buildGateContext(ctx);
+    return articles.filter((a) => judgeArticle(a, gate) === 'borderline');
+  } catch (err) {
+    console.warn('[relevance] borderline scan error, skipping AI rescue for this batch', err);
+    return [];
   }
 }
 

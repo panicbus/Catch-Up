@@ -126,6 +126,33 @@ export interface ReaderUnavailable {
 
 export type ReaderResponse = ReaderContent | ReaderUnavailable;
 
+/** A user's own added news source — global to the account, not scoped to any one channel (every
+ * channel draws from it, sorted by its own relevance gate — see server/customSources/sort.ts).
+ * Web-only, same as the reader view above — see src/services/api.ts's standalone exports, not
+ * part of CatchUpApi. */
+export interface CustomSource {
+  id: string;
+  feedUrl: string;
+  /** What the user actually pasted, for display — may differ from feedUrl when discovery found the
+   * real feed at a different address (e.g. pasting a site's homepage, feed found at /feed/). */
+  siteUrl: string;
+  label: string;
+  createdAt: string;
+  lastFetchedAt: string | null;
+  consecutiveFailures: number;
+  lastError: string | null;
+  /** Set once consecutiveFailures crosses the threshold — null means active. Shown as a flagged
+   * row with a Retry action rather than silently retried forever or silently dropped. */
+  disabledAt: string | null;
+}
+
+/** What adding a source actually returns — either the created row, or a specific reason it
+ * couldn't be added, each rendered as its own plain-language message in Settings. See
+ * server/customSources/discover.ts for exactly what each reason means. */
+export type AddCustomSourceResult =
+  | { ok: true; source: CustomSource }
+  | { ok: false; reason: 'invalid-url' | 'not-found' | 'unreachable' | 'empty' | 'duplicate' | 'limit-reached' };
+
 export interface BookmarkEntry {
   id: string;
   channelId: string;

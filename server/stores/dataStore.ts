@@ -7,10 +7,15 @@
 
 import { prisma } from '../db';
 import { capitalizeWords, slugifyChannelName } from '../../channelName';
-import type { AiProvider, AppSettings, BookmarkEntry, Channel, StreakInfo, Subchannel } from '../../ipc-contract';
+import type { AiProvider, AppSettings, BookmarkEntry, Channel, CustomSource, StreakInfo, Subchannel } from '../../ipc-contract';
 import { OLLAMA_DEFAULT_MODEL } from '../../main/providers/classifier';
 import { Prisma } from '../generated/prisma/client';
-import type { Channel as PrismaChannel, Subchannel as PrismaSubchannel, Settings as PrismaSettings } from '../generated/prisma/client';
+import type {
+  Channel as PrismaChannel,
+  Subchannel as PrismaSubchannel,
+  Settings as PrismaSettings,
+  CustomSource as PrismaCustomSource,
+} from '../generated/prisma/client';
 
 // Must match READ_ARCHIVE_DAYS in src/components/Channel/NewsFeed.tsx — see main/dataStore.ts's
 // identical constant for why.
@@ -208,6 +213,103 @@ export async function renameSubchannel(
 
 export async function deleteSubchannel(userId: string, channelId: string, subchannelId: string): Promise<void> {
   await prisma.subchannel.delete({ where: { id: subchannelId, userId, channelId } });
+}
+
+// --- Custom sources ----------------------------------------------------------------------------
+// Pure DB operations only, same convention as everywhere else in this file — the actual feed
+// discovery (a real network fetch) lives in server/customSources/discover.ts and is called from the
+// route handler BEFORE addCustomSource, the same "route orchestrates, dataStore just persists"
+// split POST /channels already uses for its own fire-and-forget first-refresh call.
+
+function toCustomSource(s: PrismaCustomSource): CustomSource {
+  return {
+    id: s.id,
+    feedUrl: s.feedUrl,
+    siteUrl: s.siteUrl,
+    label: s.label,
+    createdAt: s.createdAt.toISOString(),
+    lastFetchedAt: s.lastFetchedAt?.toISOString() ?? null,
+    consecutiveFailures: s.consecutiveFailures,
+    lastError: s.lastError,
+    disabledAt: s.disabledAt?.toISOString() ?? null,
+  };
+}
+
+export async function getCustomSources(userId: string): Promise<CustomSource[]> {
+  const rows = await prisma.customSource.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } });
+  return rows.map(toCustomSource);
+}
+
+export async function countCustomSources(userId: string): Promise<number> {
+  return prisma.customSource.count({ where: { userId } });
+}
+
+/** Thrown by addCustomSource when the count-then-create below finds the user already at their cap.
+ * A distinct error type (rather than reusing the P2002-conflict null-return below) so the route can
+ * tell "you already have this feed" apart from "you're at your source limit" without inspecting a
+ * message string. */
+export class CustomSourceLimitError extends Error {}
+
+/** Inserts an already-discovered source. `feedUrl`/`title` come from discoverFeed's result, not
+ * straight from user input — see the route handler. `etag`/`lastModified`/`lastFetchedAt` are
+ * seeded from that SAME discovery fetch (the one that just proved the feed works), not left null —
+ * otherwise the source's next scheduled poll couldn't use conditional GET, and (worse) with
+ * lastFetchedAt null it would look "never fetched" and jump the throttle queue on the very next
+ * round despite having just been fetched moments ago. Returns null instead of throwing on the
+ * `@@unique([userId, feedUrl])` conflict (a user re-adding a feed they already have), so the route
+ * can report that as a normal "duplicate" result rather than a 500.
+ *
+ * The route already checks the cap before doing the (slow) discovery fetch, purely so a request
+ * that's doomed anyway doesn't pay for a network round trip first. That check and this insert are
+ * two separate round trips, though, so two concurrent adds near the cap could both pass it — the
+ * count and the create below run inside one transaction to shrink that window from "however long a
+ * discovery fetch takes" down to two database round trips. Not an airtight guarantee against two
+ * requests landing in the same instant (that would need serializable isolation plus retry logic,
+ * not worth it for a self-imposed, low-stakes cap), just a much smaller one. */
+export async function addCustomSource(
+  userId: string,
+  input: { feedUrl: string; siteUrl: string; label: string; etag: string | null; lastModified: string | null },
+  maxSources: number
+): Promise<CustomSource | null> {
+  try {
+    const created = await prisma.$transaction(async (tx) => {
+      const count = await tx.customSource.count({ where: { userId } });
+      if (count >= maxSources) throw new CustomSourceLimitError();
+      return tx.customSource.create({
+        data: {
+          userId,
+          feedUrl: input.feedUrl,
+          siteUrl: input.siteUrl,
+          label: input.label,
+          etag: input.etag,
+          lastModified: input.lastModified,
+          lastFetchedAt: new Date(),
+        },
+      });
+    });
+    return toCustomSource(created);
+  } catch (e) {
+    if (e instanceof CustomSourceLimitError) throw e;
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') return null;
+    throw e;
+  }
+}
+
+/** Clears the disabled/failure state. Deliberately just that and nothing else — the route pairs
+ * this with an immediate call to refreshOneCustomSourceNow (which bypasses the normal ~hourly
+ * throttle and does its own real fetch right away), so a one-tap Retry actually checks the source
+ * now rather than only re-enabling it for whenever its next scheduled round happens to land. That
+ * immediate fetch is also what will re-set disabledAt if the source is, in fact, still broken —
+ * recordOutcome's success path never touches disabledAt on its own, only clearing it here does. */
+export async function retryCustomSource(userId: string, id: string): Promise<void> {
+  await prisma.customSource.update({
+    where: { id, userId },
+    data: { disabledAt: null, consecutiveFailures: 0, lastError: null },
+  });
+}
+
+export async function deleteCustomSource(userId: string, id: string): Promise<void> {
+  await prisma.customSource.delete({ where: { id, userId } });
 }
 
 // --- Bookmarks ---------------------------------------------------------------------------------

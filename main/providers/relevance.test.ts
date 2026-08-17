@@ -86,6 +86,22 @@ describe('baseline relevance gate (pre-existing, no locality involved)', () => {
     const a = article({ title: 'Local team advances to regional finals', provider: 'googlenewsrss' });
     expect(keeps(a, ctx)).toBe(false);
   });
+
+  // A user's own added source (server/customSources/) is exactly as loose as the RSS fallback — its
+  // results are a site's own general feed, never narrowed by this channel's topic search — so it
+  // gets the same extra-strictness treatment. Without this, a general source's off-topic story would
+  // slide into a lenient category channel on a technicality (net score 0, no evidence either way).
+  it('requires positive evidence from a custom source too, on the same lenient category main feed', () => {
+    const ctx: RelevanceContext = { topic: 'Tech', channelName: 'Tech', subchannelName: null, profile: techProfile, homeLocation: noHome };
+    const a = article({ title: 'City council approves new budget for next year', provider: 'custom:abc123' });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+
+  it('still keeps a custom source story that DOES show real positive evidence', () => {
+    const ctx: RelevanceContext = { topic: 'Tech', channelName: 'Tech', subchannelName: null, profile: techProfile, homeLocation: noHome };
+    const a = article({ title: 'Startup unveils new AI-powered chip for laptops', provider: 'custom:abc123' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -184,12 +200,33 @@ describe('locality signal — scope guards', () => {
     });
     expect(keeps(a, ctx)).toBe(true);
   });
+
+  // Regression coverage for a real bug caught in code review (never shipped live): World's
+  // CATEGORY_RULES entry has an empty `include` list by design ("world channels are broad and stay
+  // lenient" — see channelProfiles.ts), so a sectionless story there has NO way to earn back a
+  // locality penalty. Applying the locality signal to World at all would silently drop ordinary,
+  // unremarkable far-away world news for the sole reason that it's... far away, which is backwards
+  // for a channel whose entire purpose is showing news from everywhere.
+  it('never applies to a World channel, even with a home location set — World has no include keywords to earn the score back', () => {
+    const profile = channelProfile('World');
+    const ctx: RelevanceContext = { topic: 'World', channelName: 'World', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'Jaipur civic body elects new local council chief amid protests' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  it('never applies to a non-Politics category channel (e.g. Sports) — geographic distance isn\'t a meaningful signal there', () => {
+    const profile = channelProfile('Sports');
+    const ctx: RelevanceContext = { topic: 'Sports', channelName: 'Sports', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'Jaipur civic body elects new local council chief amid protests' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
 });
 
-describe('locality signal — broad CATEGORY channels (Politics, World, ...)', () => {
+describe('locality signal — the Politics category channel', () => {
   // Real user report: hyperlocal foreign political stories (a district-level story about a
-  // politician in India, "and other places") crowding out a broad Politics/World channel that
-  // previously had no way to gauge global interest at all.
+  // politician in India, "and other places") crowding out a broad Politics channel that previously
+  // had no way to gauge global interest at all. Scoped to Politics only — see the scope-guard tests
+  // above for why this doesn't extend to World or any other category.
   it('drops a weak-evidence, far-away local political story with no other signal', () => {
     const profile = channelProfile('Politics');
     const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile, homeLocation: LA };
@@ -263,5 +300,74 @@ describe('locality signal — performance', () => {
     const elapsed = performance.now() - start;
 
     expect(elapsed).toBeLessThan(1000);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Regression coverage for two real false positives caught live-testing custom sources against an
+// actual account (Mission Local, a general SF news feed, with no topic search narrowing its
+// results). Both fixes tighten precision at the cost of recall, deliberately — see relevance.ts's
+// own comments for the reasoning.
+// ---------------------------------------------------------------------------------------------
+describe('multi-word specific terms require ALL words, not just one', () => {
+  it('does not match a bare "man" story against a "Spider-Man" topic channel', () => {
+    const profile = channelProfile('Spider-Man');
+    const ctx: RelevanceContext = { topic: 'Spider-Man', channelName: 'Spider-Man', subchannelName: null, profile, homeLocation: noHome };
+    const a = article({ title: 'Man arrested for Sunnydale killing linked to 2015 drive-by shooting' });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+
+  it('still matches genuine coverage that names the whole entity', () => {
+    const profile = channelProfile('Spider-Man');
+    const ctx: RelevanceContext = { topic: 'Spider-Man', channelName: 'Spider-Man', subchannelName: null, profile, homeLocation: noHome };
+    const a = article({ title: 'New Spider-Man trailer breaks streaming records' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  it('still requires only the one word for a genuinely single-word entity (no regression)', () => {
+    const profile = channelProfile('Phish');
+    const ctx: RelevanceContext = { topic: 'Phish', channelName: 'Phish', subchannelName: null, profile, homeLocation: noHome };
+    const a = article({ title: 'Phish announces summer tour dates' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+});
+
+describe('loose providers on a category main feed need two distinct keyword hits, not just one', () => {
+  it('rejects a generic-word collision (a real local-news story matching "teams" in a Sports channel)', () => {
+    const profile = channelProfile('Sports');
+    const ctx: RelevanceContext = { topic: 'Sports', channelName: 'Sports', subchannelName: null, profile, homeLocation: noHome };
+    const a = article({
+      title: 'S.F. removes peer counselors from street crisis teams amid pleas to keep them',
+      provider: 'custom:abc123',
+    });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+
+  it('keeps a story with two distinct on-topic keywords', () => {
+    const profile = channelProfile('Politics');
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile, homeLocation: noHome };
+    const a = article({
+      title: "S.F. ethics commission votes to end politicians' campaign finance loophole",
+      provider: 'custom:abc123',
+    });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  it('keeps a single-keyword-only match when it comes with a real section field', () => {
+    const profile = channelProfile('Sports');
+    const ctx: RelevanceContext = { topic: 'Sports', channelName: 'Sports', subchannelName: null, profile, homeLocation: noHome };
+    const a = article({
+      title: 'Local team advances to regional finals',
+      section: 'sport',
+      provider: 'custom:abc123',
+    });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  it('a single keyword hit alone is still not enough without a section match', () => {
+    const profile = channelProfile('Sports');
+    const ctx: RelevanceContext = { topic: 'Sports', channelName: 'Sports', subchannelName: null, profile, homeLocation: noHome };
+    const a = article({ title: 'Local team advances to regional finals', provider: 'custom:abc123' });
+    expect(keeps(a, ctx)).toBe(false);
   });
 });

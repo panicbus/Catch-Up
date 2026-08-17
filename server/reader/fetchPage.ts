@@ -8,11 +8,12 @@
  * which only ever passes a `url` column read from a DB row scoped to `where: { id, channelId,
  * userId }`. That means a caller can only ever reach a URL that a configured news provider already
  * wrote into THEIR OWN rows — the "point the server at an internal address" class of attack is
- * closed by that alone. Everything below is defense-in-depth on top of that, not the primary
- * defense. It is explicitly NOT DNS-rebinding-proof (that needs a pinned-IP fetch dispatcher, e.g.
- * a custom undici Agent with a fixed `lookup`); given the URL space here is a curated set written
- * by four fixed news APIs into a personal app's own database, building that is disproportionate to
- * the actual risk. Said here rather than implied. */
+ * closed by that alone. The blocked-host/protocol checks below (server/lib/urlSafety.ts, shared with
+ * server/customSources/, which does have a directly-user-supplied URL to worry about) are
+ * defense-in-depth on top of that, not the primary defense here. See that module's own doc comment
+ * for the full reasoning, including why this isn't DNS-rebinding-proof. */
+
+import { checkUrl } from '../lib/urlSafety';
 
 const TIMEOUT_MS = 8_000;
 // Was 1.5MB — confirmed live after shipping that real, ordinary article pages (not pathological
@@ -31,46 +32,6 @@ const USER_AGENT =
 export type FetchPageResult =
   | { ok: true; html: string; finalUrl: string }
   | { ok: false; reason: 'blocked-host' | 'too-large' | 'not-html' | 'http-error' | 'timeout' | 'network'; status?: number };
-
-const PRIVATE_HOSTNAME_SUFFIXES = ['.local', '.internal', '.localhost'];
-
-/** Cheap, deliberately conservative IPv4-literal private-range check — string/number math only, no
- * DNS resolution (resolving the hostname ourselves and pinning to that IP is the DNS-rebinding-proof
- * version this isn't attempting, see the file comment above). */
-function isPrivateIPv4(host: string): boolean {
-  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!m) return false;
-  const [a, b] = [Number(m[1]), Number(m[2])];
-  if (a === 10) return true; // 10.0.0.0/8
-  if (a === 127) return true; // loopback
-  if (a === 169 && b === 254) return true; // link-local (incl. cloud metadata, 169.254.169.254)
-  if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
-  if (a === 192 && b === 168) return true; // 192.168.0.0/16
-  if (a === 0) return true;
-  return false;
-}
-
-function isBlockedHost(hostname: string): boolean {
-  const host = hostname.toLowerCase();
-  if (host === 'localhost') return true;
-  if (PRIVATE_HOSTNAME_SUFFIXES.some((s) => host.endsWith(s))) return true;
-  if (isPrivateIPv4(host)) return true;
-  // IPv6 loopback / unique-local — literal-address checks only, same reasoning as the IPv4 case.
-  if (host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:')) return true;
-  return false;
-}
-
-function checkUrl(raw: string): URL | null {
-  let u: URL;
-  try {
-    u = new URL(raw);
-  } catch {
-    return null;
-  }
-  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
-  if (isBlockedHost(u.hostname)) return null;
-  return u;
-}
 
 /** Reads the body through a stream and aborts past MAX_BYTES rather than trusting `content-length`,
  * which is often absent on chunked responses — a publisher could otherwise stream an unbounded page

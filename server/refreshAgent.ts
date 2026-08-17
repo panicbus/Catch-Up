@@ -14,6 +14,7 @@ import * as dataStore from './stores/dataStore';
 import * as articlesCache from './stores/articlesCache';
 import { ServerClassificationStore } from './stores/classificationStore';
 import { assertSearchBudget, recordSearches, RateLimitedError } from './stores/providerBudget';
+import { runCustomSources } from './customSources/refresh';
 
 /** Build the classifier config from the persisted setting, or null (AI off) if none is picked.
  * Ollama can be persisted here in principle (same Settings row shape as desktop) but is never
@@ -87,6 +88,18 @@ export async function runAll(userId: string): Promise<RunResult[]> {
       break;
     }
   }
+
+  // Once per user per round, not once per channel — see server/customSources/refresh.ts's own file
+  // comment for why. Deliberately outside the per-channel try/catch above and never counted against
+  // assertSearchBudget/recordSearches: a user's own sources don't touch the shared provider-key
+  // quota that budget protects, and a source failing shouldn't be reported as if a CHANNEL failed
+  // (each source's own success/failure already lives on its own row, surfaced in Settings instead).
+  try {
+    await runCustomSources(userId);
+  } catch (e) {
+    console.error('[refreshAgent] custom sources round failed', e);
+  }
+
   return results;
 }
 
