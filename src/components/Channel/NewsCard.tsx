@@ -36,6 +36,17 @@ function ReadBadgeIcon() {
   );
 }
 
+// Some providers hand back near-full article text as the "snippet," with no paragraph breaks — at
+// full size (expanded) that reads as one unreadable wall of small text. Capped here rather than
+// left alone because the reader view (or "Open original," right below this) already covers anyone
+// who wants the rest, properly formatted.
+const SNIPPET_WORD_CAP = 200;
+function truncateSnippet(text: string): string {
+  const words = text.split(/\s+/);
+  if (words.length <= SNIPPET_WORD_CAP) return text;
+  return `${words.slice(0, SNIPPET_WORD_CAP).join(' ')}…`;
+}
+
 export interface NewsCardData {
   id: string;
   url: string;
@@ -447,7 +458,7 @@ function NewsCardComponent({
 
       {article.snippet && (
         <div className={`news-card__snippet ${expanded ? 'news-card__snippet--full' : ''}`}>
-          {article.snippet}
+          {expanded ? truncateSnippet(article.snippet) : article.snippet}
         </div>
       )}
 

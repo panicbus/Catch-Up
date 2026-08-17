@@ -28,10 +28,37 @@ function LinkIcon() {
   );
 }
 
+// The familiar "box with an arrow out the top" share glyph (iOS's own share-sheet icon), in the
+// same stroke style as LinkIcon so the two read as siblings.
+function ShareIcon() {
+  return (
+    <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10 2.8v9" />
+      <path d="M6.7 6.1 10 2.8l3.3 3.3" />
+      <path d="M4.5 9.5v6a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-6" />
+    </svg>
+  );
+}
+
+// Feature-detected, not device-detected: the Web Share API is what actually determines whether
+// there's a native OS share sheet to hand off to, and that's true for essentially every mobile
+// browser (the "for mobile" ask) without misfiring on a merely-narrow desktop window, or missing a
+// desktop browser (Edge/Chrome on Windows) that also happens to support it.
+const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+
 function AppInfoModal({ onClose }: { onClose: () => void }) {
   const [copied, setCopied] = useState(false);
 
   const handleShare = async () => {
+    if (canNativeShare) {
+      try {
+        await navigator.share({ title: 'Catch Up', text: 'Your news. Your pace. All caught up.', url: SHARE_URL });
+      } catch (e) {
+        // AbortError: the user closed the share sheet without picking anything — not a failure.
+        if (e instanceof Error && e.name !== 'AbortError') console.error('[AppInfoButton] native share failed', e);
+      }
+      return;
+    }
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(SHARE_URL);
@@ -72,7 +99,7 @@ function AppInfoModal({ onClose }: { onClose: () => void }) {
           Buy me a coffee
         </a>
         <button type="button" className="app-info-modal__link app-info-modal__share" onClick={handleShare}>
-          <LinkIcon />
+          {canNativeShare ? <ShareIcon /> : <LinkIcon />}
           {copied ? 'Link copied' : 'Share this website with a friend'}
         </button>
       </div>
