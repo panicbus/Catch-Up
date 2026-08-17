@@ -12,7 +12,7 @@
  *     to home is used — a false negative (missing a genuinely distant story) is a much better
  *     failure mode here than a false positive (burying a story that wasn't actually distant). */
 
-import { lookupCity, type CityRow } from './gazetteer';
+import { lookupCity, lookupCountry, lookupContinent, continentOfCountry, type CityRow, type Continent } from './gazetteer';
 
 // TUNABLE: originally set much higher (50,000) to filter single-word false positives (ordinary
 // English words that double as obscure place names), but that floor silently excluded Banff, AB
@@ -52,6 +52,20 @@ function eligibleRows(rows: CityRow[], wordCount: number): CityRow[] {
   return rows.filter((r) => r.pop >= SINGLE_WORD_MIN_POP);
 }
 
+/** Every capitalized-starting 1-to-`maxWords`-word window in `text`, in the same left-to-right,
+ * shortest-to-longest order the original inlined loop scanned — shared by nearestMentionKm (city
+ * lookup) and foreignPlaceSignal (country/continent lookup) below so both scan text exactly the
+ * same way rather than keeping two copies of this loop in sync. */
+function* capitalizedPhrases(text: string, maxWords: number): Generator<{ phrase: string; wordCount: number }> {
+  const words = wordTokens(text);
+  for (let start = 0; start < words.length; start++) {
+    if (!isCapitalized(words[start])) continue;
+    for (let len = 1; len <= maxWords && start + len <= words.length; len++) {
+      yield { phrase: words.slice(start, start + len).join(' '), wordCount: len };
+    }
+  }
+}
+
 /** Distance (km) from `home` to the nearest gazetteer place mentioned in `title`/`snippet`, or
  * null if no eligible mention was found. Scans 1-, 2-, and 3-word windows over both fields. */
 export function nearestMentionKm(
@@ -62,20 +76,58 @@ export function nearestMentionKm(
   let nearest: number | null = null;
 
   for (const text of [title, snippet ?? '']) {
-    const words = wordTokens(text);
-    for (let start = 0; start < words.length; start++) {
-      if (!isCapitalized(words[start])) continue;
-      for (let len = 1; len <= MAX_NGRAM_WORDS && start + len <= words.length; len++) {
-        const phrase = words.slice(start, start + len).join(' ');
-        const rows = lookupCity(phrase);
-        if (!rows) continue;
-        for (const row of eligibleRows(rows, len)) {
-          const km = haversineKm(home.lat, home.lon, row.lat, row.lon);
-          if (nearest === null || km < nearest) nearest = km;
-        }
+    for (const { phrase, wordCount } of capitalizedPhrases(text, MAX_NGRAM_WORDS)) {
+      const rows = lookupCity(phrase);
+      if (!rows) continue;
+      for (const row of eligibleRows(rows, wordCount)) {
+        const km = haversineKm(home.lat, home.lon, row.lat, row.lon);
+        if (nearest === null || km < nearest) nearest = km;
       }
     }
   }
 
   return nearest;
+}
+
+export type ForeignPlaceKind = 'country' | 'continent' | null;
+
+/** Does this story name a country or continent that ISN'T the user's home — the country/continent
+ * counterpart to nearestMentionKm's city-level check, used by relevance.ts's foreign-country
+ * locality signal. Only consulted when nearestMentionKm found no CITY match at all (see
+ * relevance.ts's scoring block) — a story naming both "Mumbai" and "India" shouldn't stack two
+ * separate penalties for the same underlying fact.
+ *
+ * Collects EVERY distinct country/continent mentioned, not just the first, so a story that also
+ * mentions the user's own home country isn't flagged as foreign — "U.S. signs trade deal with
+ * India" is fundamentally still a home-country story that happens to name India too, not routine
+ * foreign coverage. Only when NONE of the mentioned countries is home does this report 'country';
+ * only when a continent is named and it isn't the user's own home continent does it report
+ * 'continent' — and when we can't even determine the home continent (see gazetteer.ts's
+ * CONTINENT_BY_CC coverage note), the continent tier just stays silent rather than guessing. */
+export function foreignPlaceSignal(
+  title: string,
+  snippet: string | null,
+  homeCountryCode: string
+): ForeignPlaceKind {
+  const countryCodes = new Set<string>();
+  const continents = new Set<Continent>();
+
+  for (const text of [title, snippet ?? '']) {
+    for (const { phrase } of capitalizedPhrases(text, MAX_NGRAM_WORDS)) {
+      const cc = lookupCountry(phrase);
+      if (cc) countryCodes.add(cc);
+      const continent = lookupContinent(phrase);
+      if (continent) continents.add(continent);
+    }
+  }
+
+  if (countryCodes.size > 0) {
+    return countryCodes.has(homeCountryCode.toUpperCase()) ? null : 'country';
+  }
+  if (continents.size > 0) {
+    const homeContinent = continentOfCountry(homeCountryCode);
+    if (homeContinent === null) return null;
+    return continents.has(homeContinent) ? null : 'continent';
+  }
+  return null;
 }

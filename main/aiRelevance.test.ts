@@ -154,4 +154,37 @@ describe('filterRelevant — borderline AI rescue', () => {
     expect(result).toEqual([]);
     expect(mockedClassify).not.toHaveBeenCalled();
   });
+
+  it('threads the resolved home country name through to the classifier call when a home location is set', async () => {
+    const giantsProfile = channelProfile('San Francisco Giants');
+    const a = article({ title: 'Giants win 5-2 behind a strong outing from the bullpen' });
+    mockedClassify.mockResolvedValue(new Set());
+    const store = fakeStore();
+
+    await filterRelevant(
+      [a],
+      'San Francisco Giants',
+      'chan-1',
+      'San Francisco Giants',
+      null,
+      giantsProfile,
+      store,
+      fakeConfig,
+      { lat: 34.05223, lon: -118.24368, countryCode: 'US' }
+    );
+
+    expect(mockedClassify).toHaveBeenCalledTimes(1);
+    expect(mockedClassify.mock.calls[0][0]).toMatchObject({ homeCountryName: 'the United States' });
+  });
+
+  it('passes a null home country name when no home location is set', async () => {
+    const giantsProfile = channelProfile('San Francisco Giants');
+    const a = article({ title: 'Giants win 5-2 behind a strong outing from the bullpen' });
+    mockedClassify.mockResolvedValue(new Set());
+    const store = fakeStore();
+
+    await filterRelevant([a], 'San Francisco Giants', 'chan-1', 'San Francisco Giants', null, giantsProfile, store, fakeConfig, null);
+
+    expect(mockedClassify.mock.calls[0][0]).toMatchObject({ homeCountryName: null });
+  });
 });

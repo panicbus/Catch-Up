@@ -1,6 +1,7 @@
 import { articleId } from './providers/dedupe';
 import { filterByRelevance, borderlineArticles } from './providers/relevance';
 import { classifyOffTopic, isAiConfigured, MAX_BATCH } from './providers/classifier';
+import { countryDisplayName } from './locality/gazetteer';
 import type { ProviderConfig } from './providers/classifier';
 import type { ClassificationStoreLike } from './classificationStore';
 import type { ChannelProfile } from './providers/channelProfiles';
@@ -39,10 +40,12 @@ export async function filterRelevant(
   profile: ChannelProfile,
   store: ClassificationStoreLike,
   config: ProviderConfig | null,
-  homeLocation: { lat: number; lon: number } | null,
+  homeLocation: { lat: number; lon: number; countryCode?: string } | null,
 ): Promise<FetchedArticle[]> {
-  // Locality is a heuristic-only signal (see relevance.ts) — deliberately not surfaced to the AI
-  // classifier below, same as before this rescue pass existed.
+  // The lat/lon distance signal stays heuristic-only (see relevance.ts) — never surfaced to the AI
+  // classifier below. The home COUNTRY NAME is the one deliberate exception, surfaced only for a
+  // Politics channel (see classifier.ts's buildPrompt): it catches a gap the geographic heuristic
+  // can't — a story naming only a foreign political figure, with no place word at all to detect.
   const ctx = { topic, channelName, subchannelName, profile, homeLocation };
   const heuristic = filterByRelevance(fetched, ctx);
   // Stage 2/3 require a provider to be picked AND configured (key/model present).
@@ -50,6 +53,8 @@ export async function filterRelevant(
 
   const borderline = borderlineArticles(fetched, ctx);
   if (heuristic.length === 0 && borderline.length === 0) return heuristic;
+
+  const homeCountryName = homeLocation?.countryCode ? countryDisplayName(homeLocation.countryCode) : null;
 
   // Verdicts are cached per (channel, article), not per article alone: relevance is channel-specific
   // and the same URL legitimately lands in several channels, so a "keep" for one channel must not
@@ -91,6 +96,7 @@ export async function filterRelevant(
       channelName,
       subchannelName,
       profile,
+      homeCountryName,
       config,
     });
     if (offTopic == null) {

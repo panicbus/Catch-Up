@@ -29,6 +29,10 @@ export interface ResolvedLocation {
   label: string;
   lat: number;
   lon: number;
+  /** ISO 3166-1 alpha-2 country code of the matched city — the row already carries this (`.cc`), it
+   * was just discarded before leaving this module until the foreign-country locality signal (see
+   * relevance.ts / placeExtraction.ts's foreignPlaceSignal) needed a home country to compare against. */
+  countryCode: string;
 }
 
 const CITIES = cities as CityRow[];
@@ -80,19 +84,172 @@ const CA_PROVINCES: Record<string, string> = {
   on: 'Ontario', pe: 'Prince Edward Island', qc: 'Quebec', sk: 'Saskatchewan', yt: 'Yukon',
 };
 // Full-word country names -> ISO code, for common countries in international news + the same list
-// doubles as the "is this token itself a country name" check in looksLikePlaceChannel below.
+// doubles as the "is this token itself a country name" check in looksLikePlaceChannel below, AND
+// (via lookupCountry in placeExtraction.ts's foreignPlaceSignal) as the article-text country-name
+// scanner behind the foreign-country locality signal in relevance.ts — so this table's coverage
+// directly determines which countries' stories that signal can even see.
+//
+// Deliberately curated, not a mechanical dump of every ISO country name: a handful of real
+// countries share their name with a common English word or a US state, and including them would
+// create real false positives given this is matched the same permissive way a city name is (a
+// bare capitalized word/phrase, no other context) —
+//   - Georgia: collides with the US state, which comes up constantly in US political coverage.
+//   - Jordan / Chad: extremely common first names.
+//   - Jersey: collides with both "New Jersey" and a sports jersey.
+// left out on purpose. Two US territories are aliased to 'US' rather than their own GeoNames code
+// (PR/GU) so a story about Puerto Rico or Guam doesn't read as "foreign" for a US-home user — they
+// aren't foreign countries, unlike every other code in this table.
 const COUNTRY_ALIASES: Record<string, string> = {
   usa: 'US', 'united states': 'US', 'united states of america': 'US', america: 'US',
-  canada: 'CA', mexico: 'MX', uk: 'GB', 'united kingdom': 'GB', england: 'GB', scotland: 'GB',
-  wales: 'GB', ireland: 'IE', france: 'FR', germany: 'DE', italy: 'IT', spain: 'ES',
-  portugal: 'PT', netherlands: 'NL', belgium: 'BE', switzerland: 'CH', austria: 'AT',
-  sweden: 'SE', norway: 'NO', denmark: 'DK', finland: 'FI', poland: 'PL', greece: 'GR',
-  ukraine: 'UA', russia: 'RU', turkey: 'TR', israel: 'IL', egypt: 'EG', 'south africa': 'ZA',
-  nigeria: 'NG', kenya: 'KE', india: 'IN', pakistan: 'PK', china: 'CN', japan: 'JP',
-  'south korea': 'KR', 'north korea': 'KP', vietnam: 'VN', thailand: 'TH', philippines: 'PH',
-  indonesia: 'ID', australia: 'AU', 'new zealand': 'NZ', brazil: 'BR', argentina: 'AR',
-  chile: 'CL', colombia: 'CO', venezuela: 'VE', peru: 'PE',
+  'puerto rico': 'US', guam: 'US',
+  canada: 'CA', mexico: 'MX', uk: 'GB', 'united kingdom': 'GB', britain: 'GB',
+  'great britain': 'GB', england: 'GB', scotland: 'GB', wales: 'GB', ireland: 'IE',
+  france: 'FR', germany: 'DE', italy: 'IT', spain: 'ES', portugal: 'PT', netherlands: 'NL',
+  belgium: 'BE', switzerland: 'CH', austria: 'AT', sweden: 'SE', norway: 'NO', denmark: 'DK',
+  finland: 'FI', iceland: 'IS', poland: 'PL', greece: 'GR', ukraine: 'UA', russia: 'RU',
+  belarus: 'BY', moldova: 'MD', romania: 'RO', bulgaria: 'BG', hungary: 'HU',
+  'czech republic': 'CZ', czechia: 'CZ', slovakia: 'SK', slovenia: 'SI', croatia: 'HR',
+  serbia: 'RS', bosnia: 'BA', albania: 'AL', 'north macedonia': 'MK', kosovo: 'XK',
+  lithuania: 'LT', latvia: 'LV', estonia: 'EE', luxembourg: 'LU', malta: 'MT', cyprus: 'CY',
+  turkey: 'TR', israel: 'IL', palestine: 'PS', lebanon: 'LB', syria: 'SY', iraq: 'IQ',
+  iran: 'IR', 'saudi arabia': 'SA', yemen: 'YE', oman: 'OM', qatar: 'QA', kuwait: 'KW',
+  bahrain: 'BH', 'united arab emirates': 'AE', uae: 'AE', afghanistan: 'AF',
+  egypt: 'EG', libya: 'LY', tunisia: 'TN', algeria: 'DZ', morocco: 'MA', sudan: 'SD',
+  ethiopia: 'ET', somalia: 'SO', eritrea: 'ER', djibouti: 'DJ', kenya: 'KE', uganda: 'UG',
+  tanzania: 'TZ', rwanda: 'RW', burundi: 'BI', 'south sudan': 'SS', 'south africa': 'ZA',
+  namibia: 'NA', botswana: 'BW', zimbabwe: 'ZW', zambia: 'ZM', mozambique: 'MZ',
+  malawi: 'MW', madagascar: 'MG', nigeria: 'NG', ghana: 'GH', senegal: 'SN', mali: 'ML',
+  niger: 'NE', cameroon: 'CM', 'ivory coast': 'CI', "cote d'ivoire": 'CI', guinea: 'GN',
+  benin: 'BJ', togo: 'TG', 'sierra leone': 'SL', liberia: 'LR', gabon: 'GA', congo: 'CG',
+  'democratic republic of congo': 'CD', angola: 'AO', mauritania: 'MR',
+  india: 'IN', pakistan: 'PK', bangladesh: 'BD', 'sri lanka': 'LK', nepal: 'NP',
+  bhutan: 'BT', myanmar: 'MM', china: 'CN', japan: 'JP', 'south korea': 'KR',
+  'north korea': 'KP', taiwan: 'TW', mongolia: 'MN', vietnam: 'VN', thailand: 'TH',
+  philippines: 'PH', indonesia: 'ID', malaysia: 'MY', singapore: 'SG', cambodia: 'KH',
+  laos: 'LA', kazakhstan: 'KZ', uzbekistan: 'UZ', turkmenistan: 'TM',
+  tajikistan: 'TJ', kyrgyzstan: 'KG', azerbaijan: 'AZ', armenia: 'AM',
+  australia: 'AU', 'new zealand': 'NZ', fiji: 'FJ', 'papua new guinea': 'PG',
+  brazil: 'BR', argentina: 'AR', chile: 'CL', colombia: 'CO', venezuela: 'VE', peru: 'PE',
+  ecuador: 'EC', bolivia: 'BO', paraguay: 'PY', uruguay: 'UY', guyana: 'GY', suriname: 'SR',
+  panama: 'PA', 'costa rica': 'CR', nicaragua: 'NI', honduras: 'HN', 'el salvador': 'SV',
+  guatemala: 'GT', belize: 'BZ', cuba: 'CU', 'dominican republic': 'DO', haiti: 'HT',
+  jamaica: 'JM', 'trinidad and tobago': 'TT', bahamas: 'BS', barbados: 'BB',
 };
+// Canonical display name per country code, for the handful of countries this app actually talks
+// about in prose (the AI classifier's foreign-politics guidance, see aiRelevance.ts) — deliberately
+// NOT auto-derived from COUNTRY_ALIASES (whose keys are lowercase search aliases, sometimes
+// abbreviations like "uae", not display-ready). Only needs entries for codes worth naming to a
+// model; countryDisplayName returns null for anything else rather than guessing.
+const COUNTRY_CODE_TO_NAME: Record<string, string> = {
+  US: 'the United States', CA: 'Canada', MX: 'Mexico', GB: 'the United Kingdom', IE: 'Ireland',
+  FR: 'France', DE: 'Germany', IT: 'Italy', ES: 'Spain', PT: 'Portugal', NL: 'the Netherlands',
+  BE: 'Belgium', CH: 'Switzerland', AT: 'Austria', SE: 'Sweden', NO: 'Norway', DK: 'Denmark',
+  FI: 'Finland', IS: 'Iceland', PL: 'Poland', GR: 'Greece', UA: 'Ukraine', RU: 'Russia',
+  RO: 'Romania', HU: 'Hungary', CZ: 'the Czech Republic', TR: 'Turkey', IL: 'Israel',
+  LB: 'Lebanon', SY: 'Syria', IQ: 'Iraq', IR: 'Iran', SA: 'Saudi Arabia', AE: 'the UAE',
+  AF: 'Afghanistan', EG: 'Egypt', LY: 'Libya', MA: 'Morocco', SD: 'Sudan', ET: 'Ethiopia',
+  KE: 'Kenya', NG: 'Nigeria', GH: 'Ghana', ZA: 'South Africa', ZW: 'Zimbabwe',
+  IN: 'India', PK: 'Pakistan', BD: 'Bangladesh', LK: 'Sri Lanka', NP: 'Nepal', MM: 'Myanmar',
+  CN: 'China', JP: 'Japan', KR: 'South Korea', KP: 'North Korea', TW: 'Taiwan',
+  VN: 'Vietnam', TH: 'Thailand', PH: 'the Philippines', ID: 'Indonesia', MY: 'Malaysia',
+  SG: 'Singapore', AU: 'Australia', NZ: 'New Zealand', BR: 'Brazil', AR: 'Argentina',
+  CL: 'Chile', CO: 'Colombia', VE: 'Venezuela', PE: 'Peru', CU: 'Cuba',
+};
+
+export type Continent = 'Africa' | 'Asia' | 'Europe' | 'North America' | 'South America' | 'Oceania' | 'Antarctica';
+
+// Region-level names people actually write in headlines. Deliberately excludes "the Middle East" —
+// a genuinely common phrase, but it's a fuzzy, debated set of countries rather than a clean
+// continent, and most Middle East coverage independently names a specific country anyway (which the
+// country-tier check above already catches) — not worth the ambiguity for the residual cases where
+// it doesn't. See placeExtraction.ts's foreignPlaceSignal for how this is actually used.
+const CONTINENT_ALIASES: Record<string, Continent> = {
+  africa: 'Africa',
+  asia: 'Asia',
+  europe: 'Europe',
+  'north america': 'North America',
+  'south america': 'South America',
+  oceania: 'Oceania',
+  antarctica: 'Antarctica',
+};
+
+// Which continent each ISO country code belongs to. Used ONLY to find the continent of the user's
+// OWN home country (a single lookup, always the same code for a given user) — never to place an
+// arbitrary detected country, so this doesn't need to be exhaustive. Covers the countries that
+// realistically show up as someone's home location; a code missing here just means the
+// continent-tier signal quietly stays inactive for that home location (see foreignPlaceSignal)
+// rather than misfiring — same "false negative over false positive" bias as the rest of this file.
+const CONTINENT_BY_CC: Record<string, Continent> = {
+  US: 'North America', CA: 'North America', MX: 'North America', PA: 'North America',
+  CR: 'North America', NI: 'North America', HN: 'North America', SV: 'North America',
+  GT: 'North America', BZ: 'North America', CU: 'North America', DO: 'North America',
+  HT: 'North America', JM: 'North America', TT: 'North America', BS: 'North America',
+  BB: 'North America',
+  BR: 'South America', AR: 'South America', CL: 'South America', CO: 'South America',
+  VE: 'South America', PE: 'South America', EC: 'South America', BO: 'South America',
+  PY: 'South America', UY: 'South America', GY: 'South America', SR: 'South America',
+  GB: 'Europe', IE: 'Europe', FR: 'Europe', DE: 'Europe', IT: 'Europe', ES: 'Europe',
+  PT: 'Europe', NL: 'Europe', BE: 'Europe', CH: 'Europe', AT: 'Europe', SE: 'Europe',
+  NO: 'Europe', DK: 'Europe', FI: 'Europe', IS: 'Europe', PL: 'Europe', GR: 'Europe',
+  UA: 'Europe', RU: 'Europe', BY: 'Europe', MD: 'Europe', RO: 'Europe', BG: 'Europe',
+  HU: 'Europe', CZ: 'Europe', SK: 'Europe', SI: 'Europe', HR: 'Europe', RS: 'Europe',
+  BA: 'Europe', AL: 'Europe', MK: 'Europe', XK: 'Europe', LT: 'Europe', LV: 'Europe',
+  EE: 'Europe', LU: 'Europe', MT: 'Europe', CY: 'Europe', GE: 'Europe',
+  TR: 'Asia', IL: 'Asia', PS: 'Asia', LB: 'Asia', SY: 'Asia', IQ: 'Asia', IR: 'Asia',
+  SA: 'Asia', YE: 'Asia', OM: 'Asia', QA: 'Asia', KW: 'Asia', BH: 'Asia', AE: 'Asia',
+  AF: 'Asia', IN: 'Asia', PK: 'Asia', BD: 'Asia', LK: 'Asia', NP: 'Asia', BT: 'Asia',
+  MM: 'Asia', CN: 'Asia', JP: 'Asia', KR: 'Asia', KP: 'Asia', TW: 'Asia', MN: 'Asia',
+  VN: 'Asia', TH: 'Asia', PH: 'Asia', ID: 'Asia', MY: 'Asia', SG: 'Asia', KH: 'Asia',
+  LA: 'Asia', KZ: 'Asia', UZ: 'Asia', TM: 'Asia', TJ: 'Asia', KG: 'Asia', AZ: 'Asia',
+  AM: 'Asia',
+  EG: 'Africa', LY: 'Africa', TN: 'Africa', DZ: 'Africa', MA: 'Africa', SD: 'Africa',
+  ET: 'Africa', SO: 'Africa', ER: 'Africa', DJ: 'Africa', KE: 'Africa', UG: 'Africa',
+  TZ: 'Africa', RW: 'Africa', BI: 'Africa', SS: 'Africa', ZA: 'Africa', NA: 'Africa',
+  BW: 'Africa', ZW: 'Africa', ZM: 'Africa', MZ: 'Africa', MW: 'Africa', MG: 'Africa',
+  NG: 'Africa', GH: 'Africa', SN: 'Africa', ML: 'Africa', NE: 'Africa', CM: 'Africa',
+  CI: 'Africa', GN: 'Africa', BJ: 'Africa', TG: 'Africa', SL: 'Africa', LR: 'Africa',
+  GA: 'Africa', CG: 'Africa', CD: 'Africa', AO: 'Africa', MR: 'Africa',
+  AU: 'Oceania', NZ: 'Oceania', FJ: 'Oceania', PG: 'Oceania',
+};
+
+/** Country code for `phrase`, via COUNTRY_ALIASES (full country/territory names, e.g. "India")
+ * — deliberately NOT the bare-two-letter-code fallback isCountryCode uses for channel names below.
+ * That fallback is safe for a short, deliberate channel name, but not for scanning ordinary sentence
+ * text: several real ISO codes are also extremely common English words that are routinely
+ * capitalized at the start of a sentence — "In" (IN, India), "It" (IT, Italy), "By" (BY, Belarus),
+ * "So" (SO, Somalia) — which would misfire constantly if matched here.
+ *
+ * "US" is the one deliberate exception, and ONLY when BOTH letters are capitalized (not just the
+ * first, which is how case is checked everywhere else in this module) — confirmed live as a real
+ * false positive without this: a story headlined "US government map of Africa mislabels every
+ * country..." named no place other than the abbreviation, so it read as foreign-continent coverage
+ * with nothing to prove otherwise. ALL-CAPS is a much stronger signal than ordinary sentence-initial
+ * capitalization (nobody writes "US weekly" the way they'd write "Us Weekly"). Not extended to the
+ * rest of the code set — "UK" doesn't need its own case here, "uk" is already a safe plain
+ * COUNTRY_ALIASES entry below (no common English word collides with it the way "us" does) — and "IT"
+ * (Italy) very much WOULD collide even all-caps, as a Technology channel's own "IT department"/
+ * "IT infrastructure" headlines would demonstrate, which is why this isn't "any code, if all-caps." */
+export function lookupCountry(phrase: string): string | null {
+  if (phrase === 'US') return 'US';
+  return COUNTRY_ALIASES[phrase.trim().toLowerCase()] ?? null;
+}
+
+/** Continent for `phrase` (e.g. "Africa"), via CONTINENT_ALIASES. */
+export function lookupContinent(phrase: string): Continent | null {
+  return CONTINENT_ALIASES[phrase.trim().toLowerCase()] ?? null;
+}
+
+/** Continent of a country code, or null when the code isn't in CONTINENT_BY_CC's coverage. */
+export function continentOfCountry(cc: string): Continent | null {
+  return CONTINENT_BY_CC[cc.toUpperCase()] ?? null;
+}
+
+/** Canonical display name for a country code (e.g. "the United States"), for the AI classifier
+ * prompt — null when the code isn't one of the countries worth naming to a model. */
+export function countryDisplayName(cc: string): string | null {
+  return COUNTRY_CODE_TO_NAME[cc.toUpperCase()] ?? null;
+}
+
 const US_STATE_ABBR_BY_NAME = new Map(Object.entries(US_STATES).map(([abbr, name]) => [normalize(name), abbr.toUpperCase()]));
 const CA_PROVINCE_ABBR_BY_NAME = new Map(Object.entries(CA_PROVINCES).map(([abbr, name]) => [normalize(name), abbr.toUpperCase()]));
 
@@ -142,7 +299,7 @@ export function resolveCity(query: string): ResolvedLocation | null {
   }
 
   const best = pool.reduce((a, b) => (b.pop > a.pop ? b : a));
-  return { label: formatLabel(best), lat: best.lat, lon: best.lon };
+  return { label: formatLabel(best), lat: best.lat, lon: best.lon, countryCode: best.cc };
 }
 
 // A topic/entity channel named after a real place (e.g. "Ukraine", "Paris Olympics") would have
@@ -158,7 +315,7 @@ function tokens(name: string): string[] {
  * the locality signal from penalizing every story in a channel that IS a place. */
 export function looksLikePlaceChannel(channelName: string): boolean {
   for (const token of tokens(channelName)) {
-    if (COUNTRY_ALIASES[token] || isCountryCode(token)) return true;
+    if (COUNTRY_ALIASES[token] || isCountryCode(token) || CONTINENT_ALIASES[token]) return true;
     const rows = BY_NAME.get(token);
     if (rows && rows.some((r) => r.pop >= PLACE_CHANNEL_MIN_POP)) return true;
   }

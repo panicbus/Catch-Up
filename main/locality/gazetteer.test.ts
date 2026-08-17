@@ -1,10 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { resolveCity, looksLikePlaceChannel, lookupCity } from './gazetteer';
+import {
+  resolveCity,
+  looksLikePlaceChannel,
+  lookupCity,
+  lookupCountry,
+  lookupContinent,
+  continentOfCountry,
+  countryDisplayName,
+} from './gazetteer';
 
 describe('resolveCity', () => {
   it('resolves a qualified city with a US state abbreviation', () => {
     const result = resolveCity('Los Angeles, CA');
-    expect(result).toEqual({ label: 'Los Angeles, CA, US', lat: 34.05223, lon: -118.24368 });
+    expect(result).toEqual({ label: 'Los Angeles, CA, US', lat: 34.05223, lon: -118.24368, countryCode: 'US' });
   });
 
   it('resolves a qualified city with a full US state name', () => {
@@ -14,7 +22,7 @@ describe('resolveCity', () => {
 
   it('resolves the motivating example: Banff by Canadian province abbreviation', () => {
     const result = resolveCity('Banff, AB');
-    expect(result).toEqual({ label: 'Banff, AB, CA', lat: 51.17622, lon: -115.56982 });
+    expect(result).toEqual({ label: 'Banff, AB, CA', lat: 51.17622, lon: -115.56982, countryCode: 'CA' });
   });
 
   it('resolves Banff by full province name too', () => {
@@ -85,6 +93,10 @@ describe('looksLikePlaceChannel', () => {
     // word shouldn't be enough to disable locality scoring for an unrelated topic channel.
     expect(looksLikePlaceChannel('Music')).toBe(false);
   });
+
+  it('is true for a channel named after a continent', () => {
+    expect(looksLikePlaceChannel('Africa')).toBe(true);
+  });
 });
 
 describe('lookupCity', () => {
@@ -95,5 +107,78 @@ describe('lookupCity', () => {
 
   it('returns undefined for a name with no gazetteer entry', () => {
     expect(lookupCity('Nonexistentville')).toBeUndefined();
+  });
+});
+
+describe('lookupCountry', () => {
+  it('resolves common country names, case-insensitively', () => {
+    expect(lookupCountry('India')).toBe('IN');
+    expect(lookupCountry('india')).toBe('IN');
+    expect(lookupCountry('Nigeria')).toBe('NG');
+    expect(lookupCountry('South Africa')).toBe('ZA');
+  });
+
+  it('returns null for an unrecognized phrase', () => {
+    expect(lookupCountry('Nonexistentland')).toBeNull();
+  });
+
+  it('deliberately does NOT match a bare two-letter code (collides with common words like "In"/"It")', () => {
+    expect(lookupCountry('In')).toBeNull();
+    expect(lookupCountry('It')).toBeNull();
+  });
+
+  it('DOES match "US" specifically, but only when fully capitalized', () => {
+    expect(lookupCountry('US')).toBe('US');
+    // Sentence-initial capitalization only (first letter, not both) must NOT match — that's the
+    // exact "Us Weekly"/ordinary-word collision this stricter check exists to avoid.
+    expect(lookupCountry('Us')).toBeNull();
+  });
+
+  it('"uk" (lowercase) already matches via the plain alias table, case-insensitively like every other alias', () => {
+    // Unlike "us", "uk" isn't an ordinary English word, so the existing case-insensitive alias
+    // lookup was always safe for it — no special ALL-CAPS-only handling needed the way "US" gets.
+    expect(lookupCountry('UK')).toBe('GB');
+    expect(lookupCountry('Uk')).toBe('GB');
+  });
+
+  it('deliberately excludes "Georgia" (collides with the US state)', () => {
+    expect(lookupCountry('Georgia')).toBeNull();
+  });
+
+  it('aliases US territories to the US rather than their own code', () => {
+    expect(lookupCountry('Puerto Rico')).toBe('US');
+    expect(lookupCountry('Guam')).toBe('US');
+  });
+});
+
+describe('lookupContinent / continentOfCountry', () => {
+  it('resolves a continent name, case-insensitively', () => {
+    expect(lookupContinent('Africa')).toBe('Africa');
+    expect(lookupContinent('africa')).toBe('Africa');
+  });
+
+  it('returns null for a non-continent phrase', () => {
+    expect(lookupContinent('India')).toBeNull();
+  });
+
+  it('resolves the continent of a known country code', () => {
+    expect(continentOfCountry('IN')).toBe('Asia');
+    expect(continentOfCountry('NG')).toBe('Africa');
+    expect(continentOfCountry('US')).toBe('North America');
+  });
+
+  it('returns null for a code outside CONTINENT_BY_CC\'s coverage rather than guessing', () => {
+    expect(continentOfCountry('ZZ')).toBeNull();
+  });
+});
+
+describe('countryDisplayName', () => {
+  it('returns a natural display name for a known code', () => {
+    expect(countryDisplayName('US')).toBe('the United States');
+    expect(countryDisplayName('IN')).toBe('India');
+  });
+
+  it('returns null for an unrecognized code rather than a raw ISO code', () => {
+    expect(countryDisplayName('ZZ')).toBeNull();
   });
 });

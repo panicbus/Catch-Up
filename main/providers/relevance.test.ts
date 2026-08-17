@@ -214,10 +214,34 @@ describe('locality signal — scope guards', () => {
     expect(keeps(a, ctx)).toBe(true);
   });
 
-  it('never applies to a non-Politics category channel (e.g. Sports) — geographic distance isn\'t a meaningful signal there', () => {
+  it('never applies to a non-locality category channel (e.g. Sports) — geographic distance isn\'t a meaningful signal there', () => {
     const profile = channelProfile('Sports');
     const ctx: RelevanceContext = { topic: 'Sports', channelName: 'Sports', subchannelName: null, profile, homeLocation: LA };
     const a = article({ title: 'Jaipur civic body elects new local council chief amid protests' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  // Same guarantees as above, but for a bare COUNTRY/CONTINENT mention (no city named) — the new
+  // signal this describe block's siblings below actually test. World/Sports/Entertainment must stay
+  // just as untouched by a country-level mention as they already are by a city-level one.
+  it('a country mention never applies to World, even with a home location set', () => {
+    const profile = channelProfile('World');
+    const ctx: RelevanceContext = { topic: 'World', channelName: 'World', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'India announces new trade policy' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  it('a country mention never applies to Sports, even with a home location set', () => {
+    const profile = channelProfile('Sports');
+    const ctx: RelevanceContext = { topic: 'Sports', channelName: 'Sports', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'Cricket team represents India at international tournament' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  it('a country mention never applies to Entertainment, even with a home location set', () => {
+    const profile = channelProfile('Entertainment');
+    const ctx: RelevanceContext = { topic: 'Entertainment', channelName: 'Entertainment', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'Bollywood film festival celebrates cinema across India' });
     expect(keeps(a, ctx)).toBe(true);
   });
 });
@@ -253,6 +277,133 @@ describe('locality signal — the Politics category channel', () => {
     const profile = channelProfile('Politics');
     const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile, homeLocation: LA };
     const a = article({ title: 'Lawmakers debate new voting legislation ahead of recess' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Foreign country/continent signal — the fix for the actual real-world complaint that motivated
+// this: routine political (and business/health/science/tech) coverage of a country the user has no
+// connection to, that never names a single CITY (only the country, or a person), so the city-only
+// locality signal above had literally nothing to find. See W.foreignCountry's own comment in
+// relevance.ts for how the -7/-5 weights were derived from the actual scoring ceilings, not guessed.
+// ---------------------------------------------------------------------------------------------
+describe('locality signal — foreign country (Politics, no city named at all)', () => {
+  it('drops a weak-evidence story naming a foreign COUNTRY with no city mentioned', () => {
+    const profile = channelProfile('Politics');
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'India announces new trade policy' });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+
+  it('is NOT penalized when the mentioned country IS home, even if a foreign country is also named', () => {
+    const profile = channelProfile('Politics');
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'United States and India sign new policy agreement' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  it('a bare category main feed cannot outscore the foreign-country penalty even with a section match (the "strong but not absolute" design)', () => {
+    // Confirms the penalty reliably wins on a MAIN feed (its real ceiling here is +5: sectionMatch
+    // 3 + includeTitle 2 — a category channel's own ambiguous word never counts, so nothing more can
+    // stack) — the "exceptional story survives" case needs a subchannel, see the next describe block.
+    const profile = channelProfile('Politics');
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'India announces new trade policy', section: 'politics' });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+
+  it('a subchannel story with genuinely stacked evidence (its own term counted twice, plus a section match) survives the penalty', () => {
+    // The concrete "exceptionally well-covered story" case: the subchannel's own term scores once as
+    // a specificTerm (termTitle +3) and again via CATEGORY_RULES.politics.include still containing
+    // that same word (includeTitle +2), plus a real section match (+3) = +8 before locality; 8-7=1.
+    const profile = channelProfile('Politics');
+    const ctx: RelevanceContext = { topic: 'Politics "Elections"', channelName: 'Politics', subchannelName: 'Elections', profile, homeLocation: LA };
+    const a = article({ title: 'Elections held across India amid record turnout', section: 'politics' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+});
+
+describe('locality signal — foreign continent (deliberately weaker than a named country)', () => {
+  it('drops a weak-evidence story naming a foreign CONTINENT with no country or city mentioned', () => {
+    const profile = channelProfile('Politics');
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'Political unrest spreads across Africa' });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+
+  it('is NOT penalized when the mentioned continent IS home\'s own continent', () => {
+    const profile = channelProfile('Politics');
+    const paris = resolveCity('Paris, FR')!;
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile, homeLocation: paris };
+    const a = article({ title: 'Political unrest spreads across Europe' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  it('a bare main-feed story that survives the continent penalty would NOT survive the harsher country one at the same evidence level', () => {
+    // Same evidence shape (includeTitle + sectionMatch = +5) both times — only the kind of place
+    // mentioned differs. This is the concrete demonstration that foreignContinent (-5) is
+    // deliberately weaker than foreignCountry (-7): 5-5=0 survives, 5-7=-2 does not.
+    const profile = channelProfile('Politics');
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile, homeLocation: LA };
+    const continentStory = article({ title: 'Political unrest spreads across Africa', section: 'politics' });
+    const countryStory = article({ title: 'India announces new trade policy', section: 'politics' });
+    expect(keeps(continentStory, ctx)).toBe(true);
+    expect(keeps(countryStory, ctx)).toBe(false);
+  });
+});
+
+describe('locality signal — extended to Business/Health/Science/Technology (not just Politics)', () => {
+  it('drops a weak-evidence foreign-country business story', () => {
+    const profile = channelProfile('Business');
+    const ctx: RelevanceContext = { topic: 'Business', channelName: 'Business', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'India announces new tariffs on steel imports' });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+
+  it('drops a weak-evidence foreign-country health story', () => {
+    const profile = channelProfile('Health');
+    const ctx: RelevanceContext = { topic: 'Health', channelName: 'Health', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'India reports new vaccine rollout nationwide' });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+
+  it('drops a weak-evidence foreign-country science story', () => {
+    const profile = channelProfile('Science');
+    const ctx: RelevanceContext = { topic: 'Science', channelName: 'Science', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'India announces new climate research initiative' });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+
+  it('drops a weak-evidence foreign-country technology story', () => {
+    const profile = channelProfile('Tech');
+    const ctx: RelevanceContext = { topic: 'Tech', channelName: 'Tech', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'India announces new semiconductor manufacturing policy' });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+
+  it('is unaffected when the business story is genuinely about home', () => {
+    const profile = channelProfile('Business');
+    const ctx: RelevanceContext = { topic: 'Business', channelName: 'Business', subchannelName: null, profile, homeLocation: LA };
+    const a = article({ title: 'Markets rally as inflation data beats expectations' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+});
+
+describe('locality signal — a topic/entity channel gets the gentler weight, not the harsh one', () => {
+  // Critical distinction from the category-channel tests above: a topic channel about something
+  // fundamentally foreign (here, a channel about India's film industry) must NOT have its own core
+  // content wiped out by the very geography it's about — see W.foreignCountry's comment in
+  // relevance.ts for the concrete regression this avoids. The widened RECOGNITION (country names now
+  // register at all) still applies; only the WEIGHT used differs.
+  it('a title-match topic story mentioning a foreign country survives, because a topic channel uses localityFar (-4), not foreignCountry (-7)', () => {
+    const profile = channelProfile('Bollywood');
+    const ctx: RelevanceContext = { topic: 'Bollywood', channelName: 'Bollywood', subchannelName: null, profile, homeLocation: LA };
+    // Floors at +5 here (termTitle 3 + includeTitle 2 — a topic channel's own term is both a
+    // specificTerm AND its own include list, same double-count as the Politics subchannel case
+    // above). 5 - localityFar(4) = 1, kept. If this had used foreignCountry(-7) instead, 5-7=-2
+    // would drop it — that's exactly the regression this design avoids.
+    const a = article({ title: 'Bollywood celebrates record year for India\'s film industry' });
     expect(keeps(a, ctx)).toBe(true);
   });
 });

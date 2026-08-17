@@ -72,6 +72,13 @@ export interface ClassifyInput {
    * to the model as the channel's definition so its judgement matches the heuristic's. Optional so the
    * classifier still works standalone (e.g. tests) without one. */
   profile?: ChannelProfile;
+  /** The user's home country (a display name, e.g. "the United States"), when known — used only to
+   * add the foreign-politics guidance below on a Politics channel. Catches the one gap the heuristic
+   * locality signal in relevance.ts can't: a story that names a foreign political figure ("Modi")
+   * with no place word anywhere, so there's nothing for that lookup-based check to find. null/absent
+   * means no home location is set, or it doesn't resolve to a country this app can name — the
+   * guidance is simply omitted in either case, same as any other optional profile context here. */
+  homeCountryName?: string | null;
   config: ProviderConfig;
 }
 
@@ -204,6 +211,18 @@ function buildPrompt(input: ClassifyInput): { system: string; user: string } {
   if (profile?.category) guidance.push(`This is a ${profile.category} channel.`);
   if (profile?.include.length) guidance.push(`On-topic stories often involve: ${profile.include.slice(0, 20).join(', ')}.`);
   if (profile?.exclude.length) guidance.push(`Off-topic for this channel: ${profile.exclude.join(', ')}.`);
+  // Politics-specific, and only when we know the reader's home country: the heuristic gate in
+  // relevance.ts already deprioritizes foreign countries/continents named in a story, but has
+  // nothing to work with when a story names only a foreign political figure ("Modi defends reform
+  // bill") with no place word at all. The model can catch that semantically instead.
+  if (profile?.category === 'politics' && input.homeCountryName) {
+    guidance.push(
+      `The reader is in ${input.homeCountryName}. Treat routine coverage of another country's own ` +
+        `domestic politics — even if it never names that country, e.g. only naming a foreign ` +
+        `political figure — as off-topic, unless it's a major story with clear global significance ` +
+        `or a direct connection to ${input.homeCountryName}.`
+    );
+  }
 
   const user =
     `TOPIC: ${topic}\n` +

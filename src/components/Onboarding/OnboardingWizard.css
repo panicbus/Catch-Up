@@ -73,3 +73,21 @@
   font-size: 13px;
   color: var(--accent-strong);
 }
+
+.onboarding__location-input {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  padding: 9px 12px;
+  font-size: 14px;
+}
+
+/* iOS Safari auto-zooms the whole page on focusing any input styled under 16px — same fix already
+   applied to LocationSetting/ChannelManageList/SubchannelManagePanel's own inputs. */
+@media (max-width: 767px) {
+  .onboarding__location-input {
+    font-size: 16px;
+  }
+}

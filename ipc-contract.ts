@@ -180,11 +180,16 @@ export interface AppSettings {
    * shows a real selection rather than landing on an unlabeled in-between value. */
   maxStoriesShown: 10 | 25 | 50;
   /** User's home city, used to deprioritize geographically distant local stories in topic/entity
-   * channels (e.g. a "Wildfires" channel showing a small far-away town's fire story). Resolved
-   * against the bundled city gazetteer at save time — `query` is what the user typed, `label`/
-   * `lat`/`lon` are the resolved match. null = feature inactive (also how pre-existing data files
-   * without this field behave once loaded). Never applied to broad category channels. */
-  homeLocation: { query: string; label: string; lat: number; lon: number } | null;
+   * channels (e.g. a "Wildfires" channel showing a small far-away town's fire story) and, more
+   * strongly, a handful of category channels (Politics/Business/Health/Science/Technology) where a
+   * story confidently about a different country gets filtered out — see main/providers/relevance.ts.
+   * Resolved against the bundled city gazetteer at save time — `query` is what the user typed,
+   * `label`/`lat`/`lon`/`countryCode` are the resolved match. null = feature inactive (also how
+   * pre-existing data files without this field behave once loaded). `countryCode` is optional
+   * specifically for a home location saved before that field existed — same "old data just doesn't
+   * have it" handling as everywhere else in this file (see rollTheDiceChannelIds above); re-saving
+   * the location fills it in. */
+  homeLocation: { query: string; label: string; lat: number; lon: number; countryCode?: string } | null;
 }
 
 /** Ollama is desktop-only (the hosted server can't reach a model on the founder's own Mac) — the web
@@ -313,7 +318,7 @@ export interface CatchUpApi {
   /** Resolve a free-text city string ("Los Angeles, CA") against the bundled gazetteer, without
    * persisting anything — the caller decides whether to save it via setSettings. Returns null when
    * no match is found. */
-  resolveHomeLocation: (query: string) => Promise<{ label: string; lat: number; lon: number } | null>;
+  resolveHomeLocation: (query: string) => Promise<{ label: string; lat: number; lon: number; countryCode: string } | null>;
 
   // AI relevance filtering. Keys themselves never cross to the renderer — getAiConfig reports only
   // whether one is configured.

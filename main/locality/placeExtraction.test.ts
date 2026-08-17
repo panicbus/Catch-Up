@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nearestMentionKm } from './placeExtraction';
+import { nearestMentionKm, foreignPlaceSignal } from './placeExtraction';
 import { resolveCity } from './gazetteer';
 
 const LA = resolveCity('Los Angeles, CA')!;
@@ -101,5 +101,55 @@ describe('nearestMentionKm — performance', () => {
     // slower CI machine while still catching a real regression (e.g. an accidental full-gazetteer
     // scan per call instead of the O(1) map lookups this is supposed to do).
     expect(elapsed).toBeLessThan(500);
+  });
+});
+
+describe('foreignPlaceSignal', () => {
+  it("reports 'country' for a story naming a country that isn't home — the real motivating case (no city named at all)", () => {
+    expect(foreignPlaceSignal('India announces new trade policy', null, 'US')).toBe('country');
+  });
+
+  it('is null when the mentioned country IS home, even if a foreign country is also named', () => {
+    expect(foreignPlaceSignal('United States and India sign new trade deal', null, 'US')).toBeNull();
+  });
+
+  it('also recognizes the fully-capitalized "US"/"UK" abbreviations as home (confirmed live as a real gap otherwise)', () => {
+    expect(foreignPlaceSignal('US and India sign new trade deal', null, 'US')).toBeNull();
+    expect(foreignPlaceSignal('UK and India sign new trade deal', null, 'GB')).toBeNull();
+  });
+
+  // Known, accepted gap (same spirit as the "no demonym matching" limitation documented in the
+  // plan): wordTokens splits on periods, so "U.S." tokenizes into single-letter fragments ("U", "S")
+  // that never match lookupCountry's "US" allowlist entry. Not fixed by loosening wordTokens, a
+  // shared function nearestMentionKm's city-matching also depends on and already has real, tested
+  // behavior around periods (e.g. "St. Louis" tokenizing as "St"/"Louis") — not worth the regression
+  // risk for one abbreviation style. The undotted "US" form (also extremely common, and arguably the
+  // more common digital-headline style) IS caught — see the test above.
+  it('does NOT catch the dotted "U.S." form (documented gap, not a bug to silently fix)', () => {
+    expect(foreignPlaceSignal('U.S. and India sign new trade deal', null, 'US')).toBe('country');
+  });
+
+  it("reports 'continent' when only a continent is named, and it isn't home's", () => {
+    expect(foreignPlaceSignal('Political unrest spreads across Africa', null, 'US')).toBe('continent');
+  });
+
+  it("is null when the mentioned continent IS home's own continent", () => {
+    expect(foreignPlaceSignal('Political unrest spreads across Europe', null, 'FR')).toBeNull();
+  });
+
+  it('is null when no country or continent is mentioned at all', () => {
+    expect(foreignPlaceSignal('Lawmakers debate new voting legislation ahead of recess', null, 'US')).toBeNull();
+  });
+
+  it('stays silent on the continent tier when the home country has no known continent, rather than guessing', () => {
+    expect(foreignPlaceSignal('Political unrest spreads across Africa', null, 'ZZ')).toBeNull();
+  });
+
+  it('scans the snippet as well as the title', () => {
+    expect(foreignPlaceSignal('Update issued this morning', 'Officials in Nigeria responded to the crisis.', 'US')).toBe('country');
+  });
+
+  it('deliberately does not match a lowercase, non-sentence-initial country mention (capitalization gate)', () => {
+    expect(foreignPlaceSignal('Officials met to discuss trade with india this week', null, 'US')).toBeNull();
   });
 });

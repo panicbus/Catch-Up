@@ -31,7 +31,7 @@
 import { normalizeTitle } from './dedupe';
 import { sectionMatchesCategory, sectionIsForeign } from './channelProfiles';
 import { looksLikePlaceChannel } from '../locality/gazetteer';
-import { nearestMentionKm } from '../locality/placeExtraction';
+import { nearestMentionKm, foreignPlaceSignal } from '../locality/placeExtraction';
 import type { ChannelProfile, NewsCategory } from './channelProfiles';
 import type { FetchedArticle } from './types';
 
@@ -76,22 +76,42 @@ const W = {
   // = 5, since include IS the name for topic channels), so anything weaker than -6 leaves a
   // wrong-sense story net-positive and it survives. Verified, not assumed.
   wrongSenseHit: -6,
-  // Applies whenever a home location is configured, for topic/entity channels AND the Politics
-  // category channel specifically (see GateContext.locality / buildGateContext's localityEligible)
-  // — a nearby mentioned place is a mild positive, a distant one a clear negative. For a topic
-  // channel's own main feed the channel's term is scored twice over (once as a specificTerm, once
-  // as profile.include — same word, both paths), so the weakest kept case (the term named ONLY in
-  // the snippet) actually floors at +3 (termSnippet 2 + includeSnippet 1), not +2 — verified
+  // Applies whenever a home location is configured, for topic/entity channels AND a handful of
+  // category channels (see GateContext.locality / buildGateContext's localityEligible) — a nearby
+  // mentioned CITY is a mild positive, a distant one a clear negative. For a topic channel's own
+  // main feed the channel's term is scored twice over (once as a specificTerm, once as
+  // profile.include — same word, both paths), so the weakest kept case (the term named ONLY in the
+  // snippet) actually floors at +3 (termSnippet 2 + includeSnippet 1), not +2 — verified
   // empirically, not assumed. -4 tips that floor below KEEP_SCORE when the story's nearest
   // mentioned place is far away, while a title or tag match (floors at +5) survives regardless of
   // distance — strong on-topic evidence should never be overridden by geography alone. The lenient
-  // Politics channel's floor is lower still (a single include-keyword hit, +1 to +2, or even a bare
+  // category channels' floor is lower still (a single include-keyword hit, +1 to +2, or even a bare
   // 0 with no signal at all), so this is where the penalty does its real work: dropping the weak-
   // evidence hyperlocal-foreign long tail (a specific country's local politician, a district-level
   // story) while a well-covered story — matched by a real section field or a strong keyword hit —
   // keeps enough score to survive.
   localityNear: 1,
   localityFar: -4,
+  // A COUNTRY or CONTINENT named in the story (as opposed to a city — see foreignCountry/
+  // foreignContinent's one call site in scoreArticle) is much stronger, more confident evidence
+  // that the whole story is fundamentally about somewhere else, not just a passing place mention —
+  // real user reports were routine foreign-country political/business/etc. coverage that never
+  // named a single city at all ("India announces new trade policy"), so nearestMentionKm's city-only
+  // check had literally nothing to penalize. Sized against the actual scoring ceilings, not guessed:
+  // a bare category main feed tops out at +5 (sectionMatch 3 + includeTitle 2 — a category's own
+  // ambiguous word is never scorable, so that's the real ceiling there), so -7 reliably sinks it
+  // (5-7 = -2). A SUBCHANNEL under one of these categories can reach +8 (its own term double-counts:
+  // once via specificTerms' termTitle +3, again via gate.include still containing that same word
+  // from CATEGORY_RULES +2, plus sectionMatch +3) — 8-7 = 1 still survives, which is the "truly
+  // exceptional, heavily-signaled story" the strong-but-not-absolute design calls for, not a
+  // loophole. foreignContinent is deliberately weaker: a continent is 50+ countries, much less
+  // specific evidence than a named country, so a moderately-evidenced story (5-5 = 0) still survives
+  // it while the near-zero-evidence floor still doesn't. ONLY applied on category channels (see
+  // scoreArticle) — a topic/entity channel uses localityFar's gentler weight instead, so a channel
+  // ABOUT a foreign person/place/thing can't have its own core content wiped out by the very
+  // geography it's about.
+  foreignCountry: -7,
+  foreignContinent: -5,
 };
 const KEEP_SCORE = 0; // keep when the summed score is >= this (i.e. not net-negative)
 // TUNABLE: distance bands (km) for the locality signal above. Inside NEAR, a mild boost; beyond
@@ -113,9 +133,11 @@ export interface RelevanceContext {
   /** null for a channel-level (main) batch. */
   subchannelName: string | null;
   profile: ChannelProfile;
-  /** The user's configured home city (Settings), or null when unset. Only ever applied to topic/
-   * entity channels — see buildGateContext. */
-  homeLocation: { lat: number; lon: number } | null;
+  /** The user's configured home city (Settings), or null when unset. `countryCode` is optional
+   * purely for backward compatibility with a settings file saved before it existed (see
+   * ipc-contract.ts's AppSettings.homeLocation) — a real, current save always has it. Only ever
+   * applied to topic/entity channels and a handful of category channels — see buildGateContext. */
+  homeLocation: { lat: number; lon: number; countryCode?: string } | null;
 }
 
 /** Tokenize a provider search topic into scorable terms. `normalizeTitle` already lowercases and
@@ -213,11 +235,24 @@ interface GateContext {
    * rarely repeats. Only a CATEGORY channel's main feed is lenient (this stays false there). */
   requireSpecificTerm: boolean;
   /** The user's home location, but only when the locality signal should actually apply: a topic/
-   * entity channel, a home location configured, AND the channel isn't itself a place (see
-   * looksLikePlaceChannel) — every legitimate story in a channel named "Ukraine" would otherwise get
-   * penalized purely for being far from home. null means the signal is inactive. */
-  locality: { lat: number; lon: number } | null;
+   * entity or locality-eligible category channel, a home location configured, AND the channel isn't
+   * itself a place (see looksLikePlaceChannel) — every legitimate story in a channel named "Ukraine"
+   * would otherwise get penalized purely for being far from home. null means the signal is inactive. */
+  locality: { lat: number; lon: number; countryCode?: string } | null;
 }
+
+// Category channels where routine coverage of another country's own domestic affairs is exactly
+// the same "not relevant to a reader who isn't there" shape as foreign domestic politics — the
+// original, narrower problem this signal was built for. Explicitly NOT world/sports/entertainment:
+// international coverage is the entire point of a World channel, and a foreign team/event/release
+// is often exactly what a Sports or Entertainment channel is expected to surface.
+const LOCALITY_CATEGORIES: ReadonlySet<NewsCategory> = new Set([
+  'politics',
+  'business',
+  'health',
+  'science',
+  'technology',
+]);
 
 function buildGateContext(ctx: RelevanceContext): GateContext {
   const allTerms = buildQueryTerms(ctx.topic).terms;
@@ -227,23 +262,24 @@ function buildGateContext(ctx: RelevanceContext): GateContext {
   const ambiguous =
     ctx.profile.type === 'category' ? new Set(buildQueryTerms(ctx.channelName).terms) : new Set<string>();
   const specificTerms = allTerms.filter((t) => !ambiguous.has(t));
-  // Locality used to be topic/entity channels only. Broadened to the POLITICS category channel too
-  // (not just a "Wildfires"-style topic) after real, repeated user reports of hyperlocal foreign
+  // Locality used to be topic/entity channels only, then broadened to the POLITICS category channel
+  // too (not just a "Wildfires"-style topic) after real, repeated user reports of hyperlocal foreign
   // political stories (a district-level story about a politician in India, then "other places" too)
   // drowning out a broad Politics channel that had no other way to gauge global interest.
-  // Deliberately NOT broadened to every category, despite the signal being additive rather than a
-  // hard filter: 'world' has an empty CATEGORY_RULES include list (see channelProfiles.ts — "world
-  // channels are broad and stay lenient" is the whole point of that category), so a World-channel
-  // story with no section tag would have had ZERO way to earn the score back and got dropped purely
-  // for being far away — exactly backwards for a channel whose entire purpose is far-away news
-  // (caught in review, not live — see the reverted broader version's test coverage gap). The other
-  // categories (sports/business/science/health/entertainment/technology) were never part of the
-  // actual report either, and geographic distance isn't a meaningful relevance signal for most of
-  // them (an away game, a study from anywhere, are normal expected content, not "uninteresting").
+  // Broadened again to Business/Health/Science/Technology for the same underlying reason: routine
+  // day-to-day coverage of another country's own domestic business, health, science, or tech affairs
+  // is the same "not relevant to a reader who isn't there" shape as foreign domestic politics — see
+  // LOCALITY_CATEGORIES above. Deliberately NOT every category: 'world' has an empty CATEGORY_RULES
+  // include list (see channelProfiles.ts — "world channels are broad and stay lenient" is the whole
+  // point of that category), so a World-channel story with no section tag would have had ZERO way to
+  // earn the score back and got dropped purely for being far away — exactly backwards for a channel
+  // whose entire purpose is far-away news (caught in review, not live — see the reverted broader
+  // version's test coverage gap). Sports and Entertainment stay excluded too: a foreign team/event/
+  // release is often exactly what those channels are expected to surface, not "uninteresting."
   const localityEligible =
     ctx.homeLocation != null &&
     !looksLikePlaceChannel(ctx.channelName) &&
-    (ctx.profile.type === 'topic' || ctx.profile.category === 'politics');
+    (ctx.profile.type === 'topic' || (ctx.profile.category != null && LOCALITY_CATEGORIES.has(ctx.profile.category)));
   return {
     specificTerms,
     include: ctx.profile.include,
@@ -371,6 +407,17 @@ function scoreArticle(article: FetchedArticle, gate: GateContext): ScoredSignals
     if (km !== null) {
       if (km <= LOCALITY_NEAR_KM) score += W.localityNear;
       else if (km >= LOCALITY_FAR_KM) score += W.localityFar;
+    } else if (gate.locality.countryCode) {
+      // No CITY mentioned at all — the gap this signal actually exists for (see W.foreignCountry's
+      // own comment): routine foreign coverage very often names the country or a person, never a
+      // city ("India announces new trade policy"), so nearestMentionKm above had nothing to find.
+      // Category channels (Politics/Business/Health/Science/Technology) get the strong weight this
+      // was built for; a topic/entity channel gets localityFar's gentler one instead — a channel
+      // ABOUT a foreign person/place/thing must not have its own core content wiped out by the very
+      // geography it's about (see W.foreignCountry's comment for the concrete regression this avoids).
+      const signal = foreignPlaceSignal(article.title, article.snippet, gate.locality.countryCode);
+      if (signal === 'country') score += gate.category ? W.foreignCountry : W.localityFar;
+      else if (signal === 'continent') score += gate.category ? W.foreignContinent : W.localityFar;
     }
   }
 

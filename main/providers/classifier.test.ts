@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { classifyOffTopic, isAiConfigured, type ProviderConfig } from './classifier';
+import type { ChannelProfile } from './channelProfiles';
 
 const ITEMS = [
   { id: 'a1', title: 'Virginia Tech wins football game', snippet: null },
@@ -134,5 +135,59 @@ describe('classifyOffTopic', () => {
     });
     expect(result).toEqual(new Set());
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('classifyOffTopic — foreign-politics guidance in the prompt', () => {
+  const politicsProfile: ChannelProfile = { type: 'category', category: 'politics', include: ['election'], exclude: [], wrongSense: [] };
+  const techProfile: ChannelProfile = { type: 'category', category: 'technology', include: ['chip'], exclude: [], wrongSense: [] };
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ candidates: [{ content: { parts: [{ text: '{"remove":[]}' }] } }] }));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  function sentPrompt(): string {
+    const [, requestInit] = vi.mocked(fetch).mock.calls[0];
+    const body = JSON.parse((requestInit as RequestInit).body as string);
+    return body.contents[0].parts[0].text as string;
+  }
+
+  it('adds the foreign-politics guidance for a Politics channel when a home country is known', async () => {
+    await classifyOffTopic({
+      items: ITEMS,
+      channelName: 'Politics',
+      subchannelName: null,
+      profile: politicsProfile,
+      homeCountryName: 'the United States',
+      config: { provider: 'gemini', apiKey: 'k' },
+    });
+    expect(sentPrompt()).toContain('the United States');
+    expect(sentPrompt()).toContain("another country's own");
+  });
+
+  it('omits the guidance when no home country is known, even for Politics', async () => {
+    await classifyOffTopic({
+      items: ITEMS,
+      channelName: 'Politics',
+      subchannelName: null,
+      profile: politicsProfile,
+      homeCountryName: null,
+      config: { provider: 'gemini', apiKey: 'k' },
+    });
+    expect(sentPrompt()).not.toContain("another country's own");
+  });
+
+  it('omits the guidance for a non-Politics category channel even with a home country known', async () => {
+    await classifyOffTopic({
+      items: ITEMS,
+      channelName: 'Tech',
+      subchannelName: null,
+      profile: techProfile,
+      homeCountryName: 'the United States',
+      config: { provider: 'gemini', apiKey: 'k' },
+    });
+    expect(sentPrompt()).not.toContain("another country's own");
   });
 });
