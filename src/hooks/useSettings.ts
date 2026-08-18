@@ -42,9 +42,16 @@ export function useSettings() {
     document.documentElement.setAttribute('data-theme', settings.theme);
   }, [settings.theme]);
 
+  // Returns the underlying request so a caller that shows its own "saved" state (e.g. LocationSetting)
+  // can wait for the real round trip instead of declaring success the instant the optimistic local
+  // update above lands — a real-world gap: a Save button that flips to "Currently set to: ..." right
+  // away invites the next thing you do to be closing the app, and on mobile a force-close (swiping the
+  // app away, not a graceful quit) can abort a still-in-flight request outright, silently discarding
+  // it server-side. Most callers still fire-and-forget this exactly as before; returning a promise
+  // doesn't change their behavior since none of them await it.
   const update = useCallback((partial: Partial<AppSettings>) => {
     setSettings((prev) => ({ ...prev, ...partial }));
-    void api.setSettings(partial);
+    return api.setSettings(partial);
   }, []);
 
   return { settings, loading, update };

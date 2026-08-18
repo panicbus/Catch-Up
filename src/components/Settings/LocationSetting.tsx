@@ -19,7 +19,7 @@ export function LocationSetting() {
   const save = async () => {
     const query = text.trim();
     if (!query) {
-      update({ homeLocation: null });
+      await update({ homeLocation: null });
       setStatus('idle');
       setEditing(true);
       return;
@@ -30,7 +30,11 @@ export function LocationSetting() {
       setStatus('not-found');
       return;
     }
-    update({ homeLocation: { query, ...resolved } });
+    // Stays in the 'checking' state (button still says "Checking…") until the save has actually
+    // round-tripped to the server, not just landed in local state — closing the app right after
+    // seeing "Currently set to: ..." appear is a real workflow, and a force-close (unlike a graceful
+    // quit) can abort a still-in-flight request with nothing left behind to retry it.
+    await update({ homeLocation: { query, ...resolved } });
     setStatus('idle');
     setEditing(false);
   };
