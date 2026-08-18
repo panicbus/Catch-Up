@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Logo } from '../Layout/Logo';
 import './ColdStartNotice.css';
 
@@ -35,11 +36,36 @@ function ClockFace() {
   );
 }
 
+// Rotated through in order while the wait drags on, so a real cold start (20-30+s) doesn't just
+// sit on one static line the whole time. Each entry's duration is how long IT stays up before
+// advancing; the last one has no duration because it just holds once reached.
+const CAPTION_STAGES: { text: string; durationMs?: number }[] = [
+  { text: 'Waking up the server.', durationMs: 5000 },
+  { text: 'This can take up to 30 seconds on the first load.', durationMs: 8000 },
+  { text: 'Almost there…', durationMs: 10000 },
+  { text: 'Still going — thanks for your patience.' },
+];
+
+function useCaptionStage(): number {
+  const [stage, setStage] = useState(0);
+
+  useEffect(() => {
+    const duration = CAPTION_STAGES[stage]?.durationMs;
+    if (duration === undefined) return;
+    const t = window.setTimeout(() => setStage((s) => s + 1), duration);
+    return () => window.clearTimeout(t);
+  }, [stage]);
+
+  return stage;
+}
+
 /** Shown while a gate (OnboardingGate, AuthGate) is waiting on the FIRST network call of the
  * session — the one that can actually hit Render's free-tier cold start (fully suspends after ~15
  * minutes idle; the next request then takes 20-30+ seconds to boot the server back up). Extracted
  * from OnboardingGate, which had this before AuthGate needed the identical thing in front of it. */
 export function ColdStartNotice() {
+  const stage = useCaptionStage();
+
   return (
     <div className="cold-start-notice" role="status">
       <div className="cold-start-notice__clock">
@@ -48,7 +74,10 @@ export function ColdStartNotice() {
           <Logo size={64} />
         </div>
       </div>
-      <p>Waking up the server. This can take up to 30 seconds on the first load.</p>
+      {/* key={stage} remounts the <p> on every stage change so its fade-in keyframe replays. */}
+      <p key={stage} className="cold-start-notice__caption">
+        {CAPTION_STAGES[stage].text}
+      </p>
     </div>
   );
 }

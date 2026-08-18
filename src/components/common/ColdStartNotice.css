@@ -65,3 +65,20 @@
     transform: rotate(360deg);
   }
 }
+
+/* Caption swaps between CAPTION_STAGES over the course of a long cold start; remounted via
+   key={stage} each time so this replays instead of only firing once on mount. */
+.cold-start-notice__caption {
+  animation: cold-start-notice-caption-fade 0.5s ease;
+}
+
+@keyframes cold-start-notice-caption-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
