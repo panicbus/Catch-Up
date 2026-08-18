@@ -40,4 +40,9 @@ export interface NewsProvider {
  * and their results get merged into one list. */
 export interface FetchedArticle extends ProviderArticle {
   provider: string;
+  /** The additive score relevance.ts computed while deciding to keep this article (see
+   * scoreArticle in relevance.ts) — undefined until filterByRelevance/borderlineArticles attach
+   * it. Rides along through aiRelevance.ts's AI stage unchanged (same object reference) so it's
+   * still present on whatever finally reaches articlesCache.merge() for persisting. */
+  relevanceScore?: number;
 }

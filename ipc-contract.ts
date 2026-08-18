@@ -36,6 +36,9 @@ export interface Article {
   channelId: string;
   subchannelId: string | null;
   paywalled: boolean;
+  /** relevance.ts's additive keep/reject score at save time — see prisma/schema.prisma's
+   * Article.relevanceScore comment. null for anything saved before this field existed. */
+  relevanceScore: number | null;
   bookmarked: boolean;
   read: boolean;
 }

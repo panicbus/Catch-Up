@@ -73,7 +73,9 @@ describe('filterRelevant — borderline AI rescue', () => {
       null
     );
 
-    expect(result).toEqual([a]);
+    // relevanceScore 5 = termTitle (3, "giants" alone matches) + includeTitle (2, the topic
+    // channel's own include list is the same name tokens, so "giants" double-counts there too).
+    expect(result).toEqual([{ ...a, relevanceScore: 5 }]);
     expect(mockedClassify).toHaveBeenCalledTimes(1);
     const sentIds = (mockedClassify.mock.calls[0][0] as { items: { title: string }[] }).items;
     expect(sentIds.some((i) => i.title === a.title)).toBe(true);
@@ -114,7 +116,10 @@ describe('filterRelevant — borderline AI rescue', () => {
     const politicsResult = await filterRelevant([keptByHeuristic], 'Politics', 'chan-1', 'Politics', null, politicsProfile, fakeStore(), fakeConfig, null);
     const sportsResult = await filterRelevant([borderline], 'Sports', 'chan-2', 'Sports', null, sportsProfile2, fakeStore(), fakeConfig, null);
 
-    expect(politicsResult).toEqual([keptByHeuristic]);
+    // relevanceScore 2 = includeTitle: a single best-source-wins hit against Politics' include list
+    // (the title actually hits three distinct keywords — "politicians", "campaign", "votes" — but
+    // only the first match increments the score; includeHitCount is the separate, uncapped count).
+    expect(politicsResult).toEqual([{ ...keptByHeuristic, relevanceScore: 2 }]);
     expect(sportsResult).toEqual([]);
   });
 

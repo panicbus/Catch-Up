@@ -18,6 +18,9 @@ export interface CachedArticle {
   channelId: string;
   subchannelId: string | null;
   paywalled: boolean;
+  /** See prisma/schema.prisma's Article.relevanceScore comment — same field, JSON-file mirror.
+   * Absent on anything merged before this field existed. */
+  relevanceScore?: number;
 }
 
 interface ChannelBucket {
@@ -198,6 +201,7 @@ export class ArticlesCache {
         channelId,
         subchannelId,
         paywalled: isPaywalledDomain(hostname),
+        relevanceScore: article.relevanceScore,
       });
       addedIds.push(id);
     }

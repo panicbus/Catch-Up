@@ -119,6 +119,10 @@ model Article {
   provider       String
   paywalled      Boolean  @default(false)
   titleDedupeKey String   @map("title_dedupe_key")
+  // relevance.ts's additive keep/reject score at the moment this article was saved — null for
+  // anything merged before this field existed, or if scoring itself errored (see filterByRelevance's
+  // defensive catch). Used to rank within a channel (best-first) rather than only newest-first.
+  relevanceScore Int?     @map("relevance_score")
 
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   channel    Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)

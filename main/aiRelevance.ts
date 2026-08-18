@@ -113,8 +113,15 @@ export async function filterRelevant(
 }
 
 /** Return the kept articles in their original fetched order (the feed sorts newest-first later, but
- * keeping input order here avoids surprising downstream dedupe/merge). */
+ * keeping input order here avoids surprising downstream dedupe/merge). Walks `original` for order
+ * but returns the objects from `kept` — those carry the relevanceScore filterByRelevance/
+ * borderlineArticles attached (see relevance.ts); `original`'s own objects never got one. */
 function orderLike(original: FetchedArticle[], kept: FetchedArticle[]): FetchedArticle[] {
-  const keepSet = new Set(kept.map((a) => a.url));
-  return original.filter((a) => keepSet.has(a.url));
+  const byUrl = new Map(kept.map((a) => [a.url, a]));
+  const ordered: FetchedArticle[] = [];
+  for (const a of original) {
+    const scored = byUrl.get(a.url);
+    if (scored) ordered.push(scored);
+  }
+  return ordered;
 }

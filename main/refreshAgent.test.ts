@@ -95,7 +95,11 @@ describe('runChannel — end-to-end locality threading (mocked providers, real o
 
     expect(mergeSpy).toHaveBeenCalledTimes(1);
     const [, , keptArticles] = mergeSpy.mock.calls[0];
-    expect(keptArticles).toEqual([BANFF_STORY]);
+    // relevanceScore 3 = termSnippet (2, "wildfires" named only in the snippet) + includeSnippet (1,
+    // the same word double-counts as the topic channel's own include keyword — see relevance.ts's
+    // W.localityNear comment). Calgary-to-Banff is ~128km, inside the deliberately neutral middle
+    // band between LOCALITY_NEAR_KM (100) and LOCALITY_FAR_KM (500), so locality adds nothing here.
+    expect(keptArticles).toEqual([{ ...BANFF_STORY, relevanceScore: 3 }]);
   });
 
   it('keeps the same story via the real pipeline when no home location is configured', async () => {
@@ -105,7 +109,7 @@ describe('runChannel — end-to-end locality threading (mocked providers, real o
     await runChannel(deps, 'ch1');
 
     const [, , keptArticles] = mergeSpy.mock.calls[0];
-    expect(keptArticles).toEqual([BANFF_STORY]);
+    expect(keptArticles).toEqual([{ ...BANFF_STORY, relevanceScore: 3 }]);
   });
 
   it('returns a not-found result for an unknown channel id without touching providers', async () => {

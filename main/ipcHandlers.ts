@@ -24,6 +24,7 @@ export function broadcast(event: DataChangeEvent): void {
 function toArticle(cached: CachedArticle, dataStore: DataStore): Article {
   return {
     ...cached,
+    relevanceScore: cached.relevanceScore ?? null,
     bookmarked: dataStore.isBookmarked(cached.id),
     read: dataStore.isRead(cached.id),
   };

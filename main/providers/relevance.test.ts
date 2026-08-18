@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterByRelevance, type RelevanceContext } from './relevance';
+import { filterByRelevance, borderlineArticles, type RelevanceContext } from './relevance';
 import { channelProfile } from './channelProfiles';
 import { resolveCity } from '../locality/gazetteer';
 import type { FetchedArticle } from './types';
@@ -520,5 +520,43 @@ describe('loose providers on a category main feed need two distinct keyword hits
     const ctx: RelevanceContext = { topic: 'Sports', channelName: 'Sports', subchannelName: null, profile, homeLocation: noHome };
     const a = article({ title: 'Local team advances to regional finals', provider: 'custom:abc123' });
     expect(keeps(a, ctx)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// relevanceScore — the ranking signal filterByRelevance/borderlineArticles now attach to every
+// surviving article (see FetchedArticle.relevanceScore), reusing the same additive score that
+// already decided keep/reject rather than discarding it. These are regression guards on the
+// ranking-relevant ordering, not on the keep/reject boundary itself (that's covered above).
+// ---------------------------------------------------------------------------------------------
+describe('relevanceScore — the persisted ranking signal', () => {
+  const techProfile = channelProfile('Tech');
+
+  it('attaches a higher score to a story with stronger on-topic evidence than a weaker one', () => {
+    const ctx: RelevanceContext = { topic: 'Tech', channelName: 'Tech', subchannelName: null, profile: techProfile, homeLocation: noHome };
+    // Section match (+3) plus a title keyword (+2) — strong, structured evidence.
+    const strong = article({ title: 'New chip startup unveils AI laptop', section: 'technology' });
+    // A single, weaker snippet-only keyword hit, no section field at all.
+    const weak = article({ title: 'A quiet afternoon in the newsroom', snippet: 'The new chip launch got a brief mention.', section: null });
+
+    const [strongResult] = filterByRelevance([strong], ctx);
+    const [weakResult] = filterByRelevance([weak], ctx);
+
+    expect(strongResult.relevanceScore).toBeGreaterThan(weakResult.relevanceScore!);
+  });
+
+  it('does not attach a score to a rejected article (it never reaches the kept array at all)', () => {
+    const ctx: RelevanceContext = { topic: 'Tech', channelName: 'Tech', subchannelName: null, profile: techProfile, homeLocation: noHome };
+    const a = article({ title: 'Virginia Tech Hokies win the quarterback showdown', section: null });
+    expect(filterByRelevance([a], ctx)).toEqual([]);
+  });
+
+  it('borderlineArticles attaches a score too, so an AI-rescued story is still rankable', () => {
+    const giantsProfile = channelProfile('San Francisco Giants');
+    const ctx: RelevanceContext = { topic: 'San Francisco Giants', channelName: 'San Francisco Giants', subchannelName: null, profile: giantsProfile, homeLocation: noHome };
+    const a = article({ title: 'Giants win 5-2 behind a strong outing from the bullpen' });
+
+    const [result] = borderlineArticles([a], ctx);
+    expect(result.relevanceScore).toBeTypeOf('number');
   });
 });

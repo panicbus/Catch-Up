@@ -42,6 +42,7 @@ const ARTICLE_SELECT = {
   channelId: true,
   subchannelId: true,
   paywalled: true,
+  relevanceScore: true,
 } as const;
 
 /** The narrowed row shape ARTICLE_SELECT produces. Typed off PrismaArticle rather than restated, so
@@ -63,6 +64,7 @@ function toArticle(a: SelectedArticle, read: boolean, bookmarked: boolean): Arti
     channelId: a.channelId,
     subchannelId: a.subchannelId,
     paywalled: a.paywalled,
+    relevanceScore: a.relevanceScore,
     bookmarked,
     read,
   };
@@ -214,6 +216,7 @@ export async function merge(
       provider: article.provider,
       paywalled: isPaywalledDomain(hostname),
       titleDedupeKey: dedupeKey,
+      relevanceScore: article.relevanceScore ?? null,
     });
     addedIds.push(id);
   }

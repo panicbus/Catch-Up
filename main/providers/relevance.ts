@@ -426,6 +426,18 @@ function scoreArticle(article: FetchedArticle, gate: GateContext): ScoredSignals
 
 type Verdict = 'keep' | 'reject' | 'borderline';
 
+interface Judgment {
+  verdict: Verdict;
+  /** scoreArticle's raw additive score — exposed alongside the verdict (not just the threshold
+   * decision) so callers can persist it as a relevance/ranking signal for articles that survive.
+   * Still fundamentally a keep/reject score, not a graded quality score: its weights were tuned so
+   * one clear negative reliably sinks a story, not so distance above zero forms a smooth "how good"
+   * scale. But the positive weights already DO form a coherent rough ordering among kept articles —
+   * a title match plus a section match outscores a single weak snippet hit — which is what makes it
+   * usable for ranking without a separate scoring pass. */
+  score: number;
+}
+
 /** Three-way, not a boolean keep/reject — 'borderline' is a NEW category: a story the strict
  * keyword rules reject, but only for a reason that's about PRECISION of matching, not genuine
  * lack of evidence (a real exclude-keyword hit, a foreign section, or literally zero on-topic
@@ -436,20 +448,21 @@ type Verdict = 'keep' | 'reject' | 'borderline';
  * gets a chance to be rescued there, while a user with no AI configured simply keeps the strict
  * result, same as before. See judgeArticle's two 'borderline' branches for exactly which cases
  * qualify. */
-function judgeArticle(article: FetchedArticle, gate: GateContext): Verdict {
+function judgeArticle(article: FetchedArticle, gate: GateContext): Judgment {
   const signals = scoreArticle(article, gate);
+  const score = signals.score;
 
   if (gate.requireSpecificTerm) {
     // Strict tier (every subchannel + a topic/entity channel's main feed): the specific term must be
     // named (in the title, a provider tag, or the snippet), and the story must not be net-negative.
     // This is what keeps a Star-Trek or generic-marketing story out of a "Phish" channel — a real
     // Phish story names Phish, so a story that never does is dropped.
-    if (signals.hasSpecificTerm && signals.score >= KEEP_SCORE) return 'keep';
+    if (signals.hasSpecificTerm && score >= KEEP_SCORE) return { verdict: 'keep', score };
     // Borderline: SOME (not all) of a multi-word entity's words appeared, and nothing else already
     // torpedoed the score — this is exactly the "San Francisco Giants" case, real coverage that
     // just says "Giants," not confidently off-topic content.
-    if (signals.hasAnySpecificTerm && signals.score >= KEEP_SCORE) return 'borderline';
-    return 'reject';
+    if (signals.hasAnySpecificTerm && score >= KEEP_SCORE) return { verdict: 'borderline', score };
+    return { verdict: 'reject', score };
   }
 
   // Lenient tier (a CATEGORY channel's main feed only): keep unless net-negative. Any loose source
@@ -472,11 +485,11 @@ function judgeArticle(article: FetchedArticle, gate: GateContext): Verdict {
       // Borderline: exactly one distinct keyword hit and nothing structural — genuinely uncertain
       // without more context (could be a real but thinly-worded match, could be a coincidence),
       // worth an AI opinion when one's available rather than a flat reject.
-      if (signals.includeHitCount === 1 && signals.score >= KEEP_SCORE) return 'borderline';
-      return 'reject';
+      if (signals.includeHitCount === 1 && score >= KEEP_SCORE) return { verdict: 'borderline', score };
+      return { verdict: 'reject', score };
     }
   }
-  return signals.score >= KEEP_SCORE ? 'keep' : 'reject';
+  return { verdict: score >= KEEP_SCORE ? 'keep' : 'reject', score };
 }
 
 /** Drop off-topic stories from a freshly-fetched batch, keeping the rest in their original order (the
@@ -486,7 +499,12 @@ function judgeArticle(article: FetchedArticle, gate: GateContext): Verdict {
 export function filterByRelevance(articles: FetchedArticle[], ctx: RelevanceContext): FetchedArticle[] {
   try {
     const gate = buildGateContext(ctx);
-    return articles.filter((a) => judgeArticle(a, gate) === 'keep');
+    const kept: FetchedArticle[] = [];
+    for (const a of articles) {
+      const judgment = judgeArticle(a, gate);
+      if (judgment.verdict === 'keep') kept.push({ ...a, relevanceScore: judgment.score });
+    }
+    return kept;
   } catch (err) {
     console.warn('[relevance] filter error, keeping batch unfiltered', err);
     return articles;
@@ -505,7 +523,12 @@ export function filterByRelevance(articles: FetchedArticle[], ctx: RelevanceCont
 export function borderlineArticles(articles: FetchedArticle[], ctx: RelevanceContext): FetchedArticle[] {
   try {
     const gate = buildGateContext(ctx);
-    return articles.filter((a) => judgeArticle(a, gate) === 'borderline');
+    const borderline: FetchedArticle[] = [];
+    for (const a of articles) {
+      const judgment = judgeArticle(a, gate);
+      if (judgment.verdict === 'borderline') borderline.push({ ...a, relevanceScore: judgment.score });
+    }
+    return borderline;
   } catch (err) {
     console.warn('[relevance] borderline scan error, skipping AI rescue for this batch', err);
     return [];
