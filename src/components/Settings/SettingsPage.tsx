@@ -45,22 +45,22 @@ export function SettingsPage() {
         <ProviderStatusPanel />
       </section>
 
-      <section className="settings-section">
-        <h2 className="settings-section__title">AI filtering</h2>
-        <AiFilteringSetting />
-      </section>
-
-      <section className="settings-section">
-        <h2 className="settings-section__title">Trusted sources</h2>
-        <TrustedSourcesSetting />
-      </section>
-
       {isWeb && (
         <section className="settings-section">
           <h2 className="settings-section__title">Your own sources</h2>
           <CustomSourcesSetting />
         </section>
       )}
+
+      <section className="settings-section">
+        <h2 className="settings-section__title">Trusted sources</h2>
+        <TrustedSourcesSetting />
+      </section>
+
+      <section className="settings-section">
+        <h2 className="settings-section__title">AI filtering</h2>
+        <AiFilteringSetting />
+      </section>
 
       {isWeb && (
         <section className="settings-section">
