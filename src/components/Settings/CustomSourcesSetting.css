@@ -39,14 +39,10 @@
   opacity: 0.6;
 }
 
-/* Same bordered box + divided rows as ChannelManageList — no collapsible toggle here, unlike that
-   one, since this list is capped at 10 and short enough to just always show. */
+/* Lives inside SettingsAccordion's body-inner now, which already provides the border/background —
+   this only needs the divided-row layout below. */
 .custom-sources__list {
   margin-top: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--surface);
 }
 
 .custom-sources__row {

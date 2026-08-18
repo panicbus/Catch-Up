@@ -2,6 +2,7 @@ import { useEffect, useState, type KeyboardEvent } from 'react';
 import { getCustomSources, addCustomSource, deleteCustomSource, retryCustomSource } from '../../services/api';
 import { relativeTime } from '../../services/formatters';
 import { Button } from '../common/Button';
+import { SettingsAccordion } from './SettingsAccordion';
 import type { AddCustomSourceResult, CustomSource } from '../../../ipc-contract';
 import './CustomSourcesSetting.css';
 
@@ -110,35 +111,37 @@ function CustomSourcesSettingInner() {
       {addError && <p className="custom-sources__add-error">{addError}</p>}
 
       {sources && sources.length > 0 && (
-        <div className="custom-sources__list">
-          {sources.map((source) => (
-            <div key={source.id} className="custom-sources__row">
-              <div className="custom-sources__row-main">
-                <span className="custom-sources__row-label">{source.label}</span>
-                <span className="custom-sources__row-url">{source.siteUrl}</span>
-                {source.disabledAt ? (
-                  <span className="custom-sources__row-status custom-sources__row-status--error">
-                    Couldn’t check this source recently{source.lastError ? ` (${source.lastError})` : ''}.
-                  </span>
-                ) : source.lastFetchedAt ? (
-                  <span className="custom-sources__row-status">Checked {relativeTime(source.lastFetchedAt)}</span>
-                ) : (
-                  <span className="custom-sources__row-status">Not checked yet</span>
-                )}
-              </div>
-              <div className="custom-sources__row-actions">
-                {source.disabledAt && (
-                  <Button variant="ghost" size="sm" onClick={() => retrySource(source.id)} disabled={retryingId === source.id}>
-                    {retryingId === source.id ? 'Retrying…' : 'Retry'}
+        <SettingsAccordion label="Your sources" subtitle={`${sources.length}`}>
+          <div className="custom-sources__list">
+            {sources.map((source) => (
+              <div key={source.id} className="custom-sources__row">
+                <div className="custom-sources__row-main">
+                  <span className="custom-sources__row-label">{source.label}</span>
+                  <span className="custom-sources__row-url">{source.siteUrl}</span>
+                  {source.disabledAt ? (
+                    <span className="custom-sources__row-status custom-sources__row-status--error">
+                      Couldn’t check this source recently{source.lastError ? ` (${source.lastError})` : ''}.
+                    </span>
+                  ) : source.lastFetchedAt ? (
+                    <span className="custom-sources__row-status">Checked {relativeTime(source.lastFetchedAt)}</span>
+                  ) : (
+                    <span className="custom-sources__row-status">Not checked yet</span>
+                  )}
+                </div>
+                <div className="custom-sources__row-actions">
+                  {source.disabledAt && (
+                    <Button variant="ghost" size="sm" onClick={() => retrySource(source.id)} disabled={retryingId === source.id}>
+                      {retryingId === source.id ? 'Retrying…' : 'Retry'}
+                    </Button>
+                  )}
+                  <Button variant="danger" size="sm" onClick={() => removeSource(source.id)}>
+                    Remove
                   </Button>
-                )}
-                <Button variant="danger" size="sm" onClick={() => removeSource(source.id)}>
-                  Remove
-                </Button>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </SettingsAccordion>
       )}
     </div>
   );

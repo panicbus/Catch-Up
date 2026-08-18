@@ -33,6 +33,10 @@ function DigestSettingInner() {
   const { config: aiConfig, setProvider } = useAiConfig();
   const [emailDraft, setEmailDraft] = useState(settings.digestEmailOverride ?? '');
   const [emailError, setEmailError] = useState<string | null>(null);
+  // Closed by default — clicking "Turn on" forces it open (see enable() below) since that's
+  // exactly the moment there's something worth looking at; toggling it after that is otherwise
+  // just the accordion's own normal open/close, via onOpenChange.
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const enable = () => {
     const updates: Partial<AppSettings> = { digestEnabled: true };
@@ -47,6 +51,7 @@ function DigestSettingInner() {
     // on AI filtering (using the app's shared free Gemini key) if it isn't already, rather than
     // making this a second thing to go find in Settings.
     if (aiConfig.provider === null) setProvider('gemini');
+    setDetailsOpen(true);
   };
 
   const toggleChannel = (channelId: string) => {
@@ -91,7 +96,7 @@ function DigestSettingInner() {
       </p>
 
       {settings.digestEnabled && (
-        <SettingsAccordion label="Digest details" defaultOpen>
+        <SettingsAccordion label="Digest details" open={detailsOpen} onOpenChange={setDetailsOpen}>
           <div className="digest-setting__body">
             <div className="digest-setting__field">
               <label className="digest-setting__field-label" htmlFor="digest-hour">
@@ -150,13 +155,13 @@ function DigestSettingInner() {
 
             <div className="digest-setting__field">
               <label className="digest-setting__field-label" htmlFor="digest-email">
-                Send to a different email (optional)
+                Send to a different email (optional — leave blank to use your sign-in email)
               </label>
               <input
                 id="digest-email"
                 className="digest-setting__input"
                 type="email"
-                placeholder="you@example.com — leave blank to use your sign-in email"
+                placeholder="you@example.com"
                 value={emailDraft}
                 onChange={(e) => {
                   setEmailDraft(e.target.value);

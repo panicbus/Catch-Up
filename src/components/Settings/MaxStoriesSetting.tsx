@@ -1,7 +1,7 @@
 import { useSettings } from '../../hooks/useSettings';
 import './MaxStoriesSetting.css';
 
-const OPTIONS = [10, 25, 50] as const;
+const OPTIONS = [10, 25, 50, 100] as const;
 
 /** Caps how many unread stories show at once in a channel's main feed (read-stories archive is
  * unaffected). Defaults to 25, so this always shows a real selection out of the box instead of

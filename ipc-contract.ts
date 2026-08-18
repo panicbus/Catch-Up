@@ -188,9 +188,9 @@ export interface AppSettings {
   rollTheDiceChannelIds: string[] | null;
   /** How many unread stories show at once in a channel's main feed before older ones are held
    * back (the read-stories archive is unaffected — this only caps the active unread list).
-   * Defaults to 25, one of the three choices Settings offers (10/25/50), so the picker always
+   * Defaults to 25, one of the four choices Settings offers (10/25/50/100), so the picker always
    * shows a real selection rather than landing on an unlabeled in-between value. */
-  maxStoriesShown: 10 | 25 | 50;
+  maxStoriesShown: 10 | 25 | 50 | 100;
   /** User's home city, used to deprioritize geographically distant local stories in topic/entity
    * channels (e.g. a "Wildfires" channel showing a small far-away town's fire story) and, more
    * strongly, a handful of category channels (Politics/Business/Health/Science/Technology) where a

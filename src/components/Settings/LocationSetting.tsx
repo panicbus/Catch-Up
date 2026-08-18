@@ -56,7 +56,7 @@ export function LocationSetting() {
 
       {!editing && settings.homeLocation ? (
         <p className="location-setting__confirm">
-          Currently set to: {settings.homeLocation.label}{' '}
+          Currently set to: <strong className="location-setting__value">{settings.homeLocation.label}</strong>{' '}
           <button type="button" className="location-setting__change-link" onClick={startChange}>
             Change location
           </button>

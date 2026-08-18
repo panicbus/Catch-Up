@@ -25,6 +25,12 @@ interface SettingsAccordionProps {
   /** Right-aligned small text next to the label, e.g. "3 of 8 included". */
   subtitle?: string;
   defaultOpen?: boolean;
+  /** Controlled open state — set this (with onOpenChange) when a parent needs to force the
+   * accordion open/closed itself (e.g. DigestSetting auto-opening on "Turn on"), rather than just
+   * seeding its initial state. Omit both for the plain uncontrolled behavior (RollTheDiceSettings,
+   * TrustedSourcesSetting) — defaultOpen alone still works exactly as before. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   children: ReactNode;
 }
 
@@ -33,12 +39,20 @@ interface SettingsAccordionProps {
  * chevron/grid-rows-accordion pair. No JS height measuring: the body's grid-template-rows tween
  * (0fr -> 1fr) is the same trick used elsewhere in this app (NewsCard's expand, NewsFeed's read
  * archive). */
-export function SettingsAccordion({ label, subtitle, defaultOpen = false, children }: SettingsAccordionProps) {
-  const [open, setOpen] = useState(defaultOpen);
+export function SettingsAccordion({ label, subtitle, defaultOpen = false, open: controlledOpen, onOpenChange, children }: SettingsAccordionProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : uncontrolledOpen;
+
+  const toggle = () => {
+    const next = !open;
+    if (isControlled) onOpenChange?.(next);
+    else setUncontrolledOpen(next);
+  };
 
   return (
     <div className="settings-accordion">
-      <button type="button" className="settings-accordion__toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+      <button type="button" className="settings-accordion__toggle" onClick={toggle} aria-expanded={open}>
         <ChevronIcon open={open} />
         <span className="settings-accordion__label">{label}</span>
         {subtitle && <span className="settings-accordion__subtitle">{subtitle}</span>}
