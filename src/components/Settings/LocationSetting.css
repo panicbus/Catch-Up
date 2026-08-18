@@ -34,6 +34,17 @@
   margin-top: 8px;
 }
 
+.location-setting__change-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* iOS Safari auto-zooms the whole page on focusing any input styled under 16px — this is 13px, so
    tapping it zoomed the whole screen in (same fix already applied elsewhere — see
    SubchannelManagePanel.css and ChannelManageList.css for the identical issue). */

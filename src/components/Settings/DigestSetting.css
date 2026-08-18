@@ -36,8 +36,10 @@
   max-width: 560px;
 }
 
+/* Lives inside SettingsAccordion's body-inner, which has no padding of its own — this box needs
+   its own so the fields don't touch the accordion's edges. */
 .digest-setting__body {
-  margin-top: 18px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -79,30 +81,6 @@
 .digest-setting__input--tz {
   flex: 1;
   min-width: 220px;
-}
-
-.digest-setting__channels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  padding: 12px 14px;
-}
-
-.digest-setting__channel {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13.5px;
-  color: var(--text);
-}
-
-.digest-setting__empty {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-faint);
 }
 
 .digest-setting__error {

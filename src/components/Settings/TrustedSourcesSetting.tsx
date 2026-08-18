@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent } from 'react';
 import { useSettings } from '../../hooks/useSettings';
 import { Button } from '../common/Button';
+import { SettingsAccordion } from './SettingsAccordion';
 import './TrustedSourcesSetting.css';
 
 /** Accepts a bare domain ("reuters.com"), a full URL, or one with "www." — reduces all three to
@@ -86,16 +87,18 @@ export function TrustedSourcesSetting() {
       {error && <p className="trusted-sources-setting__error">{error}</p>}
 
       {settings.trustedSourceDomains.length > 0 && (
-        <div className="trusted-sources-setting__list">
-          {settings.trustedSourceDomains.map((domain) => (
-            <div key={domain} className="trusted-sources-setting__row">
-              <span className="trusted-sources-setting__row-label">{domain}</span>
-              <Button variant="danger" size="sm" onClick={() => removeDomain(domain)}>
-                Remove
-              </Button>
-            </div>
-          ))}
-        </div>
+        <SettingsAccordion label="Trusted" subtitle={`${settings.trustedSourceDomains.length}`}>
+          <div className="trusted-sources-setting__list">
+            {settings.trustedSourceDomains.map((domain) => (
+              <div key={domain} className="trusted-sources-setting__row">
+                <span className="trusted-sources-setting__row-label">{domain}</span>
+                <Button variant="danger" size="sm" onClick={() => removeDomain(domain)}>
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+        </SettingsAccordion>
       )}
     </div>
   );

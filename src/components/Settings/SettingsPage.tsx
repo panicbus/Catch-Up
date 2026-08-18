@@ -41,6 +41,11 @@ export function SettingsPage() {
       </section>
 
       <section className="settings-section">
+        <h2 className="settings-section__title">Default news providers</h2>
+        <ProviderStatusPanel />
+      </section>
+
+      <section className="settings-section">
         <h2 className="settings-section__title">AI filtering</h2>
         <AiFilteringSetting />
       </section>
@@ -48,11 +53,6 @@ export function SettingsPage() {
       <section className="settings-section">
         <h2 className="settings-section__title">Trusted sources</h2>
         <TrustedSourcesSetting />
-      </section>
-
-      <section className="settings-section">
-        <h2 className="settings-section__title">News providers</h2>
-        <ProviderStatusPanel />
       </section>
 
       {isWeb && (

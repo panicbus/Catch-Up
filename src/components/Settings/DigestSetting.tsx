@@ -3,6 +3,8 @@ import { useSettings } from '../../hooks/useSettings';
 import { useChannels } from '../../hooks/useChannels';
 import { useAiConfig } from '../../hooks/useAiConfig';
 import { Button } from '../common/Button';
+import { SettingsAccordion } from './SettingsAccordion';
+import { ChannelChecklist } from './ChannelChecklist';
 import type { AppSettings } from '../../../ipc-contract';
 import './DigestSetting.css';
 
@@ -89,91 +91,83 @@ function DigestSettingInner() {
       </p>
 
       {settings.digestEnabled && (
-        <div className="digest-setting__body">
-          <div className="digest-setting__field">
-            <label className="digest-setting__field-label" htmlFor="digest-hour">
-              Send at
-            </label>
-            <div className="digest-setting__time-row">
-              <select
-                id="digest-hour"
-                className="digest-setting__select"
-                value={settings.digestSendHour}
-                onChange={(e) => update({ digestSendHour: Number(e.target.value) })}
-              >
-                {HOURS.map((h) => (
-                  <option key={h} value={h}>
-                    {hourLabel(h)}
-                  </option>
-                ))}
-              </select>
-              {SUPPORTED_TIMEZONES ? (
+        <SettingsAccordion label="Digest details" defaultOpen>
+          <div className="digest-setting__body">
+            <div className="digest-setting__field">
+              <label className="digest-setting__field-label" htmlFor="digest-hour">
+                Send at
+              </label>
+              <div className="digest-setting__time-row">
                 <select
+                  id="digest-hour"
                   className="digest-setting__select"
-                  value={settings.digestTimezone ?? ''}
-                  onChange={(e) => update({ digestTimezone: e.target.value })}
-                  aria-label="Time zone"
+                  value={settings.digestSendHour}
+                  onChange={(e) => update({ digestSendHour: Number(e.target.value) })}
                 >
-                  {settings.digestTimezone && !SUPPORTED_TIMEZONES.includes(settings.digestTimezone) && (
-                    <option value={settings.digestTimezone}>{settings.digestTimezone}</option>
-                  )}
-                  {SUPPORTED_TIMEZONES.map((tz) => (
-                    <option key={tz} value={tz}>
-                      {tz.replace(/_/g, ' ')}
+                  {HOURS.map((h) => (
+                    <option key={h} value={h}>
+                      {hourLabel(h)}
                     </option>
                   ))}
                 </select>
-              ) : (
-                <input
-                  className="digest-setting__input digest-setting__input--tz"
-                  type="text"
-                  value={settings.digestTimezone ?? ''}
-                  onChange={(e) => update({ digestTimezone: e.target.value })}
-                  aria-label="Time zone (IANA name, e.g. America/Los_Angeles)"
-                />
-              )}
+                {SUPPORTED_TIMEZONES ? (
+                  <select
+                    className="digest-setting__select"
+                    value={settings.digestTimezone ?? ''}
+                    onChange={(e) => update({ digestTimezone: e.target.value })}
+                    aria-label="Time zone"
+                  >
+                    {settings.digestTimezone && !SUPPORTED_TIMEZONES.includes(settings.digestTimezone) && (
+                      <option value={settings.digestTimezone}>{settings.digestTimezone}</option>
+                    )}
+                    {SUPPORTED_TIMEZONES.map((tz) => (
+                      <option key={tz} value={tz}>
+                        {tz.replace(/_/g, ' ')}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    className="digest-setting__input digest-setting__input--tz"
+                    type="text"
+                    value={settings.digestTimezone ?? ''}
+                    onChange={(e) => update({ digestTimezone: e.target.value })}
+                    aria-label="Time zone (IANA name, e.g. America/Los_Angeles)"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="digest-setting__field">
+              <span className="digest-setting__field-label">Channels included</span>
+              <ChannelChecklist
+                channels={channels}
+                isChecked={(id) => settings.digestChannelIds.includes(id)}
+                onToggle={toggleChannel}
+                emptyLabel="Add a channel first — there's nothing to include yet."
+              />
+            </div>
+
+            <div className="digest-setting__field">
+              <label className="digest-setting__field-label" htmlFor="digest-email">
+                Send to a different email (optional)
+              </label>
+              <input
+                id="digest-email"
+                className="digest-setting__input"
+                type="email"
+                placeholder="you@example.com — leave blank to use your sign-in email"
+                value={emailDraft}
+                onChange={(e) => {
+                  setEmailDraft(e.target.value);
+                  if (emailError) setEmailError(null);
+                }}
+                onBlur={saveEmail}
+              />
+              {emailError && <p className="digest-setting__error">{emailError}</p>}
             </div>
           </div>
-
-          <div className="digest-setting__field">
-            <span className="digest-setting__field-label">Channels included</span>
-            {channels.length === 0 ? (
-              <p className="digest-setting__empty">Add a channel first — there's nothing to include yet.</p>
-            ) : (
-              <div className="digest-setting__channels">
-                {channels.map((c) => (
-                  <label key={c.id} className="digest-setting__channel">
-                    <input
-                      type="checkbox"
-                      checked={settings.digestChannelIds.includes(c.id)}
-                      onChange={() => toggleChannel(c.id)}
-                    />
-                    {c.name}
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="digest-setting__field">
-            <label className="digest-setting__field-label" htmlFor="digest-email">
-              Send to a different email (optional)
-            </label>
-            <input
-              id="digest-email"
-              className="digest-setting__input"
-              type="email"
-              placeholder="you@example.com — leave blank to use your sign-in email"
-              value={emailDraft}
-              onChange={(e) => {
-                setEmailDraft(e.target.value);
-                if (emailError) setEmailError(null);
-              }}
-              onBlur={saveEmail}
-            />
-            {emailError && <p className="digest-setting__error">{emailError}</p>}
-          </div>
-        </div>
+        </SettingsAccordion>
       )}
     </div>
   );

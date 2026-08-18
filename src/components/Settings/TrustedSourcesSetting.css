@@ -36,12 +36,12 @@
   border-color: var(--accent);
 }
 
+/* Lives inside SettingsAccordion's body-inner, which already provides the border/background —
+   this only needs its own scroll cap, since the list has no upper bound on length. ~5 rows before
+   it scrolls (each row is ~45px including its border). */
 .trusted-sources-setting__list {
-  margin-top: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--surface);
+  max-height: 225px;
+  overflow-y: auto;
 }
 
 .trusted-sources-setting__row {
