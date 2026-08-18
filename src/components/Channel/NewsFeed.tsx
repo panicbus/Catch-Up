@@ -387,9 +387,22 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   const prevUnreadCountRef = useRef<number | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
 
+  // Set right before any action that removes a card from mainArticles above (or at) the current
+  // scroll position — checkmark-archive, swipe-dismiss, and the bulk flush button below all funnel
+  // through this same ref, read (and cleared) by the layout effect right after it. Declared here,
+  // ahead of its first use, since onLocalExit is the earliest of the three call sites.
+  const pendingArchiveCompensationRef = useRef<{ scrollRoot: HTMLElement; heightBefore: number } | null>(null);
+
   const onLocalExit = useCallback((articleId: string) => {
     setLocallyExited((prev) => {
       if (prev.has(articleId)) return prev;
+      // A swipe-dismissed or checkmark-dismissed card's fly-off animation has already finished by
+      // the time this fires (see NewsCard's commitDismiss) — so this removal from mainArticles is a
+      // synchronous, instant shrink, same as the bulk flush below. Confirmed live as a scroll jump:
+      // this is the everyday single-card dismiss path, not just the rarer "move all to archive"
+      // button that the first pass at this fix covered.
+      const scrollRoot = feedRef.current?.closest<HTMLElement>('.app-shell__main');
+      if (scrollRoot) pendingArchiveCompensationRef.current = { scrollRoot, heightBefore: scrollRoot.scrollHeight };
       const next = new Set(prev);
       next.add(articleId);
       return next;
@@ -514,6 +527,10 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   const archiveReadInPlace = useCallback((articleId: string) => {
     setKeepVisible((prev) => {
       if (!prev.has(articleId)) return prev;
+      // Same reasoning as onLocalExit above — this card's fly-off has already played out, so this is
+      // an instant shrink of mainArticles that needs the same compensation.
+      const scrollRoot = feedRef.current?.closest<HTMLElement>('.app-shell__main');
+      if (scrollRoot) pendingArchiveCompensationRef.current = { scrollRoot, heightBefore: scrollRoot.scrollHeight };
       const next = new Set(prev);
       next.delete(articleId);
       return next;
@@ -529,23 +546,13 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     onReadInPlaceCountChange?.(readInPlaceCount);
   }, [readInPlaceCount, onReadInPlaceCountChange]);
 
-  // Set right before the archiving state change below, read (and cleared) by the layout effect
-  // right after it — the handoff that lets that effect compensate scrollTop for exactly this one
-  // action without needing to run its measure-and-adjust logic on every render.
-  const pendingArchiveCompensationRef = useRef<{ scrollRoot: HTMLElement; heightBefore: number } | null>(null);
-
   useImperativeHandle(
     ref,
     () => ({
       flushReadInPlace: () => {
-        // A single card's own checkmark already animates its exit (NewsCard's own fly-off, THEN
-        // onArchiveReadInPlace after it finishes) — this bulk path had no equivalent at all: every
-        // read-in-place card vanished from mainArticles in one instant setKeepVisible(new Set()),
-        // with nothing to compensate if any of them sat above (or at) the current scroll position.
-        // Confirmed live as the reported "unpredictable scroll jump" — the browser doesn't auto-
-        // adjust scrollTop when content shrinks above the viewport, so the page silently yanks up
-        // by however much was removed. Measured here, compensated in the layout effect below once
-        // the DOM actually reflects the removal.
+        // Every read-in-place card vanishes from mainArticles in one instant setKeepVisible(new
+        // Set()) — same instant-shrink shape as the two single-card paths above, using the same
+        // pendingArchiveCompensationRef handoff to the layout effect below.
         const scrollRoot = feedRef.current?.closest<HTMLElement>('.app-shell__main');
         if (scrollRoot) pendingArchiveCompensationRef.current = { scrollRoot, heightBefore: scrollRoot.scrollHeight };
         setKeepVisible(new Set());
