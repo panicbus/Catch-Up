@@ -9,6 +9,7 @@ import { SubchannelBar } from './SubchannelBar';
 import { SubchannelPickerTrigger, SubchannelPickerPanel } from './SubchannelPicker';
 import { SubchannelManagePanel } from '../common/SubchannelManagePanel';
 import { ViewModeToggle } from './ViewModeToggle';
+import { SortModeToggle } from './SortModeToggle';
 import { NewsFeed, type NewsFeedHandle } from './NewsFeed';
 import { FeedSkeleton, ChannelPageSkeleton } from './FeedSkeleton';
 import { EmptyState } from '../common/EmptyState';
@@ -149,7 +150,8 @@ export function ChannelPage() {
 
   const { articles, loading, reload, subchannelCounts, totalUnread } = useChannelArticles(
     channel?.id ?? null,
-    subchannelId
+    subchannelId,
+    settings.defaultSortMode
   );
 
   // The sticky controls bar picks up the channel name once the page's own title has scrolled
@@ -399,6 +401,7 @@ export function ChannelPage() {
             {/* A grid view makes no sense at phone width — hidden rather than shown-disabled, since
                 there's nothing to toggle to. Forces the rendered feed to list mode below WITHOUT
                 writing to settings.defaultViewMode, which desktop shares. */}
+            <SortModeToggle value={settings.defaultSortMode} onChange={(mode) => update({ defaultSortMode: mode })} />
             {!isMobile && (
               <ViewModeToggle value={settings.defaultViewMode} onChange={(mode) => update({ defaultViewMode: mode })} />
             )}
@@ -484,6 +487,7 @@ export function ChannelPage() {
           onBackToParent={activeSubchannel ? () => setSubchannelId(null) : undefined}
           trustedSourceDomains={trustedSourceDomains}
           onToggleTrust={onToggleTrust}
+          sortMode={settings.defaultSortMode}
         />
       )}
     </div>

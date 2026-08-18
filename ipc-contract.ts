@@ -52,6 +52,8 @@ export interface ArticleListParams {
    * relying on channelId — it exists so a cross-channel view is one request rather than one per
    * channel. `subchannelId` doesn't apply: The Pool never drills into subchannels. */
   channelIds?: string[];
+  /** Defaults to 'newest' server-side when omitted — see SortMode. */
+  sortMode?: SortMode;
 }
 
 /** Unread + recent counts per channel id, for the home tiles. Deliberately its own tiny endpoint
@@ -168,10 +170,17 @@ export interface BookmarkEntry {
 }
 
 export type ViewMode = 'list' | 'grid';
+/** 'newest' (the long-standing default) or 'relevance' — server-applied in both getArticles
+ * implementations (relevanceScore desc, publishedAt desc as tiebreak), not a client-side re-sort,
+ * so pagination/caps stay coherent with what's actually returned. */
+export type SortMode = 'newest' | 'relevance';
 export type Theme = 'light' | 'dark';
 
 export interface AppSettings {
   defaultViewMode: ViewMode;
+  /** Defaults to 'newest' — same "old data files just don't have it" fallback convention as every
+   * other field here (see rollTheDiceChannelIds). */
+  defaultSortMode: SortMode;
   refreshIntervalMinutes: number;
   theme: Theme;
   /** Channel ids Roll the dice is allowed to pull from. null/undefined means every channel — the

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { api } from '../services/api';
 import { useReloadOnDataChange } from './useReloadOnDataChange';
-import type { Article } from '../../ipc-contract';
+import type { Article, SortMode } from '../../ipc-contract';
 
 export interface ChannelArticles {
   /** Articles for the active subchannel, or the whole channel when activeSubchannelId is null.
@@ -24,7 +24,11 @@ export interface ChannelArticles {
  * A story is tagged with the subchannelId of the search that first found it (null = channel-level),
  * which is exactly how a pill filters the view — so a null-tagged unread counts toward the total but
  * no subchannel, and the per-subchannel numbers can sum to less than the total. */
-export function useChannelArticles(channelId: string | null, activeSubchannelId: string | null): ChannelArticles {
+export function useChannelArticles(
+  channelId: string | null,
+  activeSubchannelId: string | null,
+  sortMode: SortMode = 'newest'
+): ChannelArticles {
   // Tag the loaded set with the channel it's for. On a channel switch the previous channel's data
   // lingers for one fetch (same as the feed always has — clearing it would flash an empty "all
   // caught up" screen), but tagging lets the counts below ignore it so the pills never show the
@@ -54,12 +58,12 @@ export function useChannelArticles(channelId: string | null, activeSubchannelId:
     // data shouldn't drop the feed into a skeleton every time; that's for a channel switch or first
     // load, not routine revalidation.
     if (loadedChannelIdRef.current !== channelId) setLoading(true);
-    void api.getArticles({ channelId, subchannelId: null }).then((r) => {
+    void api.getArticles({ channelId, subchannelId: null, sortMode }).then((r) => {
       loadedChannelIdRef.current = channelId;
       setLoaded({ channelId, articles: r.articles });
       setLoading(false);
     });
-  }, [channelId]);
+  }, [channelId, sortMode]);
 
   useReloadOnDataChange(reload, { channelId, includeBookmarks: true });
 

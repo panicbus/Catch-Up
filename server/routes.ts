@@ -172,22 +172,24 @@ router.delete(
 router.get(
   '/articles',
   handle(async (userId, req) => {
-    const { channelId, channelIds, subchannelId, limit } = req.query as {
+    const { channelId, channelIds, subchannelId, limit, sortMode } = req.query as {
       channelId?: string;
       channelIds?: string;
       subchannelId?: string;
       limit?: string;
+      sortMode?: string;
     };
     const parsedLimit = limit ? Number(limit) : undefined;
+    const parsedSortMode = sortMode === 'relevance' ? 'relevance' : 'newest';
     // `channelIds` (comma-separated) is The Pool's path: it wants a slice of every channel at once,
     // and used to issue one request PER channel to get it. One query with an `IN` replaces all of
     // them. `channelId` stays the single-channel path used by the channel view.
     if (channelIds) {
       const ids = channelIds.split(',').map((s) => s.trim()).filter(Boolean);
-      const articles = await articlesCache.getArticlesForChannels(userId, ids, parsedLimit);
+      const articles = await articlesCache.getArticlesForChannels(userId, ids, parsedLimit, parsedSortMode);
       return { articles };
     }
-    const articles = await articlesCache.getArticles(userId, channelId ?? '', subchannelId ?? null, parsedLimit);
+    const articles = await articlesCache.getArticles(userId, channelId ?? '', subchannelId ?? null, parsedLimit, parsedSortMode);
     return { articles };
   })
 );

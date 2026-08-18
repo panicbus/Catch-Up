@@ -11,7 +11,7 @@ import { isPaywalledDomain } from '../../main/providers/paywallDomains';
 import type { FetchedArticle } from '../../main/providers/types';
 import { Prisma } from '../generated/prisma/client';
 import type { Article as PrismaArticle } from '../generated/prisma/client';
-import type { Article } from '../../ipc-contract';
+import type { Article, SortMode } from '../../ipc-contract';
 
 const MAX_AGE_DAYS = 14;
 const MAX_COUNT = 300;
@@ -89,6 +89,18 @@ async function alreadyReadDedupeKeys(userId: string, keys: string[]): Promise<Se
   return new Set(rows.map((r) => r.key));
 }
 
+/** 'newest' (the long-standing default): publishedAt desc alone. 'relevance': relevanceScore desc
+ * — NULLS LAST is explicit, not Postgres's own default, because Postgres defaults DESC to NULLS
+ * FIRST, which would put every article merged before this field existed (or scored on the
+ * defensive-catch path) at the very TOP of a "most relevant" sort, backwards from the intent —
+ * with publishedAt desc as the tiebreak among equal (or equally absent) scores. */
+function orderByFor(sortMode: SortMode): Prisma.ArticleOrderByWithRelationInput[] {
+  if (sortMode === 'relevance') {
+    return [{ relevanceScore: { sort: 'desc', nulls: 'last' } }, { publishedAt: 'desc' }];
+  }
+  return [{ publishedAt: 'desc' }];
+}
+
 /** Stable sort: pushes already-read-elsewhere duplicates (see alreadyReadDedupeKeys) to the bottom
  * without disturbing the relative order of everything else, or of the buried items among
  * themselves — `rows` arrives pre-sorted by the caller's own orderBy (newest-first today, also
@@ -103,11 +115,12 @@ export async function getArticles(
   userId: string,
   channelId: string,
   subchannelId?: string | null,
-  limit = 300
+  limit = 300,
+  sortMode: SortMode = 'newest'
 ): Promise<Article[]> {
   const fetched = await prisma.article.findMany({
     where: { userId, channelId, ...(subchannelId ? { subchannelId } : {}) },
-    orderBy: { publishedAt: 'desc' },
+    orderBy: orderByFor(sortMode),
     take: limit,
     select: { ...ARTICLE_SELECT, titleDedupeKey: true },
   });
@@ -138,12 +151,13 @@ export async function getArticleById(userId: string, channelId: string, id: stri
 export async function getArticlesForChannels(
   userId: string,
   channelIds: string[],
-  limit = 300
+  limit = 300,
+  sortMode: SortMode = 'newest'
 ): Promise<Article[]> {
   if (channelIds.length === 0) return [];
   const fetched = await prisma.article.findMany({
     where: { userId, channelId: { in: channelIds } },
-    orderBy: { publishedAt: 'desc' },
+    orderBy: orderByFor(sortMode),
     take: limit,
     select: { ...ARTICLE_SELECT, titleDedupeKey: true },
   });

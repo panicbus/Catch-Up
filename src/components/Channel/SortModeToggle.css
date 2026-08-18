@@ -1,0 +1,26 @@
+.sort-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.sort-toggle__btn {
+  background: var(--surface);
+  border: none;
+  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.sort-toggle__btn + .sort-toggle__btn {
+  border-left: 1px solid var(--border-strong);
+}
+
+.sort-toggle__btn--active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}

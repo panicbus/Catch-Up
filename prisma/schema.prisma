@@ -164,6 +164,7 @@ model Bookmark {
 model Settings {
   userId                 String    @id @map("user_id")
   defaultViewMode        String    @default("list") @map("default_view_mode")
+  defaultSortMode        String    @default("newest") @map("default_sort_mode")
   refreshIntervalMinutes Int       @default(30) @map("refresh_interval_minutes")
   theme                  String    @default("light")
   rollTheDiceChannelIds  String[]  @map("roll_the_dice_channel_ids")

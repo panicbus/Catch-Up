@@ -3,6 +3,7 @@ import { articlesCacheFilePath } from './paths';
 import { articleId, normalizeUrl, titleDedupeKey } from './providers/dedupe';
 import { isPaywalledDomain } from './providers/paywallDomains';
 import type { FetchedArticle } from './providers/types';
+import type { SortMode } from '../ipc-contract';
 
 export interface CachedArticle {
   id: string;
@@ -141,17 +142,28 @@ export class ArticlesCache {
   // most recent articles happen to be a content-light source (no snippet/image) could keep older,
   // richer articles from ever reaching the renderer at all, before NewsFeed's own
   // interspersing/capping logic ever got a chance to consider them.
-  getArticles(channelId: string, subchannelId?: string | null, limit = 300): CachedArticle[] {
+  getArticles(channelId: string, subchannelId?: string | null, limit = 300, sortMode: SortMode = 'newest'): CachedArticle[] {
     const bucket = this.data.byChannel[channelId];
     if (!bucket) return [];
     const filtered = subchannelId
       ? bucket.articles.filter((a) => a.subchannelId === subchannelId)
       : bucket.articles;
     const buried = this.readDedupeKeys();
+    const byDate = (a: CachedArticle, b: CachedArticle) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+    const primarySort =
+      sortMode === 'relevance'
+        ? // Undefined/absent scores sort as -Infinity, i.e. last — same NULLS LAST intent as the
+          // server's orderByFor, so an article merged before this field existed doesn't rank as
+          // if it were the MOST relevant thing in the channel purely for having no score at all.
+          (a: CachedArticle, b: CachedArticle) => {
+            const diff = (b.relevanceScore ?? -Infinity) - (a.relevanceScore ?? -Infinity);
+            return diff !== 0 ? diff : byDate(a, b);
+          }
+        : byDate;
     return [...filtered]
-      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+      .sort(primarySort)
       // Stable second pass: sinks already-read-elsewhere duplicates to the bottom without
-      // disturbing the date order established above, either among themselves or the rest — see
+      // disturbing the order established above, either among themselves or the rest — see
       // server/stores/articlesCache.ts's sinkAlreadyRead for the identical server-side version.
       .sort((a, b) => Number(buried.has(titleDedupeKey(a.title))) - Number(buried.has(titleDedupeKey(b.title))))
       .slice(0, limit);

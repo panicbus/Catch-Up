@@ -98,15 +98,24 @@ export function registerIpcHandlers({ dataStore, articlesCache, classificationSt
     // channel gets its fair share" Pool, which this call is not meant to alter. Dividing the budget
     // back out per channel restores that guarantee: with the caller's own math, this recovers
     // exactly MAX_PER_CHANNEL when every requested channel is included.
+    const sortMode = params.sortMode ?? 'newest';
     if (params.channelIds?.length) {
       const perChannelLimit = params.limit ? Math.ceil(params.limit / params.channelIds.length) : undefined;
       const merged = params.channelIds
-        .flatMap((id) => articlesCache.getArticles(id, null, perChannelLimit))
-        .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+        .flatMap((id) => articlesCache.getArticles(id, null, perChannelLimit, sortMode))
+        // Re-sort the merged set the same way each channel's own slice was already sorted — each
+        // channel contributes its own best/newest, but combining several channels' results needs
+        // its own final ordering pass to interleave them correctly.
+        .sort((a, b) =>
+          sortMode === 'relevance'
+            ? (b.relevanceScore ?? -Infinity) - (a.relevanceScore ?? -Infinity) ||
+              new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+            : new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+        )
         .slice(0, params.limit ?? undefined);
       return { articles: merged.map((a) => toArticle(a, dataStore)) };
     }
-    const cached = articlesCache.getArticles(params.channelId, params.subchannelId, params.limit);
+    const cached = articlesCache.getArticles(params.channelId, params.subchannelId, params.limit, sortMode);
     return { articles: cached.map((a) => toArticle(a, dataStore)) };
   });
   // Same counts the web build gets from its dedicated endpoint — computed straight off the

@@ -62,6 +62,7 @@ function toChannel(c: ChannelWithSubchannels): Channel {
 function toSettings(s: PrismaSettings): AppSettings {
   return {
     defaultViewMode: s.defaultViewMode as AppSettings['defaultViewMode'],
+    defaultSortMode: s.defaultSortMode as AppSettings['defaultSortMode'],
     refreshIntervalMinutes: s.refreshIntervalMinutes,
     theme: s.theme as AppSettings['theme'],
     rollTheDiceChannelIds: s.rollTheDiceChannelIds.length > 0 ? s.rollTheDiceChannelIds : null,
@@ -458,6 +459,7 @@ export async function setSettings(userId: string, partial: Partial<AppSettings>)
     where: { userId },
     data: {
       ...(partial.defaultViewMode !== undefined && { defaultViewMode: partial.defaultViewMode }),
+      ...(partial.defaultSortMode !== undefined && { defaultSortMode: partial.defaultSortMode }),
       ...(partial.refreshIntervalMinutes !== undefined && { refreshIntervalMinutes: partial.refreshIntervalMinutes }),
       ...(partial.theme !== undefined && { theme: partial.theme }),
       ...(partial.rollTheDiceChannelIds !== undefined && {

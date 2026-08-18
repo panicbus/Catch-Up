@@ -72,6 +72,7 @@ const DEFAULT_DATA: DataFile = {
   onboarding: { completed: false, completedAt: null },
   settings: {
     defaultViewMode: 'list',
+    defaultSortMode: 'newest',
     refreshIntervalMinutes: 30,
     theme: 'light',
     rollTheDiceChannelIds: null,

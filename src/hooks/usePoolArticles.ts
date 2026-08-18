@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { api } from '../services/api';
 import { useReloadOnDataChange } from './useReloadOnDataChange';
-import type { Article, Channel } from '../../ipc-contract';
+import type { Article, Channel, SortMode } from '../../ipc-contract';
 
 export interface PoolArticle extends Article {
   channelName: string;
@@ -18,7 +18,7 @@ const MAX_PER_CHANNEL = 50;
  * fan-out-then-merge shape as useChannelCounts: N parallel per-channel getArticles calls,
  * merged client-side, rather than a new IPC endpoint — articles already carry channelId, so
  * there's nothing a main-process change would buy here. */
-export function usePoolArticles(channels: Channel[]) {
+export function usePoolArticles(channels: Channel[], sortMode: SortMode = 'newest') {
   const [articles, setArticles] = useState<PoolArticle[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,6 +38,7 @@ export function usePoolArticles(channels: Channel[]) {
         channelId: '',
         channelIds: channels.map((c) => c.id),
         limit: MAX_PER_CHANNEL * channels.length,
+        sortMode,
       })
       .then((r) => {
         // The same story can legitimately be pulled into two different channels independently (e.g.
@@ -49,15 +50,20 @@ export function usePoolArticles(channels: Channel[]) {
         for (const a of r.articles) {
           if (!byId.has(a.id)) byId.set(a.id, { ...a, channelName: nameById.get(a.channelId) ?? '' });
         }
-        // Already ordered newest-first by the server, but re-sorted here so this doesn't silently
-        // depend on that (and stays correct for the desktop bridge's own merge path).
-        setArticles(
-          [...byId.values()].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
-        );
+        // Already ordered by the server (relevance- or newest-first, per sortMode), but re-sorted
+        // here the same way so this doesn't silently depend on that (and stays correct for the
+        // desktop bridge's own merge path, which the server obviously doesn't go through).
+        const bySortMode =
+          sortMode === 'relevance'
+            ? (a: PoolArticle, b: PoolArticle) =>
+                (b.relevanceScore ?? -Infinity) - (a.relevanceScore ?? -Infinity) ||
+                new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+            : (a: PoolArticle, b: PoolArticle) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+        setArticles([...byId.values()].sort(bySortMode));
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [channels]);
+  }, [channels, sortMode]);
 
   // Still debounced: one poll tick delivers articles + readState + bookmarks, and without this each
   // would trigger its own reload of the same data.

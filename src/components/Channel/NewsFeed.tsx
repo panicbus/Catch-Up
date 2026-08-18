@@ -8,7 +8,7 @@ import { useScrollCatchUp } from '../../hooks/useScrollCatchUp';
 import { NewsCard, type NewsCardData } from './NewsCard';
 import { AllCaughtUp } from './AllCaughtUp';
 import { CaughtUpOverlay } from './CaughtUpOverlay';
-import type { ViewMode } from '../../../ipc-contract';
+import type { ViewMode, SortMode } from '../../../ipc-contract';
 import './NewsFeed.css';
 
 /** "Something to read in the expanded pane" — a real snippet or a thumbnail, either counts.
@@ -82,6 +82,13 @@ interface NewsFeedProps {
    * Both undefined together (the default) simply renders every card without a trust toggle. */
   trustedSourceDomains?: Set<string>;
   onToggleTrust?: (domain: string) => void;
+  /** 'newest' (default) groups the main section under day headers, same as always. 'relevance'
+   * renders one flat ranked list instead — day headers would re-sort each day's own bucket back
+   * to chronological order (see groupByDay), which would silently undo the very ranking the mode
+   * exists to show. The caller (ChannelPage/PoolPage) is expected to have already requested this
+   * order from the server (see useChannelArticles/usePoolArticles's own sortMode param) — this
+   * prop only controls how NewsFeed *renders* what it's given, not what order it arrives in. */
+  sortMode?: SortMode;
 }
 
 /** Imperative handle for parents (ChannelPage's "move read to archive" button). */
@@ -346,6 +353,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     onBackToParent,
     trustedSourceDomains,
     onToggleTrust,
+    sortMode = 'newest',
   }: NewsFeedProps,
   ref
 ) {
@@ -439,15 +447,23 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // to unread immediately — see locallyUnread above.
   const isRead = (a: NewsCardData) => a.read && !locallyUnread.has(a.id);
 
-  // articles arrive already sorted newest-first (see articlesCache.getArticles). In showReadDimmed
-  // mode (The Pool) the cap covers ALL recent stories (read stay, dimmed); otherwise only unread.
+  // articles arrive already sorted — newest-first, or relevance-first per sortMode (see
+  // articlesCache.getArticles). In showReadDimmed mode (The Pool) the cap covers ALL recent
+  // stories (read stay, dimmed); otherwise only unread.
   const baseUnread = !showReadDimmed && (partitionByRead || removeOnRead) ? articles.filter((a) => !isRead(a)) : articles;
   // Intersperse *before* slicing to the cap, not after — groupByDay (used below) always re-sorts
   // each day's own bucket back to pure chronological order, so any interspersing done after grouping
   // can only rearrange whatever already survived this cut. Doing it here means a content-having
   // article that would otherwise be sliced off entirely (behind a long recent-but-empty run from a
   // source like Google News RSS) still makes it into the visible set.
-  const cappedBase = intersperseByContent(baseUnread, hasReadableContent).slice(0, maxUnreadStories);
+  //
+  // Skipped entirely in relevance mode: the whole point of turning that mode on is an honest
+  // best-first order, and interspersing exists to visually break up content-less runs, which would
+  // reorder stories away from their actual rank for a reason that has nothing to do with relevance.
+  const cappedBase = (sortMode === 'relevance' ? baseUnread : intersperseByContent(baseUnread, hasReadableContent)).slice(
+    0,
+    maxUnreadStories
+  );
   const cappedBaseIds = useMemo(() => new Set(cappedBase.map((a) => a.id)), [cappedBase]);
 
   // Main section: the capped unread cards, plus (in catch-up mode) the ones read-in-place this
@@ -672,24 +688,46 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
               onBackToParent={onBackToParent}
             />
           )}
-          <DayGroups
-            articles={mainArticles}
-            viewMode={viewMode}
-            staysInPlace={!removeOnRead}
-            removeCardOnUnbookmark={removeCardOnUnbookmark}
-            expandedArticleId={expandedArticleId}
-            onToggleExpand={toggleExpand}
-            // The Pool dims all read cards (dimReadCards) and its check button un-reads them, so it
-            // doesn't use the readInPlace/archive path; channels do the reverse.
-            readInPlaceIds={catchUpMode && !showReadDimmed ? keepVisible : undefined}
-            dimReadCards={showReadDimmed}
-            onArchiveReadInPlace={catchUpMode && !showReadDimmed ? archiveReadInPlace : undefined}
-            onLocalExit={onLocalExit}
-            onSwipeDismissed={onSwipeDismissed}
-            onLocalUnread={onLocalUnread}
-            trustedSourceDomains={trustedSourceDomains}
-            onToggleTrust={onToggleTrust}
-          />
+          {sortMode === 'relevance' ? (
+            // One flat ranked list, no day headers — see NewsFeedProps.sortMode's own comment for
+            // why: groupByDay always re-sorts each day's own bucket back to chronological order,
+            // which would silently undo the ranking this mode exists to show.
+            <GridSection
+              articles={mainArticles}
+              isGrid={viewMode === 'grid'}
+              staysInPlace={!removeOnRead}
+              removeCardOnUnbookmark={removeCardOnUnbookmark}
+              expandedArticleId={expandedArticleId}
+              onToggleExpand={toggleExpand}
+              readInPlaceIds={catchUpMode && !showReadDimmed ? keepVisible : undefined}
+              dimReadCards={showReadDimmed}
+              onArchiveReadInPlace={catchUpMode && !showReadDimmed ? archiveReadInPlace : undefined}
+              onLocalExit={onLocalExit}
+              onSwipeDismissed={onSwipeDismissed}
+              onLocalUnread={onLocalUnread}
+              trustedSourceDomains={trustedSourceDomains}
+              onToggleTrust={onToggleTrust}
+            />
+          ) : (
+            <DayGroups
+              articles={mainArticles}
+              viewMode={viewMode}
+              staysInPlace={!removeOnRead}
+              removeCardOnUnbookmark={removeCardOnUnbookmark}
+              expandedArticleId={expandedArticleId}
+              onToggleExpand={toggleExpand}
+              // The Pool dims all read cards (dimReadCards) and its check button un-reads them, so it
+              // doesn't use the readInPlace/archive path; channels do the reverse.
+              readInPlaceIds={catchUpMode && !showReadDimmed ? keepVisible : undefined}
+              dimReadCards={showReadDimmed}
+              onArchiveReadInPlace={catchUpMode && !showReadDimmed ? archiveReadInPlace : undefined}
+              onLocalExit={onLocalExit}
+              onSwipeDismissed={onSwipeDismissed}
+              onLocalUnread={onLocalUnread}
+              trustedSourceDomains={trustedSourceDomains}
+              onToggleTrust={onToggleTrust}
+            />
+          )}
         </>
       )}
 

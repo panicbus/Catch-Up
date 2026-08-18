@@ -6,6 +6,7 @@ import { useSettings } from '../../hooks/useSettings';
 import { useTrustedSourceToggle } from '../../hooks/useTrustedSourceToggle';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { ViewModeToggle } from '../Channel/ViewModeToggle';
+import { SortModeToggle } from '../Channel/SortModeToggle';
 import { NewsFeed } from '../Channel/NewsFeed';
 import { FeedSkeleton } from '../Channel/FeedSkeleton';
 import { EmptyState } from '../common/EmptyState';
@@ -56,8 +57,8 @@ export function PoolPage() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { channels } = useChannels();
-  const { articles, loading } = usePoolArticles(channels);
   const { settings, update } = useSettings();
+  const { articles, loading } = usePoolArticles(channels, settings.defaultSortMode);
   const { trustedSourceDomains, onToggleTrust } = useTrustedSourceToggle(settings, update);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
   const [shownCount, setShownCount] = useState<(typeof SHOWN_OPTIONS)[number]>(25);
@@ -121,6 +122,7 @@ export function PoolPage() {
         <h1 className="pool-page__title">The Pool</h1>
         {/* A grid view makes no sense at phone width — hidden rather than shown-disabled, since
             there's nothing to toggle to (matches ChannelPage's identical reasoning). */}
+        <SortModeToggle value={settings.defaultSortMode} onChange={(mode) => update({ defaultSortMode: mode })} />
         {!isMobile && (
           <ViewModeToggle value={settings.defaultViewMode} onChange={(mode) => update({ defaultViewMode: mode })} />
         )}
@@ -188,6 +190,7 @@ export function PoolPage() {
           }
           trustedSourceDomains={trustedSourceDomains}
           onToggleTrust={onToggleTrust}
+          sortMode={settings.defaultSortMode}
         />
       )}
     </div>

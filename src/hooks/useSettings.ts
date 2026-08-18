@@ -4,6 +4,7 @@ import type { AppSettings } from '../../ipc-contract';
 
 const FALLBACK: AppSettings = {
   defaultViewMode: 'list',
+  defaultSortMode: 'newest',
   refreshIntervalMinutes: 30,
   theme: 'light',
   rollTheDiceChannelIds: null,
