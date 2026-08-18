@@ -387,22 +387,21 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   const prevUnreadCountRef = useRef<number | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
 
-  // Set right before any action that removes a card from mainArticles above (or at) the current
-  // scroll position — checkmark-archive, swipe-dismiss, and the bulk flush button below all funnel
-  // through this same ref, read (and cleared) by the layout effect right after it. Declared here,
-  // ahead of its first use, since onLocalExit is the earliest of the three call sites.
+  // Populated by the mainArticles-shrink check below (right after mainArticles itself is computed)
+  // whenever a render is about to drop a previously-shown card — covers every way that can happen:
+  // checkmark-archive, swipe-dismiss, the bulk flush button, and a background poll silently revealing
+  // a story as already read. Read (and cleared) by the layout effect further down. One shared
+  // mechanism rather than one per action, since all of them are the same shape: something that was
+  // visible a moment ago is gone now, with no browser-native compensation for the resulting scroll
+  // shift. Declared here, ahead of its first use.
   const pendingArchiveCompensationRef = useRef<{ scrollRoot: HTMLElement; heightBefore: number } | null>(null);
+  // mainArticles' id set as of the last render, diffed fresh each render against the current set to
+  // detect that shrink regardless of what caused it. null until the first render has actually run.
+  const prevMainArticleIdsRef = useRef<Set<string> | null>(null);
 
   const onLocalExit = useCallback((articleId: string) => {
     setLocallyExited((prev) => {
       if (prev.has(articleId)) return prev;
-      // A swipe-dismissed or checkmark-dismissed card's fly-off animation has already finished by
-      // the time this fires (see NewsCard's commitDismiss) — so this removal from mainArticles is a
-      // synchronous, instant shrink, same as the bulk flush below. Confirmed live as a scroll jump:
-      // this is the everyday single-card dismiss path, not just the rarer "move all to archive"
-      // button that the first pass at this fix covered.
-      const scrollRoot = feedRef.current?.closest<HTMLElement>('.app-shell__main');
-      if (scrollRoot) pendingArchiveCompensationRef.current = { scrollRoot, heightBefore: scrollRoot.scrollHeight };
       const next = new Set(prev);
       next.add(articleId);
       return next;
@@ -490,6 +489,33 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // or read in a previous session) and haven't just been locally un-archived.
   const archive = partitionByRead ? articles.filter((a) => isRead(a) && !keepVisible.has(a.id)) : [];
 
+  // Catches every way mainArticles can lose a card that was visible a render ago — a checkmark tap,
+  // a swipe, the bulk flush button, or (confirmed live via a screen recording) a background poll (see
+  // api.ts's 20s cycle) silently revealing a story as already read from a session before this mount's
+  // own: keepVisible resets on every remount (see its own comment above), so a story read anywhere
+  // other than THIS mount's own passive/active actions arrives as a fresh `articles` prop with no
+  // matching id in keepVisible, and drops out with no fly-off and no local callback to hook a
+  // measurement into — the recording showed the top story vanishing outright the instant the
+  // Archive-read count filled in, with nothing having scrolled past the top edge. Detected here
+  // during render, one mechanism for all of it: reading feedRef's DOM now still sees the PRE-commit
+  // layout for this update, which is exactly the "before" measurement the layout effect further down
+  // needs to compensate scrollTop once the removal actually lands.
+  const mainArticleIds = new Set(mainArticles.map((a) => a.id));
+  if (prevMainArticleIdsRef.current && !pendingArchiveCompensationRef.current) {
+    let vanished = false;
+    for (const id of prevMainArticleIdsRef.current) {
+      if (!mainArticleIds.has(id)) {
+        vanished = true;
+        break;
+      }
+    }
+    if (vanished) {
+      const scrollRoot = feedRef.current?.closest<HTMLElement>('.app-shell__main');
+      if (scrollRoot) pendingArchiveCompensationRef.current = { scrollRoot, heightBefore: scrollRoot.scrollHeight };
+    }
+  }
+  prevMainArticleIdsRef.current = mainArticleIds;
+
   // Source of truth for the celebration + streak. Normally the uncapped unread count (you must clear
   // everything — more slide in under the cap as you go). In showReadDimmed mode (The Pool) the shown
   // set IS capped, so "caught up" means the shown stories are all read — count unread among those.
@@ -527,10 +553,6 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   const archiveReadInPlace = useCallback((articleId: string) => {
     setKeepVisible((prev) => {
       if (!prev.has(articleId)) return prev;
-      // Same reasoning as onLocalExit above — this card's fly-off has already played out, so this is
-      // an instant shrink of mainArticles that needs the same compensation.
-      const scrollRoot = feedRef.current?.closest<HTMLElement>('.app-shell__main');
-      if (scrollRoot) pendingArchiveCompensationRef.current = { scrollRoot, heightBefore: scrollRoot.scrollHeight };
       const next = new Set(prev);
       next.delete(articleId);
       return next;
@@ -550,21 +572,17 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     ref,
     () => ({
       flushReadInPlace: () => {
-        // Every read-in-place card vanishes from mainArticles in one instant setKeepVisible(new
-        // Set()) — same instant-shrink shape as the two single-card paths above, using the same
-        // pendingArchiveCompensationRef handoff to the layout effect below.
-        const scrollRoot = feedRef.current?.closest<HTMLElement>('.app-shell__main');
-        if (scrollRoot) pendingArchiveCompensationRef.current = { scrollRoot, heightBefore: scrollRoot.scrollHeight };
         setKeepVisible(new Set());
       },
     }),
     []
   );
 
-  // No-op on every render except the ONE right after flushReadInPlace sets the pending ref above —
+  // A no-op on most renders — only does something the ONE render right after the mainArticles-shrink
+  // check above (a few lines up) found a vanished id and populated pendingArchiveCompensationRef.
   // useLayoutEffect (not the async useEffect) specifically so this runs after the DOM commits the
-  // archived cards' removal but BEFORE the browser paints, so the correction is invisible rather
-  // than a visible snap-back after the jump already showed.
+  // removal but BEFORE the browser paints, so the correction is invisible rather than a visible
+  // snap-back after the jump already showed.
   useLayoutEffect(() => {
     const pending = pendingArchiveCompensationRef.current;
     if (!pending) return;
