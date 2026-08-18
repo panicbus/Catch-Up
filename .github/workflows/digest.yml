@@ -9,6 +9,11 @@ on:
   schedule:
     - cron: '0 * * * *'
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Send every enabled account's digest right now, ignoring its configured hour and today's already-sent guard (testing only — never applies to the scheduled runs above)"
+        type: boolean
+        default: false
 
 jobs:
   digest:
@@ -27,3 +32,4 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DIGEST_FORCE_SEND: ${{ github.event_name == 'workflow_dispatch' && inputs.force }}

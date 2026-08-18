@@ -18,6 +18,12 @@ import { buildDigestContent } from '../digest/build';
 import { digestSubject, renderDigestEmail } from '../digest/render';
 import { sendDigestEmail } from '../digest/email';
 
+// Set by digest.yml's manual "force" workflow_dispatch input ONLY — the scheduled runs never set
+// this, so the hour/dedupe checks below always apply to every real send. Lets a manual test run
+// actually send right away instead of silently doing nothing until the account's real send hour
+// comes around, which is what happened the first time this was tested live.
+const FORCE_SEND = process.env.DIGEST_FORCE_SEND === 'true';
+
 /** The account's current hour-of-day (0-23) and calendar date (YYYY-MM-DD) in ITS OWN timezone —
  * not the server's. `en-CA` formats as YYYY-MM-DD directly, exactly the shape lastDigestSentDate
  * needs to be compared against. Throws on an invalid IANA zone name — callers treat that as "skip
@@ -69,12 +75,12 @@ function localHourAndDate(timezone: string): { hour: number; date: string } {
       continue;
     }
 
-    if (hour !== settings.digestSendHour) {
+    if (!FORCE_SEND && hour !== settings.digestSendHour) {
       notDue++;
       continue;
     }
     const lastSentDate = settings.lastDigestSentDate?.toISOString().slice(0, 10) ?? null;
-    if (lastSentDate === date) {
+    if (!FORCE_SEND && lastSentDate === date) {
       notDue++; // already sent today, this account's own local day
       continue;
     }
@@ -97,7 +103,12 @@ function localHourAndDate(timezone: string): { hour: number; date: string } {
     const to = settings.digestEmailOverride ?? user.email;
     const ok = await sendDigestEmail(to, digestSubject(content), renderDigestEmail(content));
     if (ok) {
-      await prisma.settings.update({ where: { userId: user.id }, data: { lastDigestSentDate: new Date(date) } });
+      // A forced test send deliberately does NOT record lastDigestSentDate — it's a manual, one-off
+      // action, not the real automatic send, so it shouldn't consume the account's real digest for
+      // today. Skipping this write means the actual scheduled send still goes out normally later.
+      if (!FORCE_SEND) {
+        await prisma.settings.update({ where: { userId: user.id }, data: { lastDigestSentDate: new Date(date) } });
+      }
       sent++;
     } else {
       failed++;
