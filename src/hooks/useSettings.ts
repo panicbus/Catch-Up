@@ -11,6 +11,11 @@ const FALLBACK: AppSettings = {
   trustedSourceDomains: [],
   maxStoriesShown: 25,
   homeLocation: null,
+  digestEnabled: false,
+  digestSendHour: 7,
+  digestTimezone: null,
+  digestChannelIds: [],
+  digestEmailOverride: null,
 };
 
 export function useSettings() {

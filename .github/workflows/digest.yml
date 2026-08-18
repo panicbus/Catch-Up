@@ -1,0 +1,29 @@
+name: Scheduled digest email
+
+# Runs the digest job every hour, on GitHub's own free scheduler (same reasoning as
+# refresh.yml — no paid hosting add-on, no billing details needed). Hourly, not per-user-send-time,
+# because send time is a per-account local hour (server/cron/digest.ts checks each account's own
+# timezone against `now`) — the schedule just needs to tick often enough that every possible local
+# hour gets checked once. `workflow_dispatch` allows a manual run from the Actions tab for testing.
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npx tsx server/cron/digest.ts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}

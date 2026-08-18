@@ -207,6 +207,23 @@ export interface AppSettings {
    * null-means-everything convention) since there's no "trust nothing" vs. "trust everything"
    * ambiguity here: empty simply means no boost applies to anyone yet. */
   trustedSourceDomains: string[];
+  /** Daily digest email — off by default. Web-only (see DigestSetting.tsx's isWeb gate): sending
+   * happens via a scheduled job against the hosted database, which a desktop-only account has no
+   * row in at all. */
+  digestEnabled: boolean;
+  /** 0-23, the hour (in digestTimezone) to send at. Defaults to 7 (7am) — meaningless until
+   * digestEnabled is true. */
+  digestSendHour: number;
+  /** IANA zone name (e.g. "America/Los_Angeles"), set automatically the moment digestEnabled is
+   * first turned on (see DigestSetting.tsx) — null beforehand, same "not configured yet"
+   * convention as homeLocation. */
+  digestTimezone: string | null;
+  /** Which channels the digest covers. Populated with every channel id at the moment digest is
+   * first enabled, then user-editable — deliberately NOT a null-means-all sentinel like
+   * rollTheDiceChannelIds, so the cron job never has to re-derive "all channels" itself. */
+  digestChannelIds: string[];
+  /** Send to a different address than the one signed in with. null = use the account's own email. */
+  digestEmailOverride: string | null;
 }
 
 /** Ollama is desktop-only (the hosted server can't reach a model on the founder's own Mac) — the web

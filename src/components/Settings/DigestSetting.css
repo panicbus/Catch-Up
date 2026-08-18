@@ -1,0 +1,121 @@
+.digest-setting__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.digest-setting__label-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.digest-setting__badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(120, 80, 40, 0.14);
+  color: var(--text-muted);
+}
+.digest-setting__badge--on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.digest-setting__hint {
+  margin: 14px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 560px;
+}
+
+.digest-setting__body {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.digest-setting__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.digest-setting__field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.digest-setting__time-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.digest-setting__select,
+.digest-setting__input {
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  background: var(--surface);
+  color: var(--text);
+}
+.digest-setting__select:focus,
+.digest-setting__input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.digest-setting__input--tz {
+  flex: 1;
+  min-width: 220px;
+}
+
+.digest-setting__channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 12px 14px;
+}
+
+.digest-setting__channel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  color: var(--text);
+}
+
+.digest-setting__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.digest-setting__error {
+  margin: 0;
+  color: var(--accent-strong);
+  font-size: 13px;
+}
+
+@media (max-width: 767px) {
+  /* iOS Safari auto-zooms the whole page on focusing any input styled under 16px — same fix
+     already applied to every other Settings input in this app. */
+  .digest-setting__select,
+  .digest-setting__input {
+    font-size: 16px;
+  }
+}

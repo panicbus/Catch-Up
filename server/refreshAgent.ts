@@ -19,8 +19,10 @@ import { runCustomSources } from './customSources/refresh';
 /** Build the classifier config from the persisted setting, or null (AI off) if none is picked.
  * Ollama can be persisted here in principle (same Settings row shape as desktop) but is never
  * actually reachable from the server — isAiConfigured() will report it unconfigured since
- * `ollamaModel` is never populated server-side, and filterRelevant falls back to the heuristic. */
-function buildAiConfig(
+ * `ollamaModel` is never populated server-side, and filterRelevant falls back to the heuristic.
+ * Exported: server/cron/digest.ts needs the identical construction for its own AI summarization
+ * call, and this is the one place it was already correctly implemented. */
+export function buildAiConfig(
   provider: AiProvider | null,
   geminiKey: string | null,
   groqKey: string | null

@@ -69,6 +69,12 @@ function toSettings(s: PrismaSettings): AppSettings {
     trustedSourceDomains: s.trustedSourceDomains,
     maxStoriesShown: s.maxStoriesShown as AppSettings['maxStoriesShown'],
     homeLocation: s.homeLocation as AppSettings['homeLocation'],
+    digestEnabled: s.digestEnabled,
+    digestSendHour: s.digestSendHour,
+    digestTimezone: s.digestTimezone,
+    digestChannelIds: s.digestChannelIds,
+    digestEmailOverride: s.digestEmailOverride,
+    // lastDigestSentDate is deliberately omitted — server-only bookkeeping, never sent to the client.
   };
 }
 
@@ -470,6 +476,11 @@ export async function setSettings(userId: string, partial: Partial<AppSettings>)
       ...(partial.homeLocation !== undefined && {
         homeLocation: partial.homeLocation === null ? Prisma.DbNull : (partial.homeLocation as object),
       }),
+      ...(partial.digestEnabled !== undefined && { digestEnabled: partial.digestEnabled }),
+      ...(partial.digestSendHour !== undefined && { digestSendHour: partial.digestSendHour }),
+      ...(partial.digestTimezone !== undefined && { digestTimezone: partial.digestTimezone }),
+      ...(partial.digestChannelIds !== undefined && { digestChannelIds: partial.digestChannelIds }),
+      ...(partial.digestEmailOverride !== undefined && { digestEmailOverride: partial.digestEmailOverride }),
     },
   });
 }

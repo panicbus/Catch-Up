@@ -191,6 +191,56 @@ export async function pingOllama(model: string, baseUrl?: string): Promise<{ ok:
   }
 }
 
+export interface SummarizeStory {
+  title: string;
+  snippet: string | null;
+}
+
+export interface SummarizeChannel {
+  channelName: string;
+  stories: SummarizeStory[];
+}
+
+export interface SummarizeInput {
+  channels: SummarizeChannel[];
+  config: ProviderConfig;
+}
+
+function buildSummaryPrompt(input: SummarizeInput): { system: string; user: string } {
+  const system =
+    'You write a short daily recap email for a personal news reader. You are given several channel ' +
+    'names, each with its top stories (title, snippet). Write a plain, conversational recap of the ' +
+    'most noteworthy things across ALL of it — 3 to 5 sentences total, not a list, not per-channel ' +
+    'headers, no markdown. Sound like a person catching a friend up, not a press release. Skip ' +
+    'routine or minor stories; focus on what actually matters. Respond with JSON only: ' +
+    '{"summary": "<the recap text>"}.';
+
+  const user = JSON.stringify(
+    input.channels.map((c) => ({
+      channel: c.channelName,
+      stories: c.stories.map((s) => ({ title: s.title, snippet: s.snippet ?? '' })),
+    }))
+  );
+  return { system, user };
+}
+
+/** Writes the digest email's short recap paragraph — see server/digest/build.ts, the only caller.
+ * Returns null on any failure (no key/model, network error, malformed reply), same never-throws
+ * contract as classifyOffTopic; the caller sends the curated list without a recap that day rather
+ * than not sending at all. */
+export async function summarizeStories(input: SummarizeInput): Promise<string | null> {
+  if (input.channels.every((c) => c.stories.length === 0)) return null;
+  const { system, user } = buildSummaryPrompt(input);
+  const raw = await callModel(system, user, input.config);
+  if (raw == null) return null;
+  try {
+    const parsed = JSON.parse(raw) as { summary?: unknown };
+    return typeof parsed.summary === 'string' && parsed.summary.trim() ? parsed.summary.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 function buildPrompt(input: ClassifyInput): { system: string; user: string } {
   const topic = input.subchannelName
     ? `${input.channelName} — specifically "${input.subchannelName}"`

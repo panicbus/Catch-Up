@@ -6,6 +6,7 @@ import { AiFilteringSetting } from './AiFilteringSetting';
 import { LocationSetting } from './LocationSetting';
 import { CustomSourcesSetting } from './CustomSourcesSetting';
 import { TrustedSourcesSetting } from './TrustedSourcesSetting';
+import { DigestSetting } from './DigestSetting';
 import { AccountSection } from '../Auth/AccountSection';
 import './SettingsPage.css';
 
@@ -58,6 +59,13 @@ export function SettingsPage() {
         <section className="settings-section">
           <h2 className="settings-section__title">Your own sources</h2>
           <CustomSourcesSetting />
+        </section>
+      )}
+
+      {isWeb && (
+        <section className="settings-section">
+          <h2 className="settings-section__title">Daily digest email</h2>
+          <DigestSetting />
         </section>
       )}
 

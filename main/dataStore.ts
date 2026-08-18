@@ -79,6 +79,13 @@ const DEFAULT_DATA: DataFile = {
     trustedSourceDomains: [],
     maxStoriesShown: 25,
     homeLocation: null,
+    // Digest email is a web-only feature (see DigestSetting.tsx) — these exist here purely so
+    // AppSettings, one shared type, has a value on both builds; desktop never reads or surfaces them.
+    digestEnabled: false,
+    digestSendHour: 7,
+    digestTimezone: null,
+    digestChannelIds: [],
+    digestEmailOverride: null,
   },
   ai: { ...DEFAULT_AI_STATE },
   channels: [],
