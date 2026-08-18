@@ -262,6 +262,23 @@
     text-overflow: ellipsis;
   }
 
+  /* Desktop lets the collapsed (0fr-width) title keep its natural line-height because it always
+     shares a row with Archive read + the sort toggle, so that reserved height is absorbed into
+     the row rather than shown on its own. Mobile no longer shares a row (see .channel-page__controls
+     below) — Archive read/sort now always wrap onto their own full-width line — so that same
+     reserved height was showing up as a bare empty gap above them even while the title was fully
+     invisible. Collapsed to true zero height here so there's nothing left to wrap onto its own line
+     until the title is actually visible. */
+  .channel-page__sticky-title {
+    height: 0;
+    padding-top: 0;
+    overflow: hidden;
+  }
+  .channel-page__sticky-title--visible {
+    height: auto;
+    padding-top: 4px;
+  }
+
   /* Lets the row wrap once the sticky title actually appears (post-scroll) and no longer fits
      beside Archive read + the sort toggle — confirmed live as an overlap once SortModeToggle made
      the right side wide enough on its own, permanently, that the two sides no longer reliably fit
