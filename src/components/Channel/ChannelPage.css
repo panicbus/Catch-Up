@@ -252,10 +252,13 @@
 
   /* Same echo-the-scrolled-away-title behavior as desktop, just narrower: the mobile header's own
      title is regular in-flow content too, so it scrolls behind this sticky bar exactly like
-     desktop's does. Capped width (rather than desktop's uncapped natural width) so a long channel
-     name can't shove Archive read off the row on a narrow phone screen. */
+     desktop's does. Now that the row below wraps (see .channel-page__controls) the title has its
+     OWN full-width line instead of sharing one with Archive read + the sort toggle, so it no
+     longer needs the tight 40vw cap that used to leave them room — sized up and given most of the
+     row's own width instead, with a cap still in place purely as a backstop for an extreme name. */
   .channel-page__sticky-title-inner {
-    max-width: 40vw;
+    max-width: 90vw;
+    font-size: 18px;
     text-overflow: ellipsis;
   }
 
@@ -270,6 +273,14 @@
      the right edge. */
   .channel-page__controls {
     flex-wrap: wrap;
+  }
+
+  /* Once wrapped onto its own line (see above), stretch Archive read and the sort toggle to the
+     row's full width — space-between pins one to each edge, rather than both sitting compact at
+     the left with empty space to the right of them. */
+  .channel-page__controls-right {
+    width: 100%;
+    justify-content: space-between;
   }
 
   /* Its own row, full width, instead of squeezed in beside the sticky-title echo — see the JSX

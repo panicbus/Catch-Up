@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { flushSync } from 'react-dom';
 import { groupByDay } from '../../utils/groupByDay';
 import { intersperseByContent } from '../../utils/intersperseByContent';
@@ -529,7 +529,42 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     onReadInPlaceCountChange?.(readInPlaceCount);
   }, [readInPlaceCount, onReadInPlaceCountChange]);
 
-  useImperativeHandle(ref, () => ({ flushReadInPlace: () => setKeepVisible(new Set()) }), []);
+  // Set right before the archiving state change below, read (and cleared) by the layout effect
+  // right after it — the handoff that lets that effect compensate scrollTop for exactly this one
+  // action without needing to run its measure-and-adjust logic on every render.
+  const pendingArchiveCompensationRef = useRef<{ scrollRoot: HTMLElement; heightBefore: number } | null>(null);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      flushReadInPlace: () => {
+        // A single card's own checkmark already animates its exit (NewsCard's own fly-off, THEN
+        // onArchiveReadInPlace after it finishes) — this bulk path had no equivalent at all: every
+        // read-in-place card vanished from mainArticles in one instant setKeepVisible(new Set()),
+        // with nothing to compensate if any of them sat above (or at) the current scroll position.
+        // Confirmed live as the reported "unpredictable scroll jump" — the browser doesn't auto-
+        // adjust scrollTop when content shrinks above the viewport, so the page silently yanks up
+        // by however much was removed. Measured here, compensated in the layout effect below once
+        // the DOM actually reflects the removal.
+        const scrollRoot = feedRef.current?.closest<HTMLElement>('.app-shell__main');
+        if (scrollRoot) pendingArchiveCompensationRef.current = { scrollRoot, heightBefore: scrollRoot.scrollHeight };
+        setKeepVisible(new Set());
+      },
+    }),
+    []
+  );
+
+  // No-op on every render except the ONE right after flushReadInPlace sets the pending ref above —
+  // useLayoutEffect (not the async useEffect) specifically so this runs after the DOM commits the
+  // archived cards' removal but BEFORE the browser paints, so the correction is invisible rather
+  // than a visible snap-back after the jump already showed.
+  useLayoutEffect(() => {
+    const pending = pendingArchiveCompensationRef.current;
+    if (!pending) return;
+    pendingArchiveCompensationRef.current = null;
+    const delta = pending.heightBefore - pending.scrollRoot.scrollHeight;
+    if (delta > 0) pending.scrollRoot.scrollTop -= delta;
+  });
 
   const onPassedTop = useCallback(
     (articleId: string) => {
