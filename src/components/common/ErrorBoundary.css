@@ -5,6 +5,8 @@
   justify-content: center;
   gap: 8px;
   min-height: 100vh;
+  /* Same iOS Safari toolbar/100vh mismatch fixed in AppShell.css — see its comment. */
+  min-height: 100dvh;
   padding: 24px;
   text-align: center;
   background: var(--bg);

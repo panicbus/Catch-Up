@@ -5,6 +5,10 @@
   justify-content: center;
   gap: 16px;
   min-height: 100vh;
+  /* Same iOS Safari toolbar/100vh mismatch fixed in AppShell.css — see its comment. Not a
+     scrolling container here, but 100vh being taller than the real viewport still throws off this
+     screen's vertical centering while the toolbar is showing. */
+  min-height: 100dvh;
   padding: 24px;
   text-align: center;
   color: var(--text-muted);

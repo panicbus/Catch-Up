@@ -68,4 +68,10 @@
   .trusted-sources-setting__input {
     font-size: 16px;
   }
+
+  /* Kills the iOS rubber-band bounce at the top/bottom of this list — same fix, same reasoning,
+     as AppShell.css's .app-shell__main. */
+  .trusted-sources-setting__list {
+    overscroll-behavior-y: none;
+  }
 }

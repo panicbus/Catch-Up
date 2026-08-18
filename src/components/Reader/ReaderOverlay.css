@@ -200,19 +200,24 @@
   gap: 12px;
   margin-top: 12px;
 }
+/* Same shimmer as FeedSkeleton.css's .feed-skeleton__line — see its comment. The plain --border
+   fill this replaces was nearly invisible against .reader-overlay's own --bg background, the
+   identical low-contrast issue confirmed live on the channel-loading skeleton. */
 .reader-overlay__skeleton-line {
   height: 14px;
   border-radius: 7px;
-  background: var(--border);
-  animation: reader-skeleton-pulse 1.3s ease-in-out infinite;
+  background: linear-gradient(90deg, var(--border-strong) 25%, var(--border) 37%, var(--border-strong) 63%);
+  background-size: 400% 100%;
+  animation: reader-skeleton-shimmer 1.6s ease-in-out infinite;
 }
-@keyframes reader-skeleton-pulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+@keyframes reader-skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 @media (prefers-reduced-motion: reduce) {
   .reader-overlay__skeleton-line {
     animation: none;
+    background: var(--border-strong);
   }
 }
 
@@ -261,5 +266,14 @@
   }
   .reader-overlay__body {
     font-size: 18px;
+  }
+}
+
+@media (max-width: 767px) {
+  /* Kills the iOS rubber-band bounce at the top/bottom of a story — same fix, same reasoning, as
+     AppShell.css's .app-shell__main. Reading is the single most-used mobile surface in this
+     overlay, so it gets the identical treatment. */
+  .reader-overlay__scroll {
+    overscroll-behavior-y: none;
   }
 }

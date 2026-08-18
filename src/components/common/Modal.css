@@ -37,6 +37,13 @@
   .modal-overlay {
     left: 0;
   }
+
+  /* Kills the iOS rubber-band bounce at the top/bottom of a modal's own scrollable content (e.g.
+     Roll the Dice previewing a long article) — same fix, same reasoning, as AppShell.css's
+     .app-shell__main. */
+  .modal {
+    overscroll-behavior-y: none;
+  }
 }
 
 .modal__title {

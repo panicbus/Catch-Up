@@ -1,6 +1,17 @@
 .app-shell {
   display: flex;
   height: 100vh;
+  /* iOS Safari's address bar grows/shrinks the visual viewport without resizing 100vh (which stays
+     pinned to the LARGEST possible viewport, toolbar hidden) — 100vh is taller than what's
+     actually visible, and the mismatch is what caused the reported mobile scroll bugs: scrolling
+     appearing to "stick" mid-gesture while the toolbar collapse triggers a resize/reflow, the
+     bottom-most Home tile staying just out of reach, and a flick-to-top landing a little short of
+     true scrollTop 0. dvh tracks the real, current viewport instead. Kept as a second declaration
+     (not a replacement) so browsers without dvh support keep the 100vh fallback rather than
+     getting no height at all — same fix already applied to SignInScreen.css and
+     ReaderOverlay.css; this is .app-shell__main's own containing block, so those two fixing
+     THEIR OWN heights never touched the root cause for every other page routed through here. */
+  height: 100dvh;
 }
 
 /* Right pane = a fixed drag strip on top of the scrolling content column. */
@@ -42,8 +53,16 @@
 
   /* Generous rather than pixel-exact — clears BottomNav (its own height plus the safe-area inset)
      on every page, including ones with little bottom padding of their own, without needing this
-     value to track BottomNav's real rendered height. */
+     value to track BottomNav's real rendered height.
+     overscroll-behavior-y: none kills iOS's rubber-band bounce past the top/bottom edge (a flick
+     that overscrolls then springs back to rest) — a deliberate product choice, not a bug fix: it
+     stops exactly at the true top/bottom instead. `none`, not `contain` — contain only stops the
+     bounce from chaining to a parent scroller; this element would still bounce itself under
+     `contain`, since that value only suppresses the DEFAULT action on ANCESTORS, not on itself.
+     Scoped to mobile only — desktop's trackpad elastic scroll is a separate, OS-level preference
+     nobody asked to change. */
   .app-shell__main {
     padding-bottom: calc(56px + env(safe-area-inset-bottom));
+    overscroll-behavior-y: none;
   }
 }

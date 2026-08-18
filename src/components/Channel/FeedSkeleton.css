@@ -9,16 +9,25 @@
   flex-direction: column;
   gap: 10px;
   padding: 16px 18px;
-  background: var(--story-card-1);
-  border: 1px solid var(--story-card-border);
+  /* Neutral, not the warm story-card tint (--story-card-1) real cards use — that tint sat only a
+     few % of lightness away from the line color below, which read as unclear "colored boxes with
+     white text" rather than an obvious loading state (confirmed live). A skeleton should look like
+     UI chrome, not like it's guessing at real content's color. */
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
 
+/* Standard shimmer: a lighter band sweeping through an otherwise solid-colored bar, via an
+   oversized gradient whose position animates. base/highlight (border-strong/border) give real
+   contrast against the card's --surface background, unlike the old plain --border fill, which was
+   nearly invisible against the old --story-card-1 card. */
 .feed-skeleton__line {
   height: 12px;
   border-radius: 6px;
-  background: var(--border);
-  animation: feed-skeleton-pulse 1.4s ease-in-out infinite;
+  background: linear-gradient(90deg, var(--border-strong) 25%, var(--border) 37%, var(--border-strong) 63%);
+  background-size: 400% 100%;
+  animation: feed-skeleton-shimmer 1.6s ease-in-out infinite;
 }
 .feed-skeleton__line--title {
   width: 55%;
@@ -32,9 +41,16 @@
   margin-top: 4px;
 }
 
-@keyframes feed-skeleton-pulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+@keyframes feed-skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feed-skeleton__line {
+    animation: none;
+    background: var(--border-strong);
+  }
 }
 
 .feed-skeleton-page {

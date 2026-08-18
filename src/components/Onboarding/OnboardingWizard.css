@@ -2,6 +2,9 @@
   position: relative;
   overflow: hidden;
   height: 100vh;
+  /* Same iOS Safari toolbar/100vh mismatch fixed in AppShell.css and SignInScreen.css — see
+     AppShell.css's comment. */
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
