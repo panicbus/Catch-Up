@@ -193,6 +193,11 @@ export interface AppSettings {
    * have it" handling as everywhere else in this file (see rollTheDiceChannelIds above); re-saving
    * the location fills it in. */
   homeLocation: { query: string; label: string; lat: number; lon: number; countryCode?: string } | null;
+  /** Publisher domains (e.g. "reuters.com") the user has explicitly marked as trusted — a mild
+   * boost in relevance.ts's scoring. Always a plain array (unlike rollTheDiceChannelIds's
+   * null-means-everything convention) since there's no "trust nothing" vs. "trust everything"
+   * ambiguity here: empty simply means no boost applies to anyone yet. */
+  trustedSourceDomains: string[];
 }
 
 /** Ollama is desktop-only (the hosted server can't reach a model on the founder's own Mac) — the web

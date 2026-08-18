@@ -41,12 +41,13 @@ export async function filterRelevant(
   store: ClassificationStoreLike,
   config: ProviderConfig | null,
   homeLocation: { lat: number; lon: number; countryCode?: string } | null,
+  trustedSourceDomains: readonly string[] = [],
 ): Promise<FetchedArticle[]> {
   // The lat/lon distance signal stays heuristic-only (see relevance.ts) — never surfaced to the AI
   // classifier below. The home COUNTRY NAME is the one deliberate exception, surfaced only for a
   // Politics channel (see classifier.ts's buildPrompt): it catches a gap the geographic heuristic
   // can't — a story naming only a foreign political figure, with no place word at all to detect.
-  const ctx = { topic, channelName, subchannelName, profile, homeLocation };
+  const ctx = { topic, channelName, subchannelName, profile, homeLocation, trustedSourceDomains };
   const heuristic = filterByRelevance(fetched, ctx);
   // Stage 2/3 require a provider to be picked AND configured (key/model present).
   if (!config || !isAiConfigured(config)) return heuristic;

@@ -65,6 +65,7 @@ function toSettings(s: PrismaSettings): AppSettings {
     refreshIntervalMinutes: s.refreshIntervalMinutes,
     theme: s.theme as AppSettings['theme'],
     rollTheDiceChannelIds: s.rollTheDiceChannelIds.length > 0 ? s.rollTheDiceChannelIds : null,
+    trustedSourceDomains: s.trustedSourceDomains,
     maxStoriesShown: s.maxStoriesShown as AppSettings['maxStoriesShown'],
     homeLocation: s.homeLocation as AppSettings['homeLocation'],
   };
@@ -462,6 +463,7 @@ export async function setSettings(userId: string, partial: Partial<AppSettings>)
       ...(partial.rollTheDiceChannelIds !== undefined && {
         rollTheDiceChannelIds: partial.rollTheDiceChannelIds ?? [],
       }),
+      ...(partial.trustedSourceDomains !== undefined && { trustedSourceDomains: partial.trustedSourceDomains }),
       ...(partial.maxStoriesShown !== undefined && { maxStoriesShown: partial.maxStoriesShown }),
       ...(partial.homeLocation !== undefined && {
         homeLocation: partial.homeLocation === null ? Prisma.DbNull : (partial.homeLocation as object),

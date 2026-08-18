@@ -167,6 +167,7 @@ model Settings {
   refreshIntervalMinutes Int       @default(30) @map("refresh_interval_minutes")
   theme                  String    @default("light")
   rollTheDiceChannelIds  String[]  @map("roll_the_dice_channel_ids")
+  trustedSourceDomains   String[]  @map("trusted_source_domains")
   maxStoriesShown        Int       @default(25) @map("max_stories_shown")
   homeLocation           Json?     @map("home_location") // {query,label,lat,lon} or null, same shape as AppSettings today
   aiEnabled              Boolean   @default(false) @map("ai_enabled") // legacy pre-provider-choice flag; see aiProvider

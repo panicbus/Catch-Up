@@ -147,9 +147,29 @@ export class ArticlesCache {
     const filtered = subchannelId
       ? bucket.articles.filter((a) => a.subchannelId === subchannelId)
       : bucket.articles;
+    const buried = this.readDedupeKeys();
     return [...filtered]
       .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+      // Stable second pass: sinks already-read-elsewhere duplicates to the bottom without
+      // disturbing the date order established above, either among themselves or the rest — see
+      // server/stores/articlesCache.ts's sinkAlreadyRead for the identical server-side version.
+      .sort((a, b) => Number(buried.has(titleDedupeKey(a.title))) - Number(buried.has(titleDedupeKey(b.title))))
       .slice(0, limit);
+  }
+
+  /** Every titleDedupeKey with at least one READ article anywhere in the cache (any channel) —
+   * the desktop mirror of server/stores/articlesCache.ts's alreadyReadDedupeKeys. Scans the whole
+   * in-memory cache rather than scoping to a candidate set first: unlike the server's Postgres
+   * store this is a local JSON file already fully loaded in memory (capped at 300 articles per
+   * channel), so there's no network/DB round-trip to bound — a full scan costs nothing here. */
+  private readDedupeKeys(): Set<string> {
+    const keys = new Set<string>();
+    for (const bucket of Object.values(this.data.byChannel)) {
+      for (const a of bucket.articles) {
+        if (this.isRead(a.id)) keys.add(titleDedupeKey(a.title));
+      }
+    }
+    return keys;
   }
 
   /** Direct by-id lookup within a known channel's bucket — a plain `.find()`, unlike getArticles

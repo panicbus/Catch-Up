@@ -1,0 +1,21 @@
+.trust-toggle {
+  background: none;
+  border: none;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: -4px;
+  flex-shrink: 0;
+  color: var(--text-faint);
+  margin-left: 2px;
+}
+.trust-toggle:hover {
+  color: var(--accent);
+}
+
+.trust-toggle__icon {
+  width: 13px;
+  height: 13px;
+}

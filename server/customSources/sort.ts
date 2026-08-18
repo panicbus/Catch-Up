@@ -39,7 +39,8 @@ function asSearchPhrase(name: string): string {
 export function sortCustomArticles(
   articles: FetchedArticle[],
   channels: Pick<Channel, 'id' | 'name' | 'subchannels'>[],
-  homeLocation: RelevanceContext['homeLocation']
+  homeLocation: RelevanceContext['homeLocation'],
+  trustedSourceDomains: RelevanceContext['trustedSourceDomains'] = []
 ): CustomSourcePlacement[] {
   const placements: CustomSourcePlacement[] = [];
 
@@ -58,6 +59,7 @@ export function sortCustomArticles(
         subchannelName: sub.name,
         profile,
         homeLocation,
+        trustedSourceDomains,
       };
       const kept = filterByRelevance(candidates, ctx);
       if (kept.length === 0) continue;
@@ -73,6 +75,7 @@ export function sortCustomArticles(
       subchannelName: null,
       profile,
       homeLocation,
+      trustedSourceDomains,
     };
     const keptMain = filterByRelevance(remaining, mainCtx);
     if (keptMain.length > 0) placements.push({ channelId: channel.id, subchannelId: null, articles: keptMain });

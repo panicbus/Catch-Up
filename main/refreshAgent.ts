@@ -121,7 +121,9 @@ export async function runChannel(
   // /anti-topic keyword rules. Drives both the provider query (category-narrowed where supported) and
   // the relevance gate + AI classifier downstream.
   const profile = channelProfile(channel.name);
-  const homeLocation = deps.dataStore.getSettings().homeLocation;
+  const settings = deps.dataStore.getSettings();
+  const homeLocation = settings.homeLocation;
+  const trustedSourceDomains = settings.trustedSourceDomains;
 
   // The plain channel-name search always runs, even when subchannels exist — subchannels narrow
   // in addition to the channel's own general coverage, not instead of it. Overlap between this and
@@ -164,7 +166,8 @@ export async function runChannel(
         profile,
         deps.classificationStore,
         buildAiConfig(deps.dataStore),
-        homeLocation
+        homeLocation,
+        trustedSourceDomains
       );
       added += deps.articlesCache.merge(channelId, target.subchannelId, relevant);
     } catch (e) {

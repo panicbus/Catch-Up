@@ -75,6 +75,7 @@ const DEFAULT_DATA: DataFile = {
     refreshIntervalMinutes: 30,
     theme: 'light',
     rollTheDiceChannelIds: null,
+    trustedSourceDomains: [],
     maxStoriesShown: 25,
     homeLocation: null,
   },

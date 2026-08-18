@@ -560,3 +560,44 @@ describe('relevanceScore — the persisted ranking signal', () => {
     expect(result.relevanceScore).toBeTypeOf('number');
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// Trusted sources — a mild, unconditional score boost for a publisher domain the user has marked
+// trusted (Settings.trustedSourceDomains), applied identically across every channel type.
+// ---------------------------------------------------------------------------------------------
+describe('trusted sources', () => {
+  const techProfile = channelProfile('Tech');
+
+  it('scores a story from a trusted domain higher than the same story from an untrusted one', () => {
+    const untrustedCtx: RelevanceContext = { topic: 'Tech', channelName: 'Tech', subchannelName: null, profile: techProfile, homeLocation: noHome };
+    const trustedCtx: RelevanceContext = { ...untrustedCtx, trustedSourceDomains: ['reuters.com'] };
+    const a = article({ title: 'New chip startup unveils AI laptop', section: 'technology', url: 'https://reuters.com/tech/story' });
+
+    const [untrusted] = filterByRelevance([a], untrustedCtx);
+    const [trusted] = filterByRelevance([a], trustedCtx);
+
+    expect(trusted.relevanceScore).toBeGreaterThan(untrusted.relevanceScore!);
+  });
+
+  it('matches a subdomain of a trusted domain', () => {
+    const ctx: RelevanceContext = {
+      topic: 'Tech', channelName: 'Tech', subchannelName: null, profile: techProfile, homeLocation: noHome,
+      trustedSourceDomains: ['nytimes.com'],
+    };
+    const a = article({ title: 'New chip startup unveils AI laptop', section: 'technology', url: 'https://cooking.nytimes.com/tech/story' });
+    const untrustedCtx: RelevanceContext = { ...ctx, trustedSourceDomains: [] };
+
+    const [trusted] = filterByRelevance([a], ctx);
+    const [untrusted] = filterByRelevance([a], untrustedCtx);
+    expect(trusted.relevanceScore).toBeGreaterThan(untrusted.relevanceScore!);
+  });
+
+  it('does not let a trusted source alone rescue a clearly off-topic story', () => {
+    const ctx: RelevanceContext = {
+      topic: 'Tech', channelName: 'Tech', subchannelName: null, profile: techProfile, homeLocation: noHome,
+      trustedSourceDomains: ['reuters.com'],
+    };
+    const a = article({ title: 'Virginia Tech Hokies win the quarterback showdown', section: null, url: 'https://reuters.com/sports/story' });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+});

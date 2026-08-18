@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useChannels } from '../../hooks/useChannels';
 import { useChannelArticles } from '../../hooks/useChannelArticles';
 import { useSettings } from '../../hooks/useSettings';
+import { useTrustedSourceToggle } from '../../hooks/useTrustedSourceToggle';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { SubchannelBar } from './SubchannelBar';
 import { SubchannelPickerTrigger, SubchannelPickerPanel } from './SubchannelPicker';
@@ -75,6 +76,7 @@ export function ChannelPage() {
   const { channels, loading: channelsLoading } = useChannels();
   const channel = channels.find((c) => c.slug === channelSlug) ?? null;
   const { settings, update } = useSettings();
+  const { trustedSourceDomains, onToggleTrust } = useTrustedSourceToggle(settings, update);
   const [subchannelId, setSubchannelId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   // Only shown once a refresh has been running for a while (see handleRefresh) — most refreshes
@@ -480,6 +482,8 @@ export function ChannelPage() {
           suppressCelebrationRef={clearSuppressRef}
           parentChannelName={activeSubchannel ? channel.name : undefined}
           onBackToParent={activeSubchannel ? () => setSubchannelId(null) : undefined}
+          trustedSourceDomains={trustedSourceDomains}
+          onToggleTrust={onToggleTrust}
         />
       )}
     </div>

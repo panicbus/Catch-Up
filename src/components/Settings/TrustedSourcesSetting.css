@@ -1,0 +1,71 @@
+.trusted-sources-setting {
+  display: flex;
+  flex-direction: column;
+}
+
+.trusted-sources-setting__hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.trusted-sources-setting__add-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.trusted-sources-setting__error {
+  margin: 0 0 16px;
+  color: var(--accent-strong);
+  font-size: 13px;
+}
+
+.trusted-sources-setting__input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  background: var(--surface);
+  color: var(--text);
+}
+.trusted-sources-setting__input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.trusted-sources-setting__list {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.trusted-sources-setting__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.trusted-sources-setting__row:last-child {
+  border-bottom: none;
+}
+
+.trusted-sources-setting__row-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+@media (max-width: 767px) {
+  /* iOS Safari auto-zooms the whole page on focusing any input styled under 16px — same fix
+     already applied to CustomSourcesSetting/ChannelManageList/SubchannelManagePanel's own inputs. */
+  .trusted-sources-setting__input {
+    font-size: 16px;
+  }
+}

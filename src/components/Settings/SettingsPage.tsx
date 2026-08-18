@@ -5,6 +5,7 @@ import { MaxStoriesSetting } from './MaxStoriesSetting';
 import { AiFilteringSetting } from './AiFilteringSetting';
 import { LocationSetting } from './LocationSetting';
 import { CustomSourcesSetting } from './CustomSourcesSetting';
+import { TrustedSourcesSetting } from './TrustedSourcesSetting';
 import { AccountSection } from '../Auth/AccountSection';
 import './SettingsPage.css';
 
@@ -41,6 +42,11 @@ export function SettingsPage() {
       <section className="settings-section">
         <h2 className="settings-section__title">AI filtering</h2>
         <AiFilteringSetting />
+      </section>
+
+      <section className="settings-section">
+        <h2 className="settings-section__title">Trusted sources</h2>
+        <TrustedSourcesSetting />
       </section>
 
       <section className="settings-section">

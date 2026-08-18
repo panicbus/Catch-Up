@@ -28,7 +28,7 @@
  * category channel — that's what let "Virginia Tech" through. It classifies the channel (a trigger in
  * channelProfiles.ts) but an article has to earn relevance on the disambiguating keywords/section. */
 
-import { normalizeTitle } from './dedupe';
+import { normalizeTitle, normalizeUrl } from './dedupe';
 import { sectionMatchesCategory, sectionIsForeign } from './channelProfiles';
 import { looksLikePlaceChannel } from '../locality/gazetteer';
 import { nearestMentionKm, foreignPlaceSignal } from '../locality/placeExtraction';
@@ -48,6 +48,32 @@ const CUSTOM_PROVIDER_PREFIX = 'custom:';
  * file-level comment above and this function's one call site in keepArticle. */
 function isLooseProvider(provider: string): boolean {
   return provider === FALLBACK_PROVIDER_ID || provider.startsWith(CUSTOM_PROVIDER_PREFIX);
+}
+
+/** The article's own hostname, computed from its URL the same way merge() derives sourceDomain for
+ * storage (see server/stores/articlesCache.ts) — not read off a pre-computed field, because at
+ * filtering time (before merge) no such field exists yet. null on a malformed URL, same defensive
+ * fallback merge() itself uses. */
+function articleHostname(url: string): string | null {
+  try {
+    return new URL(normalizeUrl(url)).hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+}
+
+/** Does the article's own hostname match one of the user's trusted domains — exact, or a
+ * subdomain of one (trusting "nytimes.com" should also cover "cooking.nytimes.com"). Both sides
+ * are compared with any leading "www." stripped so a user pasting "www.reuters.com" still matches
+ * a bare "reuters.com" article host and vice versa. */
+function isTrustedSource(url: string, trustedDomains: readonly string[]): boolean {
+  if (trustedDomains.length === 0) return false;
+  const host = articleHostname(url);
+  if (!host) return false;
+  return trustedDomains.some((raw) => {
+    const domain = raw.trim().toLowerCase().replace(/^www\./, '');
+    return domain.length > 0 && (host === domain || host.endsWith(`.${domain}`));
+  });
 }
 
 // Tiny stopword set so a multi-word topic ("The Pool", "de France") isn't matched on filler words.
@@ -112,6 +138,12 @@ const W = {
   // geography it's about.
   foreignCountry: -7,
   foreignContinent: -5,
+  // A mild, not decisive, nudge for a source the user has explicitly marked trusted (see
+  // TrustedSourcesSetting) — sized like includeTitle, strong enough to matter for ranking and to
+  // occasionally tip a thin borderline case, but well short of any single clear negative above
+  // (excludeHit/foreignSection at -4), so a trusted outlet's off-topic story still doesn't survive
+  // just for being trusted.
+  trustedSource: 2,
 };
 const KEEP_SCORE = 0; // keep when the summed score is >= this (i.e. not net-negative)
 // TUNABLE: distance bands (km) for the locality signal above. Inside NEAR, a mild boost; beyond
@@ -138,6 +170,13 @@ export interface RelevanceContext {
    * ipc-contract.ts's AppSettings.homeLocation) — a real, current save always has it. Only ever
    * applied to topic/entity channels and a handful of category channels — see buildGateContext. */
   homeLocation: { lat: number; lon: number; countryCode?: string } | null;
+  /** Publisher domains the user has explicitly marked trusted (Settings.trustedSourceDomains) —
+   * applies uniformly everywhere, unlike homeLocation/locality which are gated per channel type,
+   * since "I trust this outlet" carries no category-specific caveat the way "close to home" does.
+   * Optional (unlike homeLocation) purely so the many existing test call sites that build a
+   * RelevanceContext by hand don't all need updating for a signal they aren't exercising —
+   * buildGateContext treats undefined the same as an empty array. */
+  trustedSourceDomains?: readonly string[];
 }
 
 /** Tokenize a provider search topic into scorable terms. `normalizeTitle` already lowercases and
@@ -239,6 +278,9 @@ interface GateContext {
    * itself a place (see looksLikePlaceChannel) — every legitimate story in a channel named "Ukraine"
    * would otherwise get penalized purely for being far from home. null means the signal is inactive. */
   locality: { lat: number; lon: number; countryCode?: string } | null;
+  /** See RelevanceContext.trustedSourceDomains — carried through unchanged, not gated by channel
+   * type the way locality is. */
+  trustedSourceDomains: readonly string[];
 }
 
 // Category channels where routine coverage of another country's own domestic affairs is exactly
@@ -288,6 +330,7 @@ function buildGateContext(ctx: RelevanceContext): GateContext {
     category: ctx.profile.category,
     requireSpecificTerm: ctx.subchannelName != null || ctx.profile.type === 'topic',
     locality: localityEligible ? ctx.homeLocation : null,
+    trustedSourceDomains: ctx.trustedSourceDomains ?? [],
   };
 }
 
@@ -420,6 +463,10 @@ function scoreArticle(article: FetchedArticle, gate: GateContext): ScoredSignals
       else if (signal === 'continent') score += gate.category ? W.foreignContinent : W.localityFar;
     }
   }
+
+  // Trusted source (see TrustedSourcesSetting) — unconditional, unlike locality, since there's no
+  // channel-type carve-out where "I trust this outlet" wouldn't apply.
+  if (isTrustedSource(article.url, gate.trustedSourceDomains)) score += W.trustedSource;
 
   return { score, hasSpecificTerm, hasAnySpecificTerm, hasPositive, includeHitCount, hasSectionMatch };
 }

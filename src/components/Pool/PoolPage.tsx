@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useChannels } from '../../hooks/useChannels';
 import { usePoolArticles } from '../../hooks/usePoolArticles';
 import { useSettings } from '../../hooks/useSettings';
+import { useTrustedSourceToggle } from '../../hooks/useTrustedSourceToggle';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { ViewModeToggle } from '../Channel/ViewModeToggle';
 import { NewsFeed } from '../Channel/NewsFeed';
@@ -57,6 +58,7 @@ export function PoolPage() {
   const { channels } = useChannels();
   const { articles, loading } = usePoolArticles(channels);
   const { settings, update } = useSettings();
+  const { trustedSourceDomains, onToggleTrust } = useTrustedSourceToggle(settings, update);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
   const [shownCount, setShownCount] = useState<(typeof SHOWN_OPTIONS)[number]>(25);
   const [channelsOpen, setChannelsOpen] = useState(false);
@@ -184,6 +186,8 @@ export function PoolPage() {
           swipeToastText={(channelName) =>
             channelName ? `Marked read — filed to ${channelName}.` : 'Marked read.'
           }
+          trustedSourceDomains={trustedSourceDomains}
+          onToggleTrust={onToggleTrust}
         />
       )}
     </div>

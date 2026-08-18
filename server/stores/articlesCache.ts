@@ -70,18 +70,49 @@ function toArticle(a: SelectedArticle, read: boolean, bookmarked: boolean): Arti
   };
 }
 
+/** Same real-world story legitimately living in more than one channel is by design (see Article's
+ * own schema comment) — the annoyance isn't the duplicate existing, it's it being shown as though
+ * it were new after you've already read the other copy. This finds which of `titleDedupeKey`s
+ * already has a READ article somewhere for this user (any row, any channel) — the caller then
+ * sinks those to the bottom rather than dropping them, since the fuzzy match can occasionally be
+ * wrong and a bury is recoverable, a delete isn't. Scoped to exactly the keys the caller already
+ * has in hand (bounded by that page's own `limit`), never the user's whole history — same
+ * discipline as the read/bookmark lookups just below, for the same reason (see their comment). */
+async function alreadyReadDedupeKeys(userId: string, keys: string[]): Promise<Set<string>> {
+  if (keys.length === 0) return new Set();
+  const rows = await prisma.$queryRaw<{ key: string }[]>`
+    SELECT DISTINCT a.title_dedupe_key AS key
+      FROM articles a
+      JOIN read_state r ON r.user_id = a.user_id AND r.article_id = a.id
+     WHERE a.user_id = ${userId} AND a.title_dedupe_key = ANY(${keys})
+  `;
+  return new Set(rows.map((r) => r.key));
+}
+
+/** Stable sort: pushes already-read-elsewhere duplicates (see alreadyReadDedupeKeys) to the bottom
+ * without disturbing the relative order of everything else, or of the buried items among
+ * themselves — `rows` arrives pre-sorted by the caller's own orderBy (newest-first today, also
+ * relevance-first once sort-by-relevance lands), and this only adds one more, lower-priority key
+ * on top of that, exactly like a second ORDER BY column would. */
+function sinkAlreadyRead<T extends { id: string; titleDedupeKey: string }>(rows: T[], buried: Set<string>): T[] {
+  if (buried.size === 0) return rows;
+  return [...rows].sort((a, b) => Number(buried.has(a.titleDedupeKey)) - Number(buried.has(b.titleDedupeKey)));
+}
+
 export async function getArticles(
   userId: string,
   channelId: string,
   subchannelId?: string | null,
   limit = 300
 ): Promise<Article[]> {
-  const rows = await prisma.article.findMany({
+  const fetched = await prisma.article.findMany({
     where: { userId, channelId, ...(subchannelId ? { subchannelId } : {}) },
     orderBy: { publishedAt: 'desc' },
     take: limit,
-    select: ARTICLE_SELECT,
+    select: { ...ARTICLE_SELECT, titleDedupeKey: true },
   });
+  const buried = await alreadyReadDedupeKeys(userId, [...new Set(fetched.map((r) => r.titleDedupeKey))]);
+  const rows = sinkAlreadyRead(fetched, buried);
   // Scoped to the articles actually being returned. Previously both of these pulled the user's
   // ENTIRE read-state and bookmark tables on every call — and this endpoint is hit several times
   // per 20-second poll tick, per channel. That made each call cost O(the user's whole history)
@@ -110,12 +141,14 @@ export async function getArticlesForChannels(
   limit = 300
 ): Promise<Article[]> {
   if (channelIds.length === 0) return [];
-  const rows = await prisma.article.findMany({
+  const fetched = await prisma.article.findMany({
     where: { userId, channelId: { in: channelIds } },
     orderBy: { publishedAt: 'desc' },
     take: limit,
-    select: ARTICLE_SELECT,
+    select: { ...ARTICLE_SELECT, titleDedupeKey: true },
   });
+  const buried = await alreadyReadDedupeKeys(userId, [...new Set(fetched.map((r) => r.titleDedupeKey))]);
+  const rows = sinkAlreadyRead(fetched, buried);
   const ids = rows.map((r) => r.id);
   const [readIds, bookmarkedIds] = await Promise.all([
     prisma.readState.findMany({ where: { userId, articleId: { in: ids } }, select: { articleId: true } }),

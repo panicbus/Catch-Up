@@ -4,6 +4,7 @@ import { NewBadge } from './NewBadge';
 import { PaywallBadge } from './PaywallBadge';
 import { DismissButton, type DismissVariant } from './DismissButton';
 import { BookmarkButton } from '../common/BookmarkButton';
+import { TrustToggle } from '../common/TrustToggle';
 import { relativeTime } from '../../services/formatters';
 import { api, revalidateNow } from '../../services/api';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -54,6 +55,11 @@ export interface NewsCardData {
   snippet: string | null;
   imageUrl: string | null;
   source: string;
+  /** The publisher's hostname (e.g. "reuters.com") — used only for the trust toggle's match/save
+   * key (relevance.ts scores by the same value). Optional: BookmarksPage builds cards from
+   * ArticleSnapshot, which has no sourceDomain field (it predates this feature) — those cards
+   * just skip rendering the toggle, same as RollTheDiceModal skips it via the two props below. */
+  sourceDomain?: string;
   publishedAt: string;
   paywalled: boolean;
   bookmarked: boolean;
@@ -150,6 +156,13 @@ interface NewsCardProps {
    * visible effect for however long that round trip took, easy to read as "not working" since
    * there's no exit animation on THIS path to at least show something happened in the meantime. */
   onLocalUnread?: (articleId: string) => void;
+  /** Domains the user has marked trusted (Settings.trustedSourceDomains) — drives the trust
+   * toggle's filled/outline state next to the source name. Undefined (RollTheDiceModal's one-off
+   * card, which has no settings subscription of its own) simply skips rendering the toggle. */
+  trustedSourceDomains?: Set<string>;
+  /** Flips this card's own source domain in or out of Settings.trustedSourceDomains. Undefined
+   * alongside trustedSourceDomains above — same skip-the-toggle behavior. */
+  onToggleTrust?: (domain: string) => void;
 }
 
 type ExitReason = null | 'read' | 'unbookmark';
@@ -174,6 +187,8 @@ function NewsCardComponent({
   onLocalExit,
   onSwipeDismissed,
   onLocalUnread,
+  trustedSourceDomains,
+  onToggleTrust,
 }: NewsCardProps) {
   // "Reads as done" visually — either a channel's in-place read (readInPlace, which also makes the
   // check button archive it) or The Pool's plain dimmed-read (dimmed, check button just un-reads).
@@ -494,6 +509,13 @@ function NewsCardComponent({
       <div className="news-card__footer">
         <PaywallBadge paywalled={article.paywalled} />
         {' '}{article.source} · {relativeTime(article.publishedAt)}
+        {trustedSourceDomains && onToggleTrust && article.sourceDomain && (
+          <TrustToggle
+            domain={article.sourceDomain}
+            trusted={trustedSourceDomains.has(article.sourceDomain)}
+            onToggle={onToggleTrust}
+          />
+        )}
       </div>
     </div>
   );

@@ -78,6 +78,10 @@ interface NewsFeedProps {
    * unfiltered view. See AllCaughtUp/CaughtUpOverlay, which both take this straight through. */
   parentChannelName?: string;
   onBackToParent?: () => void;
+  /** See NewsCard's own doc comments — passed straight through every layer down to each card.
+   * Both undefined together (the default) simply renders every card without a trust toggle. */
+  trustedSourceDomains?: Set<string>;
+  onToggleTrust?: (domain: string) => void;
 }
 
 /** Imperative handle for parents (ChannelPage's "move read to archive" button). */
@@ -131,6 +135,8 @@ function GridSection({
   onLocalExit,
   onSwipeDismissed,
   onLocalUnread,
+  trustedSourceDomains,
+  onToggleTrust,
 }: {
   articles: NewsCardData[];
   isGrid: boolean;
@@ -157,6 +163,8 @@ function GridSection({
   /** See NewsCard's onLocalUnread — passed straight through so an archived card's undo button
    * moves it back to the main section instantly. */
   onLocalUnread?: (articleId: string) => void;
+  trustedSourceDomains?: Set<string>;
+  onToggleTrust?: (domain: string) => void;
 }) {
   const containerClass = isGrid ? 'news-feed__grid' : 'news-feed__list';
 
@@ -183,6 +191,8 @@ function GridSection({
             onSwipeDismissed={onSwipeDismissed}
             onLocalUnread={onLocalUnread}
             onToggleExpand={() => onToggleExpand(article.id)}
+            trustedSourceDomains={trustedSourceDomains}
+            onToggleTrust={onToggleTrust}
           />
         );
       })}
@@ -203,6 +213,8 @@ function DayGroups({
   onLocalExit,
   onSwipeDismissed,
   onLocalUnread,
+  trustedSourceDomains,
+  onToggleTrust,
 }: {
   articles: NewsCardData[];
   viewMode: ViewMode;
@@ -216,6 +228,8 @@ function DayGroups({
   onLocalExit?: (articleId: string) => void;
   onSwipeDismissed?: (channelName?: string) => void;
   onLocalUnread?: (articleId: string) => void;
+  trustedSourceDomains?: Set<string>;
+  onToggleTrust?: (domain: string) => void;
 }) {
   const byDay = groupByDay(articles, 'publishedAt');
 
@@ -237,6 +251,8 @@ function DayGroups({
             onLocalExit={onLocalExit}
             onSwipeDismissed={onSwipeDismissed}
             onLocalUnread={onLocalUnread}
+            trustedSourceDomains={trustedSourceDomains}
+            onToggleTrust={onToggleTrust}
           />
         </section>
       ))}
@@ -251,6 +267,8 @@ function ReadArchive({
   expandedArticleId,
   onToggleExpand,
   onLocalUnread,
+  trustedSourceDomains,
+  onToggleTrust,
 }: {
   articles: NewsCardData[];
   viewMode: ViewMode;
@@ -258,6 +276,8 @@ function ReadArchive({
   expandedArticleId: string | null;
   onToggleExpand: (articleId: string) => void;
   onLocalUnread?: (articleId: string) => void;
+  trustedSourceDomains?: Set<string>;
+  onToggleTrust?: (domain: string) => void;
 }) {
   const byDay = groupByDay(articles, 'publishedAt');
   const [openDate, setOpenDate] = useState<string | null>(null);
@@ -295,6 +315,8 @@ function ReadArchive({
                     onToggleExpand={onToggleExpand}
                     animateReflow={false}
                     onLocalUnread={onLocalUnread}
+                    trustedSourceDomains={trustedSourceDomains}
+                    onToggleTrust={onToggleTrust}
                   />
                 </div>
               </div>
@@ -322,6 +344,8 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     suppressCelebrationRef,
     parentChannelName,
     onBackToParent,
+    trustedSourceDomains,
+    onToggleTrust,
   }: NewsFeedProps,
   ref
 ) {
@@ -663,6 +687,8 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
             onLocalExit={onLocalExit}
             onSwipeDismissed={onSwipeDismissed}
             onLocalUnread={onLocalUnread}
+            trustedSourceDomains={trustedSourceDomains}
+            onToggleTrust={onToggleTrust}
           />
         </>
       )}
@@ -675,6 +701,8 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
           expandedArticleId={expandedArticleId}
           onToggleExpand={toggleExpand}
           onLocalUnread={onLocalUnread}
+          trustedSourceDomains={trustedSourceDomains}
+          onToggleTrust={onToggleTrust}
         />
       )}
 

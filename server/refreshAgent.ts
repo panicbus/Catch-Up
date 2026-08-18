@@ -129,6 +129,7 @@ export async function runChannel(
   ]);
   const aiConfig = buildAiConfig(ai.provider, ai.geminiApiKey, ai.groqApiKey);
   const homeLocation = settings.homeLocation;
+  const trustedSourceDomains = settings.trustedSourceDomains;
   const classificationStore = new ServerClassificationStore(userId);
 
   const subchannels =
@@ -166,7 +167,8 @@ export async function runChannel(
         profile,
         classificationStore,
         aiConfig,
-        homeLocation
+        homeLocation,
+        trustedSourceDomains
       );
       added += await articlesCache.merge(userId, channelId, target.subchannelId, relevant);
     } catch (e) {

@@ -112,7 +112,7 @@ export async function mergeCustomArticles(userId: string, articles: FetchedArtic
   const channels = allChannels.filter((c) => !c.pausedUntil || new Date(c.pausedUntil).getTime() <= Date.now());
   if (channels.length === 0) return 0;
 
-  const placements = sortCustomArticles(articles, channels, settings.homeLocation);
+  const placements = sortCustomArticles(articles, channels, settings.homeLocation, settings.trustedSourceDomains);
   let added = 0;
   for (const placement of placements) {
     added += await articlesCache.merge(userId, placement.channelId, placement.subchannelId, placement.articles);
