@@ -259,6 +259,19 @@
     text-overflow: ellipsis;
   }
 
+  /* Lets the row wrap once the sticky title actually appears (post-scroll) and no longer fits
+     beside Archive read + the sort toggle — confirmed live as an overlap once SortModeToggle made
+     the right side wide enough on its own, permanently, that the two sides no longer reliably fit
+     on one line together the way they used to when only Archive read sat over there. Costs nothing
+     while the title is still collapsed (0fr width, see .channel-page__sticky-title) — both sides
+     already fit on one line then, so nothing wraps until the title genuinely needs room.
+     justify-content: space-between still left-aligns a lone second-line item, so this reads as
+     "title on its own line, controls left-aligned below it" rather than the controls jumping to
+     the right edge. */
+  .channel-page__controls {
+    flex-wrap: wrap;
+  }
+
   /* Its own row, full width, instead of squeezed in beside the sticky-title echo — see the JSX
      comment above this element for why (a long channel name left it almost no room, wrapping its
      label onto two lines and visually colliding with Archive read next to it). */
