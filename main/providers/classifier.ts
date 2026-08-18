@@ -36,10 +36,15 @@ export interface ProviderConfig {
   ollamaBaseUrl?: string;
 }
 
-// `gemini-flash-latest` is Google's alias for the current free-tier Flash model — it keeps working
-// as older pinned versions (gemini-2.0-flash, etc.) roll off the free tier. Override with GEMINI_MODEL
-// to pin a specific version if you ever need reproducibility.
-const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-flash-latest';
+// Pinned, not `gemini-flash-latest` — confirmed live that alias currently resolves to
+// gemini-3.7-flash, a newer model with a free-tier cap of just 20 requests/day, discovered when
+// digest-summarization testing exhausted it almost immediately. Also confirmed live: every 2.x
+// Flash model (2.5-flash, 2.5-flash-lite, 2.0-flash) now 404s as fully deprecated, not just
+// superseded — Google's own error message for each points to gemini-3.6-flash as the current
+// replacement, one generation behind "latest"'s 3.7, which is the pin here on the theory that the
+// newest release is what gets the tightest free-tier cap during its own rollout. Override with
+// GEMINI_MODEL if you want a different one (or to try "latest" again once 3.7 settles down).
+const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-3.6-flash';
 const GEMINI_ENDPOINT = (model: string, key: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
