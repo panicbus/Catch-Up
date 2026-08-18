@@ -17,23 +17,13 @@ import { buildAiConfig } from '../refreshAgent';
 import { buildDigestContent } from '../digest/build';
 import { digestSubject, renderDigestEmail } from '../digest/render';
 import { sendDigestEmail } from '../digest/email';
+import { localHourAndDate, isDigestDue } from './digestSchedule';
 
 // Set by digest.yml's manual "force" workflow_dispatch input ONLY — the scheduled runs never set
 // this, so the hour/dedupe checks below always apply to every real send. Lets a manual test run
 // actually send right away instead of silently doing nothing until the account's real send hour
 // comes around, which is what happened the first time this was tested live.
 const FORCE_SEND = process.env.DIGEST_FORCE_SEND === 'true';
-
-/** The account's current hour-of-day (0-23) and calendar date (YYYY-MM-DD) in ITS OWN timezone —
- * not the server's. `en-CA` formats as YYYY-MM-DD directly, exactly the shape lastDigestSentDate
- * needs to be compared against. Throws on an invalid IANA zone name — callers treat that as "skip
- * this account," not a job-ending error. */
-function localHourAndDate(timezone: string): { hour: number; date: string } {
-  const now = new Date();
-  const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: 'numeric', hour12: false }).format(now));
-  const date = new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(now);
-  return { hour, date };
-}
 
 (async () => {
   const startedAt = Date.now();
@@ -75,13 +65,9 @@ function localHourAndDate(timezone: string): { hour: number; date: string } {
       continue;
     }
 
-    if (!FORCE_SEND && hour !== settings.digestSendHour) {
-      notDue++;
-      continue;
-    }
     const lastSentDate = settings.lastDigestSentDate?.toISOString().slice(0, 10) ?? null;
-    if (!FORCE_SEND && lastSentDate === date) {
-      notDue++; // already sent today, this account's own local day
+    if (!FORCE_SEND && !isDigestDue(hour, settings.digestSendHour, lastSentDate, date)) {
+      notDue++;
       continue;
     }
     if (settings.digestChannelIds.length === 0) {

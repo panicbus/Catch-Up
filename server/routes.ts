@@ -46,7 +46,16 @@ function handle(fn: (userId: string, req: Request) => Promise<unknown>) {
     try {
       const userId = await resolveUser(req);
       const result = await fn(userId, req);
-      res.json(result ?? { ok: true });
+      // undefined (a handler with nothing to report, e.g. `dataStore.markRead`) gets the friendly
+      // { ok: true } filler. A real, explicit `null` does NOT — it's the actual, meaningful result
+      // for a handler like resolveCity ("no match") or getRandomArticle ("nothing left to roll"),
+      // and those two callers' own types (`Promise<{...} | null>`) already expect a literal null
+      // back. Collapsing null into `{ ok: true }` here silently turned "not found" into "success":
+      // confirmed live as real corruption — resolveHomeLocation's caller checks `if (!resolved)`,
+      // but `{ ok: true }` is truthy, so a location that failed to resolve got saved anyway, as
+      // `{ ok: true, query }` with no lat/lon/countryCode at all, silently disabling every
+      // downstream feature that depends on a real home location.
+      res.json(result === undefined ? { ok: true } : result);
     } catch (err) {
       console.error('[routes]', req.method, req.path, err);
       // Distinct status codes, not just message text, so the frontend can react to each without

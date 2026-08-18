@@ -72,6 +72,25 @@ describe('resolveCity', () => {
     const result = resolveCity('  bAnFF , ab  ');
     expect(result?.label).toBe('Banff, AB, CA');
   });
+
+  it('resolves a comma-less "City State" phrasing by retrying the last word as a qualifier', () => {
+    // The exact real-world input that used to silently fail: no comma, lowercase, despite the
+    // Settings UI's own "City, State" placeholder hint. Confirmed live this returned null before
+    // the fallback existed, which (via a since-fixed server bug) got saved as a broken location.
+    const result = resolveCity('Alameda ca');
+    expect(result).toEqual({ label: 'Alameda, CA, US', lat: 37.77099, lon: -122.26087, countryCode: 'US' });
+  });
+
+  it('still resolves a genuine multi-word bare city name with no comma, not just its last word', () => {
+    // The direct (whole-string) attempt must win here — the last-word-as-qualifier fallback would
+    // instead try city="mexico", qualifier="city", which shouldn't be reached at all.
+    const result = resolveCity('Mexico City');
+    expect(result?.label).toBe('Mexico City, Mexico City, MX');
+  });
+
+  it('returns null for comma-less input where neither the whole string nor a last-word split match', () => {
+    expect(resolveCity('Nonexistent Placeville')).toBeNull();
+  });
 });
 
 describe('looksLikePlaceChannel', () => {

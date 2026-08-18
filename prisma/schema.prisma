@@ -131,6 +131,13 @@ model Article {
   @@id([channelId, id])
   @@index([userId, channelId, publishedAt(sort: Desc)])
   @@index([userId, channelId, titleDedupeKey])
+  // Supports alreadyReadDedupeKeys' cross-channel lookup (server/stores/articlesCache.ts) —
+  // deliberately WITHOUT channelId, since that query has to search every channel for a duplicate.
+  // The index above can't serve that: channelId sits between userId and titleDedupeKey in it, so a
+  // query that omits channelId can only use userId as an effective prefix, not the full path to
+  // titleDedupeKey. This runs on every getArticles/getArticlesForChannels call, a hot path already
+  // responsible for one real production outage from an unindexed scan (see prune()'s comment).
+  @@index([userId, titleDedupeKey])
   @@map("articles")
 }
 

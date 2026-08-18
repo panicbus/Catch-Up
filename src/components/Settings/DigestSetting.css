@@ -57,10 +57,16 @@
   color: var(--text);
 }
 
-.digest-setting__time-row {
+.digest-setting__time-row,
+.digest-setting__email-row {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.digest-setting__email-row .digest-setting__input {
+  flex: 1;
+  min-width: 200px;
 }
 
 .digest-setting__select,

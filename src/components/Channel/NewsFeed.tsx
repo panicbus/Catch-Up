@@ -468,7 +468,8 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
 
   // Main section: the capped unread cards, plus (in catch-up mode) the ones read-in-place this
   // session so they stay put and dimmed — minus anything whose exit already committed locally
-  // (see locallyExited above). Filtering `articles` directly keeps chronological order.
+  // (see locallyExited above). Filtering `articles` directly preserves whatever order it already
+  // arrived in — chronological in 'newest' sortMode, relevance-ranked in 'relevance' mode.
   const mainArticles = articles.filter(
     (a) => !locallyExited.has(a.id) && (cappedBaseIds.has(a.id) || (catchUpMode && a.read && keepVisible.has(a.id)))
   );

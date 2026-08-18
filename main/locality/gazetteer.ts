@@ -275,20 +275,7 @@ function formatLabel(row: CityRow): string {
   return parts.join(', ');
 }
 
-/** Resolve a user-typed city string ("Los Angeles, CA" / "Banff, Alberta" / bare "Springfield")
- * against the bundled gazetteer. Called once, at settings-save time.
- *   - An optional qualifier after the last comma narrows by country code, common country name,
- *     admin1 (state/province) name, or a US/Canadian two-letter abbreviation.
- *   - When ambiguous (no qualifier, or the qualifier matches nothing), falls back to the
- *     highest-population candidate — a deliberate simplifying assumption for bare names like
- *     "Springfield"; the UI should encourage "City, State/Country" to avoid relying on it.
- * Returns null on no match. Never throws. */
-export function resolveCity(query: string): ResolvedLocation | null {
-  if (!query || !query.trim()) return null;
-  const commaIdx = query.indexOf(',');
-  const cityPart = normalize(commaIdx === -1 ? query : query.slice(0, commaIdx));
-  const qualifier = commaIdx === -1 ? null : normalize(query.slice(commaIdx + 1));
-
+function resolveParts(cityPart: string, qualifier: string | null): ResolvedLocation | null {
   const candidates = BY_NAME.get(cityPart);
   if (!candidates || candidates.length === 0) return null;
 
@@ -300,6 +287,36 @@ export function resolveCity(query: string): ResolvedLocation | null {
 
   const best = pool.reduce((a, b) => (b.pop > a.pop ? b : a));
   return { label: formatLabel(best), lat: best.lat, lon: best.lon, countryCode: best.cc };
+}
+
+/** Resolve a user-typed city string ("Los Angeles, CA" / "Banff, Alberta" / bare "Springfield")
+ * against the bundled gazetteer. Called once, at settings-save time.
+ *   - An optional qualifier after the last comma narrows by country code, common country name,
+ *     admin1 (state/province) name, or a US/Canadian two-letter abbreviation.
+ *   - When ambiguous (no qualifier, or the qualifier matches nothing), falls back to the
+ *     highest-population candidate — a deliberate simplifying assumption for bare names like
+ *     "Springfield"; the UI should encourage "City, State/Country" to avoid relying on it.
+ *   - No comma at all ("Alameda ca", "Alameda CA") is a real, common way people actually type
+ *     this despite the UI's own comma hint — confirmed live: it silently resolved to nothing,
+ *     which (via a since-fixed bug in how the server treated a null resolve) got saved as a
+ *     broken location with no lat/lon at all. Tried as a bare name first (so genuine multi-word
+ *     names like "Mexico City" or "New York" still resolve as themselves); only if THAT fails is
+ *     the last word retried as a qualifier, covering the comma-less "City State" phrasing.
+ * Returns null on no match. Never throws. */
+export function resolveCity(query: string): ResolvedLocation | null {
+  if (!query || !query.trim()) return null;
+  const commaIdx = query.indexOf(',');
+  if (commaIdx !== -1) {
+    return resolveParts(normalize(query.slice(0, commaIdx)), normalize(query.slice(commaIdx + 1)));
+  }
+
+  const direct = resolveParts(normalize(query), null);
+  if (direct) return direct;
+
+  const trimmed = query.trim();
+  const lastSpace = trimmed.lastIndexOf(' ');
+  if (lastSpace === -1) return null;
+  return resolveParts(normalize(trimmed.slice(0, lastSpace)), normalize(trimmed.slice(lastSpace + 1)));
 }
 
 // A topic/entity channel named after a real place (e.g. "Ukraine", "Paris Olympics") would have

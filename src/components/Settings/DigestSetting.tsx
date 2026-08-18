@@ -30,7 +30,7 @@ const SUPPORTED_TIMEZONES: string[] | null =
 function DigestSettingInner() {
   const { settings, update } = useSettings();
   const { channels } = useChannels();
-  const { config: aiConfig, setProvider } = useAiConfig();
+  const { config: aiConfig, loading: aiConfigLoading, setProvider } = useAiConfig();
   const [emailDraft, setEmailDraft] = useState(settings.digestEmailOverride ?? '');
   const [emailError, setEmailError] = useState<string | null>(null);
   // Closed by default — clicking "Turn on" forces it open (see enable() below) since that's
@@ -85,9 +85,14 @@ function DigestSettingInner() {
         <Button
           variant={settings.digestEnabled ? 'secondary' : 'primary'}
           size="sm"
+          // Turning OFF never touches aiConfig, so it's never gated — only enabling is, and only
+          // until the AI config fetch actually resolves. Without this, clicking "Turn on" before
+          // that resolves reads aiConfig.provider as its still-loading default (null) even when the
+          // real saved provider isn't, and silently overwrites it with Gemini (see enable()).
+          disabled={!settings.digestEnabled && aiConfigLoading}
           onClick={() => (settings.digestEnabled ? update({ digestEnabled: false }) : enable())}
         >
-          {settings.digestEnabled ? 'Turn off' : 'Turn on'}
+          {settings.digestEnabled ? 'Turn off' : aiConfigLoading ? 'Loading…' : 'Turn on'}
         </Button>
       </div>
 
@@ -157,18 +162,31 @@ function DigestSettingInner() {
               <label className="digest-setting__field-label" htmlFor="digest-email">
                 Send to a different email (optional — leave blank to use your sign-in email)
               </label>
-              <input
-                id="digest-email"
-                className="digest-setting__input"
-                type="email"
-                placeholder="you@example.com"
-                value={emailDraft}
-                onChange={(e) => {
-                  setEmailDraft(e.target.value);
-                  if (emailError) setEmailError(null);
-                }}
-                onBlur={saveEmail}
-              />
+              <div className="digest-setting__email-row">
+                <input
+                  id="digest-email"
+                  className="digest-setting__input"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={emailDraft}
+                  onChange={(e) => {
+                    setEmailDraft(e.target.value);
+                    if (emailError) setEmailError(null);
+                  }}
+                  onBlur={saveEmail}
+                />
+                {/* Blur-only saving meant a typed address was silently lost if the page closed
+                    before the input ever lost focus — an explicit action that doesn't depend on
+                    that, matching every other free-text Settings field (LocationSetting,
+                    TrustedSourcesSetting both use a real Save/Add button, not blur alone). */}
+                <Button
+                  size="sm"
+                  onClick={saveEmail}
+                  disabled={emailDraft.trim() === (settings.digestEmailOverride ?? '')}
+                >
+                  Save
+                </Button>
+              </div>
               {emailError && <p className="digest-setting__error">{emailError}</p>}
             </div>
           </div>
