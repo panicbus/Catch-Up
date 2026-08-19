@@ -414,6 +414,12 @@ export class DataStore {
     return this.readIds.has(articleId);
   }
 
+  /** null while unread. A plain array scan rather than a parallel Map — readArticleIds is one
+   * person's ~10-day read history (see pruneReadArticleIds), never large enough for this to matter. */
+  getReadAt(articleId: string): string | null {
+    return this.data.readArticleIds.find((r) => r.id === articleId)?.readAt ?? null;
+  }
+
   markRead(articleId: string): void {
     if (this.readIds.has(articleId)) return;
     this.readIds.add(articleId);

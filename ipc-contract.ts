@@ -41,6 +41,12 @@ export interface Article {
   relevanceScore: number | null;
   bookmarked: boolean;
   read: boolean;
+  /** When this article was marked read — null while unread. Exists so the "Read stories" archive
+   * (NewsFeed.tsx's ReadArchive) can group by the day something was actually read rather than the
+   * day it was published: an old story you only just got around to reading should file under today,
+   * not under its original (possibly much older) publish date, or the archive's stated retention
+   * window and what it visibly displays fall out of sync. */
+  readAt: string | null;
 }
 
 export interface ArticleListParams {

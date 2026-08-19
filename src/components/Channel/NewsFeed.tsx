@@ -286,7 +286,13 @@ function ReadArchive({
   trustedSourceDomains?: Set<string>;
   onToggleTrust?: (domain: string) => void;
 }) {
-  const byDay = groupByDay(articles, 'publishedAt');
+  // Grouped by when each story was actually READ, not when it was published — an old story you only
+  // just got around to reading should file under today, not vanish into a much-older bucket that
+  // makes the "N day archive" label above look broken (a story published 14 days ago but read
+  // yesterday is well within the 10-day read-state retention — see READ_ARCHIVE_DAYS/
+  // READ_STATE_MAX_AGE_DAYS — even though its publish date isn't). Every article here has already
+  // passed the isRead(a) check in the caller, so readAt is never actually missing in practice.
+  const byDay = groupByDay(articles, 'readAt');
   const [openDate, setOpenDate] = useState<string | null>(null);
 
   const toggleDate = (dateKey: string) => {
@@ -307,7 +313,11 @@ function ReadArchive({
               aria-expanded={isOpen}
             >
               <ChevronIcon open={isOpen} />
-              <span>{formatDateHeader(dayArticles[0].publishedAt)}</span>
+              {/* readAt drives the grouping above now, so the header has to read from the same field —
+                  labeling a "read yesterday" bucket with a story's older publish date would contradict
+                  the bucket it's sitting in. publishedAt is just a defensive fallback for the type;
+                  every card reaching this component has already passed isRead(a) in the caller. */}
+              <span>{formatDateHeader(dayArticles[0].readAt ?? dayArticles[0].publishedAt)}</span>
               <span className="news-feed__archive-count">{dayArticles.length}</span>
             </button>
             <div className={`news-feed__archive-body ${isOpen ? 'news-feed__archive-body--open' : ''}`}>

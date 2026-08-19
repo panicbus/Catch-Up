@@ -64,6 +64,11 @@ export interface NewsCardData {
   paywalled: boolean;
   bookmarked: boolean;
   read: boolean;
+  /** When this article was marked read — used by NewsFeed's ReadArchive to group by the day it was
+   * actually read rather than the day it was published. Optional/nullable: BookmarksPage builds
+   * cards from ArticleSnapshot (no such field) and an unread card has none yet — neither ever
+   * reaches ReadArchive, which only renders genuinely-read cards. */
+  readAt?: string | null;
   /** Drives the reader view's eligibility check (see readerEligible below) — 'googlenewsrss'
    * cards get "Open original" only, since their link is an opaque redirect token the reader can't
    * follow server-side. Optional because BookmarksPage builds cards from ArticleSnapshot, which

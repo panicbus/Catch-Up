@@ -27,6 +27,7 @@ function toArticle(cached: CachedArticle, dataStore: DataStore): Article {
     relevanceScore: cached.relevanceScore ?? null,
     bookmarked: dataStore.isBookmarked(cached.id),
     read: dataStore.isRead(cached.id),
+    readAt: dataStore.getReadAt(cached.id),
   };
 }
 

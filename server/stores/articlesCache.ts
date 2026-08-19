@@ -49,7 +49,7 @@ const ARTICLE_SELECT = {
  * a schema change still flows through and typecheck catches any mismatch. */
 type SelectedArticle = Pick<PrismaArticle, keyof typeof ARTICLE_SELECT>;
 
-function toArticle(a: SelectedArticle, read: boolean, bookmarked: boolean): Article {
+function toArticle(a: SelectedArticle, readAt: Date | null, bookmarked: boolean): Article {
   return {
     id: a.id,
     url: a.url,
@@ -66,7 +66,8 @@ function toArticle(a: SelectedArticle, read: boolean, bookmarked: boolean): Arti
     paywalled: a.paywalled,
     relevanceScore: a.relevanceScore,
     bookmarked,
-    read,
+    read: readAt !== null,
+    readAt: readAt ? readAt.toISOString() : null,
   };
 }
 
@@ -131,13 +132,13 @@ export async function getArticles(
   // per 20-second poll tick, per channel. That made each call cost O(the user's whole history)
   // instead of O(one page of one channel).
   const ids = rows.map((r) => r.id);
-  const [readIds, bookmarkedIds] = await Promise.all([
-    prisma.readState.findMany({ where: { userId, articleId: { in: ids } }, select: { articleId: true } }),
+  const [readRows, bookmarkedIds] = await Promise.all([
+    prisma.readState.findMany({ where: { userId, articleId: { in: ids } }, select: { articleId: true, readAt: true } }),
     prisma.bookmark.findMany({ where: { userId, articleId: { in: ids } }, select: { articleId: true } }),
   ]);
-  const read = new Set(readIds.map((r) => r.articleId));
+  const readAtById = new Map(readRows.map((r) => [r.articleId, r.readAt]));
   const bookmarked = new Set(bookmarkedIds.map((b) => b.articleId));
-  return rows.map((a) => toArticle(a, read.has(a.id), bookmarked.has(a.id)));
+  return rows.map((a) => toArticle(a, readAtById.get(a.id) ?? null, bookmarked.has(a.id)));
 }
 
 export async function getArticleById(userId: string, channelId: string, id: string): Promise<PrismaArticle | null> {
@@ -164,13 +165,13 @@ export async function getArticlesForChannels(
   const buried = await alreadyReadDedupeKeys(userId, [...new Set(fetched.map((r) => r.titleDedupeKey))]);
   const rows = sinkAlreadyRead(fetched, buried);
   const ids = rows.map((r) => r.id);
-  const [readIds, bookmarkedIds] = await Promise.all([
-    prisma.readState.findMany({ where: { userId, articleId: { in: ids } }, select: { articleId: true } }),
+  const [readRows, bookmarkedIds] = await Promise.all([
+    prisma.readState.findMany({ where: { userId, articleId: { in: ids } }, select: { articleId: true, readAt: true } }),
     prisma.bookmark.findMany({ where: { userId, articleId: { in: ids } }, select: { articleId: true } }),
   ]);
-  const read = new Set(readIds.map((r) => r.articleId));
+  const readAtById = new Map(readRows.map((r) => [r.articleId, r.readAt]));
   const bookmarked = new Set(bookmarkedIds.map((b) => b.articleId));
-  return rows.map((a) => toArticle(a, read.has(a.id), bookmarked.has(a.id)));
+  return rows.map((a) => toArticle(a, readAtById.get(a.id) ?? null, bookmarked.has(a.id)));
 }
 
 export interface ChannelCounts {
@@ -410,5 +411,5 @@ export async function getRandomArticle(
     prisma.readState.findUnique({ where: { userId_articleId: { userId, articleId: pick.id } } }),
     prisma.bookmark.findUnique({ where: { userId_articleId: { userId, articleId: pick.id } } }),
   ]);
-  return toArticle(pick, !!readRow, !!bookmarkRow);
+  return toArticle(pick, readRow?.readAt ?? null, !!bookmarkRow);
 }
