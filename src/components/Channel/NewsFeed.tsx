@@ -6,6 +6,7 @@ import { formatDateHeader } from '../../services/formatters';
 import { api } from '../../services/api';
 import { useScrollCatchUp } from '../../hooks/useScrollCatchUp';
 import { isEffectivelyRead as computeEffectivelyRead, buildUnreadKey } from './readState';
+import { pickSurvivingAnchor } from './scrollAnchor';
 import { NewsCard, type NewsCardData } from './NewsCard';
 import { AllCaughtUp } from './AllCaughtUp';
 import { CaughtUpOverlay } from './CaughtUpOverlay';
@@ -25,6 +26,39 @@ const READ_ARCHIVE_DAYS = 10;
  * (0.3s) — see toggleExpand's scroll-into-view logic below for why this can't just be a
  * requestAnimationFrame. */
 const CARD_EXPAND_TRANSITION_MS = 340;
+
+/** The thin DOM-reading wrapper around scrollAnchor.ts's pure pickSurvivingAnchor — measures each
+ * relevant card's viewport-relative position and hands that plain data off to the pure function,
+ * rather than mixing DOM reads and the actual decision logic together (which is what made the
+ * previous scrollHeight-delta approach hard to get right and impossible to unit-test). Takes
+ * `container`/`scrollRoot` as plain params rather than closing over feedRef directly so it can be
+ * called from render-time code (see the mainArticles-shrink check below) without depending on any
+ * particular render's closure.
+ *
+ * `relevantIds` scopes the candidates to the main section (mainArticles) only — `container` is the
+ * WHOLE feed, which also holds the Read Archive's cards, one per story read in the last 10 days.
+ * Those stay in the DOM even collapsed (a zero-height CSS grid-rows trick, see NewsFeed.css's
+ * .news-feed__archive-body), so an unscoped query would force a layout-reading getBoundingClientRect()
+ * on every one of them before ever reaching a candidate that's actually usable — for a heavy user
+ * with a large archive, real, unnecessary work on every single card removal. */
+function findSurvivingTopAnchor(
+  container: HTMLElement,
+  scrollRoot: HTMLElement,
+  relevantIds: ReadonlySet<string>,
+  vanishingIds: ReadonlySet<string>
+): { id: string; top: number } | null {
+  // Same [data-sticky-nav]-measured offset useScrollCatchUp and scrollExpandedCardIntoView already
+  // use as "where the visible area actually starts" — below the sticky bar, not the raw viewport top.
+  const navHeight = scrollRoot.querySelector<HTMLElement>('[data-sticky-nav]')?.getBoundingClientRect().height ?? 0;
+  const visibleTop = scrollRoot.getBoundingClientRect().top + navHeight;
+  const candidates = Array.from(container.querySelectorAll<HTMLElement>('[data-article-id]'))
+    .filter((el) => relevantIds.has(el.dataset.articleId!))
+    .map((el) => {
+      const rect = el.getBoundingClientRect();
+      return { id: el.dataset.articleId!, top: rect.top, bottom: rect.bottom };
+    });
+  return pickSurvivingAnchor(candidates, visibleTop, vanishingIds);
+}
 
 interface NewsFeedProps {
   articles: NewsCardData[];
@@ -410,7 +444,15 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // mechanism rather than one per action, since all of them are the same shape: something that was
   // visible a moment ago is gone now, with no browser-native compensation for the resulting scroll
   // shift. Declared here, ahead of its first use.
-  const pendingArchiveCompensationRef = useRef<{ scrollRoot: HTMLElement; heightBefore: number } | null>(null);
+  //
+  // anchorId/topBefore, not a total scrollHeight delta (the previous approach) — see scrollAnchor.ts's
+  // own doc comment for why that was provably wrong (it "corrected" scrollTop by the full size of
+  // anything that vanished even when it was below the fold and the browser had moved nothing).
+  // Anchoring to one real surviving card's own on-screen position is correct regardless of where the
+  // removal happened, by construction.
+  const pendingArchiveCompensationRef = useRef<{ scrollRoot: HTMLElement; anchorId: string; topBefore: number } | null>(
+    null
+  );
   // mainArticles' id set as of the last render, diffed fresh each render against the current set to
   // detect that shrink regardless of what caused it. null until the first render has actually run.
   const prevMainArticleIdsRef = useRef<Set<string> | null>(null);
@@ -528,16 +570,22 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // needs to compensate scrollTop once the removal actually lands.
   const mainArticleIds = new Set(mainArticles.map((a) => a.id));
   if (prevMainArticleIdsRef.current && !pendingArchiveCompensationRef.current) {
-    let vanished = false;
+    const vanishedIds = new Set<string>();
     for (const id of prevMainArticleIdsRef.current) {
-      if (!mainArticleIds.has(id)) {
-        vanished = true;
-        break;
-      }
+      if (!mainArticleIds.has(id)) vanishedIds.add(id);
     }
-    if (vanished) {
-      const scrollRoot = feedRef.current?.closest<HTMLElement>('.app-shell__main');
-      if (scrollRoot) pendingArchiveCompensationRef.current = { scrollRoot, heightBefore: scrollRoot.scrollHeight };
+    if (vanishedIds.size > 0 && feedRef.current) {
+      const scrollRoot = feedRef.current.closest<HTMLElement>('.app-shell__main');
+      // Skip the vanishing ids while picking the anchor, rather than picking one and discovering
+      // afterward that it's going away — see scrollAnchor.ts's own doc comment.
+      const anchor = scrollRoot ? findSurvivingTopAnchor(feedRef.current, scrollRoot, mainArticleIds, vanishedIds) : null;
+      if (scrollRoot && anchor) {
+        pendingArchiveCompensationRef.current = { scrollRoot, anchorId: anchor.id, topBefore: anchor.top };
+      }
+      // Else: nothing currently visible survives (e.g. flushReadInPlace clearing the whole visible
+      // screenful at once) — no stable reference left to compensate against. Accepted rather than
+      // falling back to the total-scrollHeight-delta guess this replaced, which was provably wrong
+      // often enough to be worse than doing nothing (see scrollAnchor.ts).
     }
   }
   prevMainArticleIdsRef.current = mainArticleIds;
@@ -613,8 +661,12 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     const pending = pendingArchiveCompensationRef.current;
     if (!pending) return;
     pendingArchiveCompensationRef.current = null;
-    const delta = pending.heightBefore - pending.scrollRoot.scrollHeight;
-    if (delta > 0) pending.scrollRoot.scrollTop -= delta;
+    const el = feedRef.current?.querySelector<HTMLElement>(`[data-article-id="${CSS.escape(pending.anchorId)}"]`);
+    // The anchor itself vanished between capture and commit (e.g. a poll raced in on top of the
+    // action that triggered this) — nothing safe left to compensate against; skip rather than guess.
+    if (!el) return;
+    const delta = pending.topBefore - el.getBoundingClientRect().top;
+    if (delta !== 0) pending.scrollRoot.scrollTop -= delta;
   });
 
   const onPassedTop = useCallback(
