@@ -191,7 +191,7 @@ model Settings {
   digestSendHour      Int       @default(7) @map("digest_send_hour") // 0-23, in digestTimezone
   digestTimezone      String?   @map("digest_timezone") // IANA name (e.g. "America/Los_Angeles"); set automatically the first time digestEnabled is turned on
   digestChannelIds    String[]  @map("digest_channel_ids") // populated with every channel id at the moment digest is first enabled (see DigestSetting.tsx), then user-editable — not a null-means-all sentinel like rollTheDiceChannelIds
-  digestEmailOverride String?   @map("digest_email_override") // send to a different address than the account's sign-in email; null = use the account email
+  digestEmailOverride String?   @map("digest_email_override") // the only address the digest sends to; null = digest is configured but never sends (see server/cron/digest.ts's where-clause). Column name predates this — was an optional override of the sign-in email with a fallback; not renamed, to avoid a schema change
   // Server-only bookkeeping, deliberately NOT exposed in AppSettings/toSettings() — the dedupe
   // guard server/cron/digest.ts uses so a slow or re-run job can't double-send. A DATE column
   // (not a full timestamp) storing the user's own LOCAL calendar date, same convention as

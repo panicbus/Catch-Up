@@ -5,6 +5,7 @@
  * design, each of these is already a small, targeted database operation, so there's nothing to
  * batch. The database itself is the only state. */
 
+import tzLookup from 'tz-lookup';
 import { prisma } from '../db';
 import { capitalizeWords, slugifyChannelName } from '../../channelName';
 import type { AiProvider, AppSettings, BookmarkEntry, Channel, CustomSource, StreakInfo, Subchannel } from '../../ipc-contract';
@@ -461,6 +462,29 @@ export async function getSettings(userId: string): Promise<AppSettings> {
 }
 
 export async function setSettings(userId: string, partial: Partial<AppSettings>): Promise<void> {
+  // A home location doubles as a timezone hint for the digest email — "send at 7am" should mean 7am
+  // at home, not 7am wherever the device happened to be when the digest was first turned on. Only
+  // kicks in when nothing has decided digestTimezone yet: device auto-detect on first enabling the
+  // digest, an earlier home-city derivation, and a manual pick via the dropdown are all
+  // indistinguishable from each other here (no separate flag recording WHICH one set it — that would
+  // need a schema change this doesn't make), so "still null" is the one signal available, and is
+  // treated as "nothing has claimed this yet" regardless of which of those it would have been.
+  // Known gap this leaves: an account that already had digestTimezone set (by any of the above)
+  // before ever saving a home location won't retroactively pick up the home city's zone later — the
+  // dropdown in Settings is still there for that case.
+  let derivedDigestTimezone: string | undefined;
+  if (partial.homeLocation && partial.digestTimezone === undefined) {
+    const current = await prisma.settings.findUnique({ where: { userId }, select: { digestTimezone: true } });
+    if (!current?.digestTimezone) {
+      try {
+        derivedDigestTimezone = tzLookup(partial.homeLocation.lat, partial.homeLocation.lon);
+      } catch {
+        // tz-lookup throws for out-of-range coordinates — shouldn't happen for a real resolved city,
+        // but a timezone guess isn't worth failing the location save over either way.
+      }
+    }
+  }
+
   await prisma.settings.update({
     where: { userId },
     data: {
@@ -479,6 +503,7 @@ export async function setSettings(userId: string, partial: Partial<AppSettings>)
       ...(partial.digestEnabled !== undefined && { digestEnabled: partial.digestEnabled }),
       ...(partial.digestSendHour !== undefined && { digestSendHour: partial.digestSendHour }),
       ...(partial.digestTimezone !== undefined && { digestTimezone: partial.digestTimezone }),
+      ...(derivedDigestTimezone !== undefined && { digestTimezone: derivedDigestTimezone }),
       ...(partial.digestChannelIds !== undefined && { digestChannelIds: partial.digestChannelIds }),
       ...(partial.digestEmailOverride !== undefined && { digestEmailOverride: partial.digestEmailOverride }),
     },

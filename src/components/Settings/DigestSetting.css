@@ -57,6 +57,16 @@
   color: var(--text);
 }
 
+/* Sits directly under a field-label (see the digest email field) — same size/weight/color as the
+   section-level .digest-setting__hint above, just without its own top margin since the gap here
+   comes from .digest-setting__field's own flex gap instead. */
+.digest-setting__field-hint {
+  margin: -4px 0 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
 .digest-setting__time-row,
 .digest-setting__email-row {
   display: flex;

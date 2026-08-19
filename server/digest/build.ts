@@ -9,14 +9,12 @@ import { summarizeStories, isAiConfigured } from '../../main/providers/classifie
 import type { ProviderConfig } from '../../main/providers/classifier';
 import type { Article } from '../../ipc-contract';
 
-const STORIES_PER_CHANNEL = 5;
+// Was 5; brought down to 3 to see how a shorter list reads before considering going back up.
+const STORIES_PER_CHANNEL = 3;
 // Over-fetched relevance-ranked, then filtered down to unread — a channel with several already-read
-// stories among its top 5 by score would otherwise come up short. 30 comfortably covers that for any
-// realistically-sized channel without pulling a channel's entire pool (capped at 300 rows anyway).
+// stories among its top picks by score would otherwise come up short. 30 comfortably covers that for
+// any realistically-sized channel without pulling a channel's entire pool (capped at 300 rows anyway).
 const FETCH_LIMIT = 30;
-// The recap only needs the standout few per channel, not the full 5 the list itself carries — keeps
-// the summarization prompt bounded regardless of how many channels/stories are configured.
-const STORIES_PER_CHANNEL_FOR_SUMMARY = 3;
 
 export interface DigestChannel {
   channelId: string;
@@ -58,9 +56,11 @@ export async function buildDigestContent(
   let summary: string | null = null;
   if (aiConfig && isAiConfigured(aiConfig)) {
     summary = await summarizeStories({
+      // c.stories is already capped at STORIES_PER_CHANNEL — no separate slice needed now that the
+      // two counts are the same; the recap covers exactly what the list underneath it shows.
       channels: channels.map((c) => ({
         channelName: c.channelName,
-        stories: c.stories.slice(0, STORIES_PER_CHANNEL_FOR_SUMMARY).map((a) => ({ title: a.title, snippet: a.snippet })),
+        stories: c.stories.map((a) => ({ title: a.title, snippet: a.snippet })),
       })),
       config: aiConfig,
     });

@@ -228,7 +228,10 @@ export interface AppSettings {
    * first enabled, then user-editable — deliberately NOT a null-means-all sentinel like
    * rollTheDiceChannelIds, so the cron job never has to re-derive "all channels" itself. */
   digestChannelIds: string[];
-  /** Send to a different address than the one signed in with. null = use the account's own email. */
+  /** Where the digest actually gets sent — required for a send to happen at all; null means the
+   * digest is configured but nothing goes out (see server/cron/digest.ts's where-clause). Name is a
+   * holdover from when this was an optional override of the sign-in email with a fallback; kept as-is
+   * to avoid a schema change, but there's no fallback anymore — this is the one address in play. */
   digestEmailOverride: string | null;
 }
 

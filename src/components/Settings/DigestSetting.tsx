@@ -3,9 +3,11 @@ import { useSettings } from '../../hooks/useSettings';
 import { useSettleFieldOnLoad } from '../../hooks/useSettleFieldOnLoad';
 import { useChannels } from '../../hooks/useChannels';
 import { useAiConfig } from '../../hooks/useAiConfig';
+import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { Button } from '../common/Button';
 import { SettingsAccordion } from './SettingsAccordion';
 import { ChannelChecklist } from './ChannelChecklist';
+import { EMAIL_PATTERN } from '../../utils/email';
 import type { AppSettings } from '../../../ipc-contract';
 import './DigestSetting.css';
 
@@ -13,8 +15,6 @@ import './DigestSetting.css';
 // is sent by a scheduled job against the hosted database, which a desktop-only account has no row
 // in at all.
 const isWeb = typeof window !== 'undefined' && !window.api;
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function hourLabel(h: number): string {
   const period = h < 12 ? 'AM' : 'PM';
@@ -32,6 +32,7 @@ function DigestSettingInner() {
   const { settings, update, loading } = useSettings();
   const { channels } = useChannels();
   const { config: aiConfig, loading: aiConfigLoading, setProvider } = useAiConfig();
+  const currentUser = useCurrentUser();
   // Same stale-initial-state bug as LocationSetting.tsx's `text`/`editing` — see useSettleFieldOnLoad
   // for the fix and why it backs off once the field's been typed into.
   const [emailDraft, setEmailDraft] = useState(settings.digestEmailOverride ?? '');
@@ -52,6 +53,15 @@ function DigestSettingInner() {
     if (!settings.digestTimezone) updates.digestTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (settings.digestChannelIds.length === 0 && channels.length > 0) {
       updates.digestChannelIds = channels.map((c) => c.id);
+    }
+    // The digest now only ever sends to this field — no more falling back to the sign-in email when
+    // it's blank (see server/cron/digest.ts) — so turning the digest on with nothing here yet would
+    // silently configure something that can never actually send. Pre-filling with the account's own
+    // email keeps "Turn on" a genuine one-step action; explicitly clearing the field afterward (in
+    // the accordion below) is what opts back out, same as before.
+    if (!settings.digestEmailOverride && currentUser?.email) {
+      updates.digestEmailOverride = currentUser.email;
+      setEmailDraft(currentUser.email);
     }
     update(updates);
     // The recap needs AI configured to actually write anything — turning the digest on also turns
@@ -166,9 +176,17 @@ function DigestSettingInner() {
             </div>
 
             <div className="digest-setting__field">
+              {/* Required now, not optional — the digest no longer falls back to the sign-in email
+                  (see server/cron/digest.ts), so an empty field here means the digest is configured
+                  but silently never sends. Pre-filled with the account email the first time the
+                  digest is turned on (see enable() above); clearing it and saving is the deliberate
+                  way to opt back out without turning the whole feature off. */}
               <label className="digest-setting__field-label" htmlFor="digest-email">
-                Send to a different email (optional — leave blank to use your sign-in email)
+                Digest email address
               </label>
+              <p className="digest-setting__field-hint">
+                Where your daily digest gets sent. Clear this and save to stop receiving it.
+              </p>
               <div className="digest-setting__email-row">
                 <input
                   id="digest-email"

@@ -28,7 +28,7 @@ const FORCE_SEND = process.env.DIGEST_FORCE_SEND === 'true';
 (async () => {
   const startedAt = Date.now();
   const users = await prisma.user.findMany({
-    where: { settings: { digestEnabled: true, digestTimezone: { not: null } } },
+    where: { settings: { digestEnabled: true, digestTimezone: { not: null }, digestEmailOverride: { not: null } } },
     orderBy: { isOwner: 'desc' },
     select: {
       id: true,
@@ -54,6 +54,7 @@ const FORCE_SEND = process.env.DIGEST_FORCE_SEND === 'true';
   for (const user of users) {
     const settings = user.settings;
     if (!settings?.digestTimezone) continue; // the where-clause already guarantees this; keeps TS honest
+    if (!settings.digestEmailOverride) continue; // same — the where-clause guarantees this too
 
     let hour: number;
     let date: string;
@@ -86,8 +87,11 @@ const FORCE_SEND = process.env.DIGEST_FORCE_SEND === 'true';
       continue;
     }
 
-    const to = settings.digestEmailOverride ?? user.email;
-    const ok = await sendDigestEmail(to, digestSubject(content), renderDigestEmail(content));
+    // No longer a fallback-from-sign-in-email "override" in practice — this is the only address the
+    // digest ever sends to now (see DigestSetting.tsx's own comment on why "leave blank to use your
+    // sign-in email" was dropped). Kept as the same field/column rather than renamed: no schema
+    // change needed to ship this.
+    const ok = await sendDigestEmail(settings.digestEmailOverride, digestSubject(content), renderDigestEmail(content));
     if (ok) {
       // A forced test send deliberately does NOT record lastDigestSentDate — it's a manual, one-off
       // action, not the real automatic send, so it shouldn't consume the account's real digest for
