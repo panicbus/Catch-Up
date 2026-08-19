@@ -65,6 +65,35 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
   );
 }
 
+/** The sticky bar's echo of the page's own title, once it's scrolled out of view (see ChannelPage's
+ * IntersectionObserver effect and ChannelPage.css's own comment on the width-only 0fr/1fr collapse
+ * this animates through). Extracted so both the mobile and desktop controls layouts below can render
+ * it identically without duplicating the markup. */
+function StickyTitleEcho({ visible, name }: { visible: boolean; name: string }) {
+  return (
+    <span className={`channel-page__sticky-title ${visible ? 'channel-page__sticky-title--visible' : ''}`}>
+      <span className="channel-page__sticky-title-inner">{name}</span>
+    </span>
+  );
+}
+
+/** Same reasoning as StickyTitleEcho above — shared between the mobile and desktop controls layouts
+ * rather than duplicated. */
+function ArchiveReadButton({ count, onClick }: { count: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="channel-page__archive-read"
+      disabled={count === 0}
+      onClick={onClick}
+      title="Move stories you've read (by scrolling past or opening) into the archive"
+    >
+      <ArchiveIcon />
+      Archive read{count > 0 ? ` (${count})` : ''}
+    </button>
+  );
+}
+
 export function ChannelPage() {
   // The URL identifies a channel by its slug (a readable version of the name, e.g. "tech"), not its
   // real database id — slugs are unique per account (schema's userId+slug constraint), so this is a
@@ -371,41 +400,42 @@ export function ChannelPage() {
           trigger below it. */}
       <div className="channel-page__sticky" data-sticky-nav>
         <div className="channel-page__controls">
-          <div className="channel-page__controls-left">
-            <span
-              className={`channel-page__sticky-title ${titleScrolledOut ? 'channel-page__sticky-title--visible' : ''}`}
-            >
-              <span className="channel-page__sticky-title-inner">{channel.name}</span>
-            </span>
-            <SubchannelBar
-              subchannels={channel.subchannels}
-              activeId={subchannelId}
-              onSelect={setSubchannelId}
-              managing={managingSubchannels}
-              onManageClick={() => setManagingSubchannels((v) => !v)}
-              counts={subchannelCounts}
-              totalUnread={totalUnread}
-            />
-          </div>
-          <div className="channel-page__controls-right">
-            <button
-              type="button"
-              className="channel-page__archive-read"
-              disabled={readInPlaceCount === 0}
-              onClick={() => feedRef.current?.flushReadInPlace()}
-              title="Move stories you've read (by scrolling past or opening) into the archive"
-            >
-              <ArchiveIcon />
-              Archive read{readInPlaceCount > 0 ? ` (${readInPlaceCount})` : ''}
-            </button>
-            {/* A grid view makes no sense at phone width — hidden rather than shown-disabled, since
-                there's nothing to toggle to. Forces the rendered feed to list mode below WITHOUT
-                writing to settings.defaultViewMode, which desktop shares. */}
-            <SortModeToggle value={settings.defaultSortMode} onChange={(mode) => update({ defaultSortMode: mode })} />
-            {!isMobile && (
-              <ViewModeToggle value={settings.defaultViewMode} onChange={(mode) => update({ defaultViewMode: mode })} />
-            )}
-          </div>
+          {isMobile ? (
+            // Own layout, not a squeezed/wrapped version of desktop's: the title shares a row with
+            // the sort toggle (which is ALWAYS present, so that row's height never depends on
+            // whether the title happens to be showing — see ChannelPage.css's own comment on why
+            // the previous height-toggling version of the title caused the feed below to visibly
+            // drop by ~10px the moment it appeared), and Archive read gets its own row underneath.
+            // SubchannelBar is desktop-only chrome anyway (hidden by its own CSS on mobile even when
+            // rendered), so it's simply not rendered here rather than mounted and immediately hidden.
+            <>
+              <div className="channel-page__controls-row1">
+                <StickyTitleEcho visible={titleScrolledOut} name={channel.name} />
+                <SortModeToggle value={settings.defaultSortMode} onChange={(mode) => update({ defaultSortMode: mode })} />
+              </div>
+              <ArchiveReadButton count={readInPlaceCount} onClick={() => feedRef.current?.flushReadInPlace()} />
+            </>
+          ) : (
+            <>
+              <div className="channel-page__controls-left">
+                <StickyTitleEcho visible={titleScrolledOut} name={channel.name} />
+                <SubchannelBar
+                  subchannels={channel.subchannels}
+                  activeId={subchannelId}
+                  onSelect={setSubchannelId}
+                  managing={managingSubchannels}
+                  onManageClick={() => setManagingSubchannels((v) => !v)}
+                  counts={subchannelCounts}
+                  totalUnread={totalUnread}
+                />
+              </div>
+              <div className="channel-page__controls-right">
+                <ArchiveReadButton count={readInPlaceCount} onClick={() => feedRef.current?.flushReadInPlace()} />
+                <SortModeToggle value={settings.defaultSortMode} onChange={(mode) => update({ defaultSortMode: mode })} />
+                <ViewModeToggle value={settings.defaultViewMode} onChange={(mode) => update({ defaultViewMode: mode })} />
+              </div>
+            </>
+          )}
         </div>
 
         {/* Its own full-width row below the title/archive row, not squeezed in beside them — sharing

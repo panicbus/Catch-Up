@@ -252,52 +252,45 @@
 
   /* Same echo-the-scrolled-away-title behavior as desktop, just narrower: the mobile header's own
      title is regular in-flow content too, so it scrolls behind this sticky bar exactly like
-     desktop's does. Now that the row below wraps (see .channel-page__controls) the title has its
-     OWN full-width line instead of sharing one with Archive read + the sort toggle, so it no
-     longer needs the tight 40vw cap that used to leave them room — sized up and given most of the
-     row's own width instead, with a cap still in place purely as a backstop for an extreme name. */
+     desktop's does. Sized up from desktop's 15px/40vw since this row has more room to give it on a
+     phone, with the cap still in place purely as a backstop for an extreme name. Deliberately no
+     mobile override of .channel-page__sticky-title's own collapse (grid-template-columns 0fr/1fr,
+     see the base rule above) — a THIRD version of this bar previously toggled height instead of
+     just width, so the row it sat in grew the moment the title appeared, pushing everything below
+     it down by however tall that title's own line was. Row1 below always has the sort toggle in it,
+     which the title now just fades in ALONGSIDE at constant height, the same way it already worked
+     on desktop sharing a row with Archive read + the sort toggle — nothing left to grow. */
   .channel-page__sticky-title-inner {
     max-width: 90vw;
     font-size: 18px;
     text-overflow: ellipsis;
   }
 
-  /* Desktop lets the collapsed (0fr-width) title keep its natural line-height because it always
-     shares a row with Archive read + the sort toggle, so that reserved height is absorbed into
-     the row rather than shown on its own. Mobile no longer shares a row (see .channel-page__controls
-     below) — Archive read/sort now always wrap onto their own full-width line — so that same
-     reserved height was showing up as a bare empty gap above them even while the title was fully
-     invisible. Collapsed to true zero height here so there's nothing left to wrap onto its own line
-     until the title is actually visible. */
-  .channel-page__sticky-title {
-    height: 0;
-    padding-top: 0;
-    overflow: hidden;
-  }
-  .channel-page__sticky-title--visible {
-    height: auto;
-    padding-top: 4px;
-  }
-
-  /* Lets the row wrap once the sticky title actually appears (post-scroll) and no longer fits
-     beside Archive read + the sort toggle — confirmed live as an overlap once SortModeToggle made
-     the right side wide enough on its own, permanently, that the two sides no longer reliably fit
-     on one line together the way they used to when only Archive read sat over there. Costs nothing
-     while the title is still collapsed (0fr width, see .channel-page__sticky-title) — both sides
-     already fit on one line then, so nothing wraps until the title genuinely needs room.
-     justify-content: space-between still left-aligns a lone second-line item, so this reads as
-     "title on its own line, controls left-aligned below it" rather than the controls jumping to
-     the right edge. */
+  /* Mobile's own controls layout (see ChannelPage.tsx's isMobile branch) — two children stacked
+     instead of desktop's single side-by-side row, since mobile pairs the title with the sort toggle
+     (row1) rather than with Archive read, which needed an actual layout split, not just a wrap.
+     align-items: stretch (rather than the default) so row1's own width fills the row — needed for
+     ITS internal justify-content: space-between to push the title/toggle apart across the full
+     width, not just the width its two children happen to add up to. */
   .channel-page__controls {
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
   }
 
-  /* Once wrapped onto its own line (see above), stretch Archive read and the sort toggle to the
-     row's full width — space-between pins one to each edge, rather than both sitting compact at
-     the left with empty space to the right of them. */
-  .channel-page__controls-right {
-    width: 100%;
+  /* Explicitly opted OUT of the stretch above — a lone pill button spanning the full row width would
+     leave its icon+label sitting at the left edge with a wide stripe of empty pill beside them, not
+     the "own row" look this is going for. Natural width, own row, same as every other single-action
+     button elsewhere in Settings. */
+  .channel-page__archive-read {
+    align-self: flex-start;
+  }
+
+  .channel-page__controls-row1 {
+    display: flex;
+    align-items: center;
     justify-content: space-between;
+    gap: 8px;
   }
 
   /* Its own row, full width, instead of squeezed in beside the sticky-title echo — see the JSX
