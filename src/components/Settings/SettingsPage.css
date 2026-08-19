@@ -21,3 +21,12 @@
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
 }
+
+/* Same subtle treatment as Sidebar.css's .sidebar__version, which this mirrors for mobile (see the
+   JSX comment where this is rendered) — not styled as its own section, just a quiet trailing line. */
+.settings-page__version {
+  margin: 8px 0 24px;
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: center;
+}

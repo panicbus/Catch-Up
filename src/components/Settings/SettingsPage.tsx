@@ -72,6 +72,14 @@ export function SettingsPage() {
       {/* Renders its own section wrapper (or nothing at all, on desktop / before a user loads) —
           see AccountSection.tsx. */}
       <AccountSection />
+
+      {/* Sidebar.tsx already shows this, but the sidebar is hidden on mobile (see AppShell.css's
+          767px breakpoint) — this is the only place a phone can ever see which build it's actually
+          running. That matters concretely: this app has a documented history of a home-screen PWA
+          sitting on a stale cached bundle for days after a deploy (see main.tsx's own comment on
+          registerSW), so "did my fix actually reach this phone" was previously unanswerable here
+          without plugging it into a computer. */}
+      <p className="settings-page__version">App version {__APP_VERSION__}</p>
     </div>
   );
 }

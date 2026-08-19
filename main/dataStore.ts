@@ -501,7 +501,12 @@ export class DataStore {
 
   setSettings(partial: Partial<AppSettings>): void {
     this.data.settings = { ...this.data.settings, ...partial };
-    this.write();
+    // persistNow(), not the debounced write() every other mutation here uses. A settings change is
+    // rare and tiny (nothing like markRead's near-every-click frequency, which is what write()'s
+    // debounce exists for) — and a force quit skips before-quit's flush entirely, so anything still
+    // sitting in that debounce window at that moment is silently lost. Cheap to just not have a
+    // window here at all.
+    this.persistNow();
   }
 
   // AI relevance filtering. Keys never leave the main process except as booleans via

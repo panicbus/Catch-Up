@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSettings } from '../../hooks/useSettings';
+import { useSettleFieldOnLoad } from '../../hooks/useSettleFieldOnLoad';
 import { useChannels } from '../../hooks/useChannels';
 import { useAiConfig } from '../../hooks/useAiConfig';
 import { Button } from '../common/Button';
@@ -28,11 +29,17 @@ const SUPPORTED_TIMEZONES: string[] | null =
   typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : null;
 
 function DigestSettingInner() {
-  const { settings, update } = useSettings();
+  const { settings, update, loading } = useSettings();
   const { channels } = useChannels();
   const { config: aiConfig, loading: aiConfigLoading, setProvider } = useAiConfig();
+  // Same stale-initial-state bug as LocationSetting.tsx's `text`/`editing` — see useSettleFieldOnLoad
+  // for the fix and why it backs off once the field's been typed into.
   const [emailDraft, setEmailDraft] = useState(settings.digestEmailOverride ?? '');
   const [emailError, setEmailError] = useState<string | null>(null);
+  const hasInteractedRef = useRef(false);
+  useSettleFieldOnLoad(loading, hasInteractedRef.current, () => {
+    setEmailDraft(settings.digestEmailOverride ?? '');
+  });
   // Closed by default — clicking "Turn on" forces it open (see enable() below) since that's
   // exactly the moment there's something worth looking at; toggling it after that is otherwise
   // just the accordion's own normal open/close, via onOpenChange.
@@ -170,6 +177,7 @@ function DigestSettingInner() {
                   placeholder="you@example.com"
                   value={emailDraft}
                   onChange={(e) => {
+                    hasInteractedRef.current = true;
                     setEmailDraft(e.target.value);
                     if (emailError) setEmailError(null);
                   }}

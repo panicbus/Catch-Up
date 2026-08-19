@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSettings } from '../../hooks/useSettings';
+import { useSettleFieldOnLoad } from '../../hooks/useSettleFieldOnLoad';
 import { api } from '../../services/api';
 import { Button } from '../common/Button';
 import './LocationSetting.css';
@@ -9,12 +10,19 @@ import './LocationSetting.css';
  * channels like Politics or Tech. Resolved against a bundled city list on save so we always store a
  * real lat/lon, not just free text. */
 export function LocationSetting() {
-  const { settings, update } = useSettings();
-  // Starts in edit mode when nothing's set yet — there's nothing to "change" from. Once a location
-  // exists, this collapses to a plain read display + a "Change location" link that reopens editing.
+  const { settings, update, loading } = useSettings();
+  // Starts in edit mode, matching the "nothing set yet" case — but this is a GUESS made before
+  // useSettings' own fetch has resolved (it starts from an empty fallback; see useSettings.ts), not
+  // a read of the real saved value. See useSettleFieldOnLoad's own comment for the bug this corrects
+  // once loading actually finishes, and why it backs off if the field's already been typed into.
   const [editing, setEditing] = useState(!settings.homeLocation);
   const [text, setText] = useState(settings.homeLocation?.query ?? '');
   const [status, setStatus] = useState<'idle' | 'checking' | 'not-found'>('idle');
+  const hasInteractedRef = useRef(false);
+  useSettleFieldOnLoad(loading, hasInteractedRef.current, () => {
+    setEditing(!settings.homeLocation);
+    setText(settings.homeLocation?.query ?? '');
+  });
 
   const save = async () => {
     const query = text.trim();
@@ -74,6 +82,7 @@ export function LocationSetting() {
               placeholder="City, State/Country (e.g. Alameda, CA)"
               value={text}
               onChange={(e) => {
+                hasInteractedRef.current = true;
                 setText(e.target.value);
                 if (status === 'not-found') setStatus('idle');
               }}
