@@ -232,7 +232,12 @@ function NewsCardComponent({
   });
 
   // What the check button means for this card right now (drives its icon/animation and the action).
-  const dismissVariant: DismissVariant = !article.read ? 'unread' : readInPlace ? 'readInPlace' : 'archived';
+  // readInPlace checked FIRST: NewsFeed now sets it as soon as this session has locally marked the
+  // card read (keepVisible membership), which can be true before article.read itself is server-
+  // confirmed — checking !article.read first would still read this as 'unread' in that window and
+  // let the checkmark re-send a read that's already in flight, instead of correctly offering to file
+  // it to the archive.
+  const dismissVariant: DismissVariant = readInPlace ? 'readInPlace' : !article.read ? 'unread' : 'archived';
 
   const handleDismissClick = useCallback(() => {
     if (exitReason) return;
@@ -403,8 +408,13 @@ function NewsCardComponent({
       className={`news-card ${paneMode ? 'news-card--pane' : ''} ${canExpand ? '' : 'news-card--static'} ${showAsRead ? 'news-card--read-in-place' : ''} ${exitClass}`}
       // Read by useScrollCatchUp's IntersectionObserver: data-article-id identifies which story
       // scrolled past, and data-unread marks which cards it should watch (only ones still unread).
+      // readInPlace factors in here too (not just article.read) so this flips to "false" — and the
+      // observer lets go of watching this card — the instant NewsFeed locally knows it's read, not up
+      // to ~20s later once the server confirms it. Pool's `dimmed` cards are deliberately left out of
+      // this — GridSection always computes readInPlace as false there (readInPlaceIds is undefined
+      // for Pool), so this is unchanged for them either way.
       data-article-id={article.id}
-      data-unread={!article.read}
+      data-unread={!article.read && !readInPlace}
       // Not role="button" — this element wraps other real interactive controls (dismiss,
       // bookmark, "Read full story"), and a button containing more buttons/links is an ARIA
       // anti-pattern (confuses how assistive tech tabs through it). "article" is the correct

@@ -5,6 +5,7 @@ import { intersperseByContent } from '../../utils/intersperseByContent';
 import { formatDateHeader } from '../../services/formatters';
 import { api } from '../../services/api';
 import { useScrollCatchUp } from '../../hooks/useScrollCatchUp';
+import { isEffectivelyRead as computeEffectivelyRead, buildUnreadKey } from './readState';
 import { NewsCard, type NewsCardData } from './NewsCard';
 import { AllCaughtUp } from './AllCaughtUp';
 import { CaughtUpOverlay } from './CaughtUpOverlay';
@@ -179,8 +180,13 @@ function GridSection({
     <div className={containerClass}>
       {articles.map((article) => {
         const isExpanded = expandedArticleId === article.id;
-        // Don't dim the card you're actively reading — only collapsed, read cards.
-        const readInPlace = !!readInPlaceIds?.has(article.id) && article.read && !isExpanded;
+        // Don't dim the card you're actively reading — only collapsed, read cards. Membership in
+        // readInPlaceIds (NewsFeed's keepVisible) alone is enough — it's only ever populated with ids
+        // THIS session has already told the app about (scrolled past, opened, checked off), so
+        // requiring article.read here too just meant waiting on the server's own confirmation, which
+        // can lag up to ~20s behind (see api.ts's poll interval) — that's what made cards dim in
+        // large delayed batches instead of individually, a beat after each one actually happened.
+        const readInPlace = !!readInPlaceIds?.has(article.id) && !isExpanded;
         const dimmed = !!dimReadCards && article.read && !isExpanded;
         return (
           <NewsCard
@@ -468,6 +474,11 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // True read state, with a just-undone card's real (not-yet-caught-up) `read:true` overridden back
   // to unread immediately — see locallyUnread above.
   const isRead = (a: NewsCardData) => a.read && !locallyUnread.has(a.id);
+  // isRead(a), OR already told the app about this session via keepVisible even though the server
+  // hasn't confirmed yet — see readState.ts's own doc comment. This is the DISPLAY/SELECTION notion
+  // of "read" used everywhere below except the two sites that specifically need the raw isRead(a)
+  // instead (called out at each).
+  const isEffectivelyRead = (a: NewsCardData) => computeEffectivelyRead(isRead(a), a.id, keepVisible);
 
   // articles arrive already sorted — newest-first, or relevance-first per sortMode (see
   // articlesCache.getArticles). In showReadDimmed mode (The Pool) the cap covers ALL recent
@@ -492,8 +503,13 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // session so they stay put and dimmed — minus anything whose exit already committed locally
   // (see locallyExited above). Filtering `articles` directly preserves whatever order it already
   // arrived in — chronological in 'newest' sortMode, relevance-ranked in 'relevance' mode.
+  // Note: the second clause deliberately checks keepVisible membership alone, not a.read too — a
+  // card can fall out of cappedBaseIds (cap window shifted, an unrelated read elsewhere freed a
+  // slot) before the server has confirmed THIS card's own read, and requiring both used to mean it
+  // vanished from the feed entirely with no fly-off and no scroll compensation to hook into, right
+  // before quietly reappearing once the server caught up a poll later.
   const mainArticles = articles.filter(
-    (a) => !locallyExited.has(a.id) && (cappedBaseIds.has(a.id) || (catchUpMode && a.read && keepVisible.has(a.id)))
+    (a) => !locallyExited.has(a.id) && (cappedBaseIds.has(a.id) || (catchUpMode && keepVisible.has(a.id)))
   );
   // Archive gets read cards that AREN'T being kept in place (i.e. swept away with the check button,
   // or read in a previous session) and haven't just been locally un-archived.
@@ -534,8 +550,8 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // on a network round trip just to notice "you're actually done" would make the celebration lag
   // behind what the screen already shows.
   const trueUnreadCount = showReadDimmed
-    ? cappedBase.reduce((n, a) => (isRead(a) || keepVisible.has(a.id) || locallyExited.has(a.id) ? n : n + 1), 0)
-    : articles.reduce((n, a) => (isRead(a) || keepVisible.has(a.id) || locallyExited.has(a.id) ? n : n + 1), 0);
+    ? cappedBase.reduce((n, a) => (isEffectivelyRead(a) || locallyExited.has(a.id) ? n : n + 1), 0)
+    : articles.reduce((n, a) => (isEffectivelyRead(a) || locallyExited.has(a.id) ? n : n + 1), 0);
 
   const markReadInPlace = useCallback((articleId: string, channelId: string) => {
     setKeepVisible((prev) => {
@@ -570,10 +586,10 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   }, []);
 
   // Report how many cards are currently read-in-place so ChannelPage can enable/disable its
-  // "move read to archive" button. Count only cards actually present + read + kept.
-  const readInPlaceCount = catchUpMode
-    ? articles.reduce((n, a) => (a.read && keepVisible.has(a.id) ? n + 1 : n), 0)
-    : 0;
+  // "move read to archive" button. Count only cards actually present + kept — not gated on the
+  // server's own a.read too, or a card dimmed on screen this session (but not yet confirmed) left
+  // the button undercounting it, and disabled if it happened to be the only one.
+  const readInPlaceCount = catchUpMode ? articles.reduce((n, a) => (keepVisible.has(a.id) ? n + 1 : n), 0) : 0;
   useEffect(() => {
     onReadInPlaceCountChange?.(readInPlaceCount);
   }, [readInPlaceCount, onReadInPlaceCountChange]);
@@ -604,22 +620,33 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   const onPassedTop = useCallback(
     (articleId: string) => {
       const a = byId.get(articleId);
-      if (a && !a.read) markReadInPlace(a.id, a.channelId);
+      // isEffectivelyRead, not the raw a.read: guards against re-sending an already-handled card to
+      // the server a second time if it's somehow re-observed before the poll confirms the first call
+      // (isEffectivelyRead closes over keepVisible/locallyUnread, so both are real dependencies here
+      // even though they're not read directly in this function body).
+      if (a && !isEffectivelyRead(a)) markReadInPlace(a.id, a.channelId);
     },
-    [byId, markReadInPlace]
+    [byId, markReadInPlace, keepVisible, locallyUnread]
   );
 
-  const onReachedBottom = useCallback(() => {
-    // Clear whatever unread is still on screen — the last screenful that never crossed the top.
-    for (const a of cappedBase) {
-      if (!a.read) markReadInPlace(a.id, a.channelId);
-    }
-  }, [cappedBase, markReadInPlace]);
+  const onReachedBottom = useCallback(
+    (visibleArticleIds: string[]) => {
+      // Only what useScrollCatchUp confirms is actually on screen right now — never the whole
+      // loaded list. See useScrollCatchUp.ts's own comment: marking everything loaded (up to
+      // maxStoriesShown) read here, regardless of whether it had ever been displayed, was the actual
+      // cause of a channel appearing to mark itself entirely read on its own after ~30 seconds.
+      for (const id of visibleArticleIds) {
+        const a = byId.get(id);
+        if (a && !isEffectivelyRead(a)) markReadInPlace(a.id, a.channelId);
+      }
+    },
+    [byId, markReadInPlace, keepVisible, locallyUnread]
+  );
 
-  const unreadKey = cappedBase
-    .filter((a) => !a.read)
-    .map((a) => a.id)
-    .join('|');
+  // Order-independent (see readState.ts) so a relevance-mode reorder with no actual read-state
+  // change doesn't look like one to useScrollCatchUp, which would otherwise tear into its
+  // reconciliation for nothing.
+  const unreadKey = buildUnreadKey(cappedBase.filter((a) => !isEffectivelyRead(a)).map((a) => a.id));
 
   useScrollCatchUp({
     containerRef: feedRef,
@@ -657,7 +684,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     const markReadOnOpen = () => {
       if (!willOpen || !catchUpMode) return;
       const a = byId.get(articleId);
-      if (a && !a.read) markReadInPlace(a.id, a.channelId);
+      if (a && !isEffectivelyRead(a)) markReadInPlace(a.id, a.channelId);
     };
     // Runs alongside markReadOnOpen, at the same "settled" point, for the same reason: measuring
     // position before a pending reflow (another card collapsing back down, in grid's case a full
