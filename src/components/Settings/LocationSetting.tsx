@@ -66,7 +66,15 @@ export function LocationSetting() {
         channels (i.e. “Politics” or “Tech”).
       </p>
 
-      {!editing && settings.homeLocation ? (
+      {/* Nothing decidable until the real settings land: `editing` is seeded from an empty fallback
+          (see useSettleFieldOnLoad above), so rendering during that window flashes the "no location
+          set" input for an instant before swapping to the saved value. A blank placeholder line
+          holds the space instead, so the section doesn't resize either. */}
+      {loading ? (
+        <p className="location-setting__confirm" aria-hidden="true">
+          &nbsp;
+        </p>
+      ) : !editing && settings.homeLocation ? (
         <p className="location-setting__confirm">
           Currently set to: <strong className="location-setting__value">{settings.homeLocation.label}</strong>{' '}
           <button type="button" className="location-setting__change-link" onClick={startChange}>

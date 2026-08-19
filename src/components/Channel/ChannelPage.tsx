@@ -193,19 +193,27 @@ export function ChannelPage() {
   // true immediately at rest (before any scrolling at all), which showed the small sticky-bar title
   // and the real page title at the same time and kept re-triggering the reveal transition —
   // confirmed live as exactly that regression.
+  //
+  // Recomputed from the live scroll position on every scroll event rather than driven by an
+  // IntersectionObserver, which this used to use. An observer only fires on a CHANGE in
+  // intersection, so any missed or stale delivery leaves this state stuck until the next crossing —
+  // confirmed live as the sticky title staying visible after scrolling back to the top, with the
+  // real page title showing right above it at the same time. A plain measurement per scroll tick is
+  // self-correcting by construction: whatever state it was in, the next scroll event recomputes it
+  // from scratch.
   useEffect(() => {
-    setTitleScrolledOut(false);
     if (!titleNode) return;
-    // Root defaults to the browser viewport, which never scrolls in this layout — AppShell's
-    // .app-shell__main div is the actual scroll container, so it must be passed explicitly or the
-    // observer never fires.
+    // AppShell's .app-shell__main div is the actual scroll container (the browser viewport never
+    // scrolls in this layout), so the comparison has to be against ITS top edge, not the viewport's.
     const scrollRoot = titleNode.closest<HTMLElement>('.app-shell__main');
-    const observer = new IntersectionObserver(([entry]) => setTitleScrolledOut(!entry.isIntersecting), {
-      root: scrollRoot,
-      threshold: 0,
-    });
-    observer.observe(titleNode);
-    return () => observer.disconnect();
+    if (!scrollRoot) return;
+    const update = () => {
+      const rootTop = scrollRoot.getBoundingClientRect().top;
+      setTitleScrolledOut(titleNode.getBoundingClientRect().bottom <= rootTop);
+    };
+    update();
+    scrollRoot.addEventListener('scroll', update, { passive: true });
+    return () => scrollRoot.removeEventListener('scroll', update);
   }, [titleNode, channelSlug]);
 
   if (!channel) {

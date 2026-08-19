@@ -450,9 +450,31 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // anything that vanished even when it was below the fold and the browser had moved nothing).
   // Anchoring to one real surviving card's own on-screen position is correct regardless of where the
   // removal happened, by construction.
-  const pendingArchiveCompensationRef = useRef<{ scrollRoot: HTMLElement; anchorId: string; topBefore: number } | null>(
-    null
-  );
+  //
+  // The 'absolute' variant exists for "Archive read", which deliberately removes EVERY read card at
+  // once: there's frequently no surviving on-screen card left to anchor to at all, so that path
+  // records the raw scroll offset up front and puts it back instead (the browser clamps it on its
+  // own if the now-shorter list can't reach that far).
+  const pendingArchiveCompensationRef = useRef<
+    | { kind: 'anchor'; scrollRoot: HTMLElement; anchorId: string; topBefore: number }
+    | { kind: 'absolute'; scrollRoot: HTMLElement; scrollTop: number }
+    | null
+  >(null);
+  // Every article id that has been shown in the main section at any point during THIS visit to the
+  // channel. Load-bearing for the rule that read stories only leave the main list when you leave the
+  // channel or tap "Archive read" — never on their own, mid-scroll.
+  //
+  // Without this, a story the server reports as read (a poll landing, a read that happened before
+  // this mount, the tail of a previous visit) dropped out of the main list the instant that poll
+  // arrived and reappeared down in the archive — confirmed live via a screen recording: three
+  // stories on screen at 19.9s, gone at 20.3s, replaced by the next three down, with the read
+  // counter unchanged (so they weren't even this session's own reads). Pinning makes membership of
+  // the main list depend only on what this visit has already shown, not on read state arriving
+  // asynchronously underneath it.
+  const pinnedIdsRef = useRef<Set<string>>(new Set());
+  // Bumped whenever pinnedIdsRef is mutated OUTSIDE of render (unpinning, via the checkmark or
+  // "Archive read") — a ref alone can't trigger the re-render those need to actually take effect.
+  const [, setUnpinTick] = useState(0);
   // mainArticles' id set as of the last render, diffed fresh each render against the current set to
   // detect that shrink regardless of what caused it. null until the first render has actually run.
   const prevMainArticleIdsRef = useRef<Set<string> | null>(null);
@@ -541,21 +563,38 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   );
   const cappedBaseIds = useMemo(() => new Set(cappedBase.map((a) => a.id)), [cappedBase]);
 
-  // Main section: the capped unread cards, plus (in catch-up mode) the ones read-in-place this
-  // session so they stay put and dimmed — minus anything whose exit already committed locally
-  // (see locallyExited above). Filtering `articles` directly preserves whatever order it already
-  // arrived in — chronological in 'newest' sortMode, relevance-ranked in 'relevance' mode.
-  // Note: the second clause deliberately checks keepVisible membership alone, not a.read too — a
-  // card can fall out of cappedBaseIds (cap window shifted, an unrelated read elsewhere freed a
-  // slot) before the server has confirmed THIS card's own read, and requiring both used to mean it
-  // vanished from the feed entirely with no fly-off and no scroll compensation to hook into, right
-  // before quietly reappearing once the server caught up a poll later.
+  // Main section: the capped unread cards, plus (in catch-up mode) everything this visit has already
+  // shown — minus anything whose exit already committed locally (see locallyExited above). Filtering
+  // `articles` directly preserves whatever order it already arrived in — chronological in 'newest'
+  // sortMode, relevance-ranked in 'relevance' mode.
+  //
+  // The pinned clause is what makes "read stories only leave when you leave the channel or tap
+  // Archive read" actually true (see pinnedIdsRef's own comment): once a card has been shown here, it
+  // stays until one of those two things happens, no matter what read state arrives underneath it.
   const mainArticles = articles.filter(
-    (a) => !locallyExited.has(a.id) && (cappedBaseIds.has(a.id) || (catchUpMode && keepVisible.has(a.id)))
+    (a) => !locallyExited.has(a.id) && (cappedBaseIds.has(a.id) || (catchUpMode && pinnedIdsRef.current.has(a.id)))
   );
-  // Archive gets read cards that AREN'T being kept in place (i.e. swept away with the check button,
-  // or read in a previous session) and haven't just been locally un-archived.
-  const archive = partitionByRead ? articles.filter((a) => isRead(a) && !keepVisible.has(a.id)) : [];
+  // Pin everything currently shown, for the next render's benefit. Mutating a ref during render is
+  // safe specifically because this is idempotent set-insertion — StrictMode's double-invoke adds the
+  // same ids twice, which is a no-op. Done BEFORE the archive split below so a card can never be in
+  // both lists on the same render.
+  if (catchUpMode) {
+    for (const a of mainArticles) pinnedIdsRef.current.add(a.id);
+  }
+  // Archive gets read cards that aren't pinned to the main list: read in a previous visit (so never
+  // pinned this time), or explicitly filed away via the checkmark / "Archive read" (which unpin).
+  const archive = partitionByRead ? articles.filter((a) => isRead(a) && !pinnedIdsRef.current.has(a.id)) : [];
+  // Which of the currently-shown cards should render as read (dimmed, "Read" marker). Covers both a
+  // read this session (keepVisible, instant) and one the server reported for a still-pinned card —
+  // the latter previously showed as fully unread despite being read, since only keepVisible was
+  // consulted.
+  //
+  // Deliberately NOT memoized: it derives from mainArticles (itself recomputed every render) plus
+  // keepVisible/locallyUnread/locallyExited and the pinned set behind a ref, and a useMemo over that
+  // needs a hand-maintained dependency list with the lint rule suppressed — which is exactly how it
+  // would go stale later without anything catching it. One more pass over a list this render already
+  // walks several times is not worth that.
+  const dimmedReadIds = new Set(mainArticles.filter((a) => isEffectivelyRead(a)).map((a) => a.id));
 
   // Catches every way mainArticles can lose a card that was visible a render ago — a checkmark tap,
   // a swipe, the bulk flush button, or (confirmed live via a screen recording) a background poll (see
@@ -580,7 +619,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
       // afterward that it's going away — see scrollAnchor.ts's own doc comment.
       const anchor = scrollRoot ? findSurvivingTopAnchor(feedRef.current, scrollRoot, mainArticleIds, vanishedIds) : null;
       if (scrollRoot && anchor) {
-        pendingArchiveCompensationRef.current = { scrollRoot, anchorId: anchor.id, topBefore: anchor.top };
+        pendingArchiveCompensationRef.current = { kind: 'anchor', scrollRoot, anchorId: anchor.id, topBefore: anchor.top };
       }
       // Else: nothing currently visible survives (e.g. flushReadInPlace clearing the whole visible
       // screenful at once) — no stable reference left to compensate against. Accepted rather than
@@ -622,9 +661,13 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     }
   }, []);
 
-  // Files a single read-in-place card away — drop it from keepVisible so it re-partitions into the
-  // archive (channel) or out of view (The Pool). Used by a card's own check button.
+  // Files a single read-in-place card away — unpin it (and drop it from keepVisible) so it
+  // re-partitions into the archive (channel) or out of view (The Pool). Used by a card's own check
+  // button. Unpinning is the part that actually moves it now; setUnpinTick forces the re-render a
+  // plain ref mutation wouldn't.
   const archiveReadInPlace = useCallback((articleId: string) => {
+    pinnedIdsRef.current.delete(articleId);
+    setUnpinTick((t) => t + 1);
     setKeepVisible((prev) => {
       if (!prev.has(articleId)) return prev;
       const next = new Set(prev);
@@ -633,11 +676,10 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     });
   }, []);
 
-  // Report how many cards are currently read-in-place so ChannelPage can enable/disable its
-  // "move read to archive" button. Count only cards actually present + kept — not gated on the
-  // server's own a.read too, or a card dimmed on screen this session (but not yet confirmed) left
-  // the button undercounting it, and disabled if it happened to be the only one.
-  const readInPlaceCount = catchUpMode ? articles.reduce((n, a) => (keepVisible.has(a.id) ? n + 1 : n), 0) : 0;
+  // Report how many cards would actually move if "Archive read" were tapped right now — i.e. pinned,
+  // still present, and effectively read. Anything else in the pinned set is still unread and stays
+  // put either way, so counting it here would overstate what the button does.
+  const readInPlaceCount = catchUpMode ? mainArticles.reduce((n, a) => (dimmedReadIds.has(a.id) ? n + 1 : n), 0) : 0;
   useEffect(() => {
     onReadInPlaceCountChange?.(readInPlaceCount);
   }, [readInPlaceCount, onReadInPlaceCountChange]);
@@ -646,10 +688,21 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     ref,
     () => ({
       flushReadInPlace: () => {
+        // Records the raw scroll offset to put back afterward, rather than relying on the anchor
+        // mechanism: this removes every read card at once, so there's frequently nothing left on
+        // screen to anchor against at all (the exact case the anchor path documents as unhandled).
+        const scrollRoot = feedRef.current?.closest<HTMLElement>('.app-shell__main');
+        if (scrollRoot) {
+          pendingArchiveCompensationRef.current = { kind: 'absolute', scrollRoot, scrollTop: scrollRoot.scrollTop };
+        }
+        // Unpin only what's actually read — an unread card that happens to be pinned should stay
+        // exactly where it is; this button is "file away what I've read", not "reset the list".
+        for (const id of dimmedReadIds) pinnedIdsRef.current.delete(id);
+        setUnpinTick((t) => t + 1);
         setKeepVisible(new Set());
       },
     }),
-    []
+    [dimmedReadIds]
   );
 
   // A no-op on most renders — only does something the ONE render right after the mainArticles-shrink
@@ -661,6 +714,12 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     const pending = pendingArchiveCompensationRef.current;
     if (!pending) return;
     pendingArchiveCompensationRef.current = null;
+    if (pending.kind === 'absolute') {
+      // Straight restore of where the user was — assigning past the new maximum is harmless, the
+      // browser clamps it to the shorter list's own bottom.
+      pending.scrollRoot.scrollTop = pending.scrollTop;
+      return;
+    }
     const el = feedRef.current?.querySelector<HTMLElement>(`[data-article-id="${CSS.escape(pending.anchorId)}"]`);
     // The anchor itself vanished between capture and commit (e.g. a poll raced in on top of the
     // action that triggered this) — nothing safe left to compensate against; skip rather than guess.
@@ -849,7 +908,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
               removeCardOnUnbookmark={removeCardOnUnbookmark}
               expandedArticleId={expandedArticleId}
               onToggleExpand={toggleExpand}
-              readInPlaceIds={catchUpMode && !showReadDimmed ? keepVisible : undefined}
+              readInPlaceIds={catchUpMode && !showReadDimmed ? dimmedReadIds : undefined}
               dimReadCards={showReadDimmed}
               onArchiveReadInPlace={catchUpMode && !showReadDimmed ? archiveReadInPlace : undefined}
               onLocalExit={onLocalExit}
@@ -868,7 +927,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
               onToggleExpand={toggleExpand}
               // The Pool dims all read cards (dimReadCards) and its check button un-reads them, so it
               // doesn't use the readInPlace/archive path; channels do the reverse.
-              readInPlaceIds={catchUpMode && !showReadDimmed ? keepVisible : undefined}
+              readInPlaceIds={catchUpMode && !showReadDimmed ? dimmedReadIds : undefined}
               dimReadCards={showReadDimmed}
               onArchiveReadInPlace={catchUpMode && !showReadDimmed ? archiveReadInPlace : undefined}
               onLocalExit={onLocalExit}
