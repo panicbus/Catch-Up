@@ -89,7 +89,11 @@ function ArchiveReadButton({ count, onClick }: { count: number; onClick: () => v
       title="Move stories you've read (by scrolling past or opening) into the archive"
     >
       <ArchiveIcon />
-      Archive read{count > 0 ? ` (${count})` : ''}
+      Archive read
+      {/* Always rendered, even at zero, so the button's width is fixed by the slot rather than by
+          whether the count happens to be showing — see .channel-page__archive-read-count's own
+          comment for the iOS repaint artifact that a changing width strands behind it. */}
+      <span className="channel-page__archive-read-count">{count > 0 ? `(${count})` : ''}</span>
     </button>
   );
 }
@@ -182,6 +186,17 @@ export function ChannelPage() {
     subchannelId,
     settings.defaultSortMode
   );
+
+  // Switching sort order re-sorts the whole list under you, so staying at whatever offset you
+  // happened to be at leaves you mid-way down an order you've never seen. Back to the top instead,
+  // which is also the only position that means the same thing in both orders. Skips the initial
+  // mount (there's nothing to reset yet, and this would fight a restored position on first paint).
+  const prevSortModeRef = useRef(settings.defaultSortMode);
+  useEffect(() => {
+    if (prevSortModeRef.current === settings.defaultSortMode) return;
+    prevSortModeRef.current = settings.defaultSortMode;
+    document.querySelector<HTMLElement>('.app-shell__main')?.scrollTo({ top: 0 });
+  }, [settings.defaultSortMode]);
 
   // The sticky controls bar picks up the channel name once the page's own title has scrolled
   // behind it. Plain threshold: 0 against the root's raw bounds, deliberately with no rootMargin
@@ -536,6 +551,18 @@ export function ChannelPage() {
         />
       ) : (
         <NewsFeed
+          // Remounts on a sort change, which resets NewsFeed's own per-visit local state in one
+          // move: the pinned set (which ids stay in the main list), the read-in-place set behind the
+          // "Archive read" count, and the previous-order snapshot driving scroll compensation. All
+          // three are scoped to "this ordering of this list" and none of them survive a re-sort
+          // meaningfully — the two orders put a DIFFERENT set of stories inside the display cap, so
+          // carrying them across accumulated the union of both and left the Archive-read count
+          // reporting on stories the current order wasn't even showing. Remounting rather than
+          // resetting each by hand so a future piece of per-visit state can't be forgotten here.
+          // Also stops the scroll compensation from firing on a re-sort, which it otherwise treats
+          // as a reorder to be counteracted — exactly backwards when the reorder is the thing the
+          // user just asked for.
+          key={settings.defaultSortMode}
           ref={feedRef}
           articles={articles.map((a) => ({ ...a, channelName: channel.name }))}
           channelName={caughtUpName}

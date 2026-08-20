@@ -126,10 +126,39 @@
   white-space: nowrap;
   transition: background 0.12s, color 0.12s, border-color 0.12s, opacity 0.12s;
 }
-.channel-page__archive-read:not(:disabled):hover {
-  border-color: #4a9c6d;
-  color: #3f8a60;
-  background: rgba(74, 156, 109, 0.1);
+
+/* Holds the " (N)" suffix in a slot wide enough for its largest possible value, so the button's own
+   width never changes as the count appears, changes, or clears. Not cosmetic: this element lives
+   inside .channel-page__sticky, which is promoted to its own compositing layer (see its
+   transform: translateZ(0) and the iOS sticky bug that requires it), and iOS Safari does not
+   reliably repaint the strip a shrinking element vacates inside such a layer. Tapping
+   "Archive read (9)" dropped the count, the pill narrowed, and the old wider pill's right end cap
+   stayed painted on screen as a detached arc — confirmed from a full-resolution frame of a screen
+   recording, where the leftover exactly matches the previous width and the previous (green) colors.
+   A constant width leaves nothing to strand.
+   Sized for the count's OWN maximum rather than the whole button's natural width, deliberately:
+   maxStoriesShown tops out at 100 (MaxStoriesSetting.tsx), so "(100)" is a real, bounded upper
+   limit that 40px covers at this font size — whereas eyeballing a min-width for the entire button
+   means guessing the label's text metrics, which is exactly how the first attempt at this landed on
+   a floor too small to ever bind. tabular-nums keeps the digits from re-fitting as the count ticks
+   up through the same digit width. */
+.channel-page__archive-read-count {
+  display: inline-block;
+  min-width: 40px;
+  font-variant-numeric: tabular-nums;
+}
+/* Guarded on real hover capability. A touch device has no hover, but iOS applies :hover on tap and
+   then LEAVES it applied until you tap something else — so tapping this button turned it green and
+   left it green, which read as "the button turned green and stopped doing anything" (it was in fact
+   just disabled afterward, having archived everything, but the stuck green made that look like a
+   stuck state rather than a finished one). It was also the source of the green in the stranded
+   repaint above. Desktop, where hover is real and transient, is unaffected. */
+@media (hover: hover) {
+  .channel-page__archive-read:not(:disabled):hover {
+    border-color: #4a9c6d;
+    color: #3f8a60;
+    background: rgba(74, 156, 109, 0.1);
+  }
 }
 .channel-page__archive-read:disabled {
   opacity: 0.4;
