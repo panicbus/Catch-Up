@@ -226,13 +226,21 @@ export function ChannelPage() {
     const scrollRoot = titleNode.closest<HTMLElement>('.app-shell__main');
     if (!scrollRoot) return;
 
-    let threshold = 0;
+    // Infinity, NOT 0, until a real measurement lands: the test below is `scrollTop >= threshold`,
+    // and `scrollTop >= 0` is true at EVERY scroll position including the very top — so a threshold
+    // of 0 pins the title permanently on, which is exactly the reported symptom. Any moment the
+    // title has no layout box to measure (mid-mount, or briefly during a remount) would otherwise
+    // land on that value. Infinity fails the other way, keeping it hidden until genuinely measured.
+    let threshold = Infinity;
     const measure = () => {
       // Converts the title's CURRENT viewport-relative position into a scroll-content-relative one
       // (independent of however much is already scrolled), by adding back the current scrollTop.
-      const titleBottom = titleNode.getBoundingClientRect().bottom;
+      const rect = titleNode.getBoundingClientRect();
+      // A zero-height rect means the element isn't laid out right now — measuring it would produce a
+      // meaningless (and, per above, actively harmful) threshold. Keep whatever was last known good.
+      if (rect.height === 0) return;
       const rootTop = scrollRoot.getBoundingClientRect().top;
-      threshold = titleBottom - rootTop + scrollRoot.scrollTop;
+      threshold = rect.bottom - rootTop + scrollRoot.scrollTop;
     };
     const update = () => setTitleScrolledOut(scrollRoot.scrollTop >= threshold);
     const recompute = () => {

@@ -290,9 +290,30 @@
      which the title now just fades in ALONGSIDE at constant height, the same way it already worked
      on desktop sharing a row with Archive read + the sort toggle — nothing left to grow. */
   .channel-page__sticky-title-inner {
-    max-width: 90vw;
     font-size: 18px;
     text-overflow: ellipsis;
+  }
+
+  /* Fades in WITHOUT collapsing its width, unlike desktop's 1fr/0fr grid trick above. Same iOS
+     repaint problem the Archive-read button's fixed-width count slot exists for, and confirmed the
+     same way: this element sits in .channel-page__sticky, a promoted compositing layer (see its
+     transform: translateZ(0)), and iOS Safari does not reliably repaint the strip a shrinking
+     element vacates there — so collapsing the title to zero width on the way out left its pixels
+     painted on screen, which reads as "the sticky title never goes away when you scroll back up"
+     no matter how correct the JS deciding to hide it is. (Three separate implementations of that
+     decision were replaced chasing this before the cause turned out to be paint, not logic.)
+     Holding the width constant and animating only opacity leaves nothing to strand.
+     Costs no layout: row1 is justify-content: space-between, so the sort toggle is pinned to the
+     right edge whether or not the title beside it is visible. flex/min-width:0 (overriding the base
+     rule's flex-shrink: 0) keeps a long channel name from pushing that toggle instead of ellipsing,
+     which is the one thing a non-collapsing title could otherwise break. */
+  .channel-page__sticky-title,
+  .channel-page__sticky-title--visible {
+    grid-template-columns: 1fr;
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-right: 10px;
+    transition: opacity 0.25s ease;
   }
 
   /* Mobile's own controls layout (see ChannelPage.tsx's isMobile branch) — two children stacked

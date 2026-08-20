@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { flushSync } from 'react-dom';
-import { groupByDay } from '../../utils/groupByDay';
+import { groupByDay, groupByDayWith } from '../../utils/groupByDay';
 import { intersperseByContent } from '../../utils/intersperseByContent';
 import { formatDateHeader } from '../../services/formatters';
 import { api } from '../../services/api';
@@ -316,6 +316,7 @@ function ReadArchive({
   onLocalUnread,
   trustedSourceDomains,
   onToggleTrust,
+  localReadAt,
 }: {
   articles: NewsCardData[];
   viewMode: ViewMode;
@@ -325,14 +326,25 @@ function ReadArchive({
   onLocalUnread?: (articleId: string) => void;
   trustedSourceDomains?: Set<string>;
   onToggleTrust?: (domain: string) => void;
+  /** When THIS session marked a story read, for stories the server hasn't confirmed yet — see the
+   * grouping below and localReadAtRef's own declaration. */
+  localReadAt: ReadonlyMap<string, string>;
 }) {
   // Grouped by when each story was actually READ, not when it was published — an old story you only
   // just got around to reading should file under today, not vanish into a much-older bucket that
   // makes the "N day archive" label above look broken (a story published 14 days ago but read
   // yesterday is well within the 10-day read-state retention — see READ_ARCHIVE_DAYS/
-  // READ_STATE_MAX_AGE_DAYS — even though its publish date isn't). Every article here has already
-  // passed the isRead(a) check in the caller, so readAt is never actually missing in practice.
-  const byDay = groupByDay(articles, 'readAt');
+  // READ_STATE_MAX_AGE_DAYS — even though its publish date isn't).
+  //
+  // readAt is genuinely absent for a story archived by this session but not yet confirmed by the
+  // server (the archive is reached the moment the app knows it's read, deliberately — see the
+  // caller's `archive` computation — which is a full poll cycle ahead of readAt being filled in).
+  // Falling back to this session's own record of when it marked the story read keeps those in
+  // today's bucket, where they belong; without it `new Date(null)` put them in a phantom 1969/1970
+  // group pinned to the bottom of the archive. publishedAt is the last resort, for a card built
+  // from an ArticleSnapshot that has no read timestamp of any kind.
+  const resolveReadAt = (a: NewsCardData) => a.readAt ?? localReadAt.get(a.id) ?? a.publishedAt;
+  const byDay = groupByDayWith(articles, resolveReadAt);
   const [openDate, setOpenDate] = useState<string | null>(null);
 
   const toggleDate = (dateKey: string) => {
@@ -357,7 +369,7 @@ function ReadArchive({
                   labeling a "read yesterday" bucket with a story's older publish date would contradict
                   the bucket it's sitting in. publishedAt is just a defensive fallback for the type;
                   every card reaching this component has already passed isRead(a) in the caller. */}
-              <span>{formatDateHeader(dayArticles[0].readAt ?? dayArticles[0].publishedAt)}</span>
+              <span>{formatDateHeader(resolveReadAt(dayArticles[0]))}</span>
               <span className="news-feed__archive-count">{dayArticles.length}</span>
             </button>
             <div className={`news-feed__archive-body ${isOpen ? 'news-feed__archive-body--open' : ''}`}>
@@ -467,6 +479,13 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // the main list depend only on what this visit has already shown, not on read state arriving
   // asynchronously underneath it.
   const pinnedIdsRef = useRef<Set<string>>(new Set());
+  // id -> ISO timestamp of when THIS session marked the story read (see markReadInPlace). Stands in
+  // for the server's own readAt in the read archive, which groups by read date: a story archived
+  // locally lands in the archive a full poll cycle before the server populates that field, and
+  // `new Date(null)` is the Unix epoch — so without this those stories all bucketed into a phantom
+  // 1969/1970 group at the bottom of the archive. A ref, not state: purely a lookup for a value
+  // that's already being rendered for other reasons, so it never needs to drive a render itself.
+  const localReadAtRef = useRef<Map<string, string>>(new Map());
   // Bumped whenever pinnedIdsRef is mutated OUTSIDE of render (unpinning, via the checkmark or
   // "Archive read") — a ref alone can't trigger the re-render those need to actually take effect.
   const [, setUnpinTick] = useState(0);
@@ -499,6 +518,17 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
       if (prev.has(articleId)) return prev;
       const next = new Set(prev);
       next.add(articleId);
+      return next;
+    });
+    // Undoing a read has to retract THIS session's own "I marked it read" record too, not just
+    // override the server's. isEffectivelyRead is `isRead(a) || keepVisible.has(id)`, and while
+    // locallyUnread already suppresses the isRead half, the keepVisible half would keep reporting
+    // the card as read on its own — so it would sit in the archive refusing to come back. These two
+    // sets are opposites and must never both contain the same id.
+    setKeepVisible((prev) => {
+      if (!prev.has(articleId)) return prev;
+      const next = new Set(prev);
+      next.delete(articleId);
       return next;
     });
   }, []);
@@ -544,7 +574,14 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // articles arrive already sorted — newest-first, or relevance-first per sortMode (see
   // articlesCache.getArticles). In showReadDimmed mode (The Pool) the cap covers ALL recent
   // stories (read stay, dimmed); otherwise only unread.
-  const baseUnread = !showReadDimmed && (partitionByRead || removeOnRead) ? articles.filter((a) => !isRead(a)) : articles;
+  // isEffectivelyRead, not the raw isRead: a story marked read THIS session has already been sent to
+  // the server, but markReadInPlace deliberately doesn't force a re-fetch (see its own comment), so
+  // `a.read` stays false for up to a full poll cycle. Using the raw value here kept those stories in
+  // the unread pool the whole time, which is what made "Archive read" appear to do nothing — the
+  // button unpinned them correctly, but they were still in cappedBaseIds below and so stayed in the
+  // main list anyway, un-dimmed, as though they'd never been read.
+  const baseUnread =
+    !showReadDimmed && (partitionByRead || removeOnRead) ? articles.filter((a) => !isEffectivelyRead(a)) : articles;
   // Intersperse *before* slicing to the cap, not after — groupByDay (used below) always re-sorts
   // each day's own bucket back to pure chronological order, so any interspersing done after grouping
   // can only rearrange whatever already survived this cut. Doing it here means a content-having
@@ -580,7 +617,14 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   }
   // Archive gets read cards that aren't pinned to the main list: read in a previous visit (so never
   // pinned this time), or explicitly filed away via the checkmark / "Archive read" (which unpin).
-  const archive = partitionByRead ? articles.filter((a) => isRead(a) && !pinnedIdsRef.current.has(a.id)) : [];
+  // isEffectivelyRead for the same reason as baseUnread above — a story archived by the button needs
+  // to land here immediately, not one poll cycle later once the server confirms what the app already
+  // told it. Membership of the main list is decided by pinning (the `!pinned` half), NOT by this
+  // read test, which is what makes it safe to use the local signal here: a read-in-place card that's
+  // still pinned stays in the main list regardless.
+  const archive = partitionByRead
+    ? articles.filter((a) => isEffectivelyRead(a) && !pinnedIdsRef.current.has(a.id))
+    : [];
   // Which of the currently-shown cards should render as read (dimmed, "Read" marker). Covers both a
   // read this session (keepVisible, instant) and one the server reported for a still-pinned card —
   // the latter previously showed as fully unread despite being read, since only keepVisible was
@@ -644,6 +688,12 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     : articles.reduce((n, a) => (isEffectivelyRead(a) || locallyExited.has(a.id) ? n : n + 1), 0);
 
   const markReadInPlace = useCallback((articleId: string, channelId: string) => {
+    // When this session marked it read, standing in for the server's own readAt until that arrives.
+    // The archive groups by read date, and a story archived from here reaches the archive a poll
+    // cycle before the server fills that field in — see localReadAtRef's declaration.
+    if (!localReadAtRef.current.has(articleId)) {
+      localReadAtRef.current.set(articleId, new Date().toISOString());
+    }
     setKeepVisible((prev) => {
       const next = new Set(prev);
       next.add(articleId);
@@ -664,19 +714,16 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     }
   }, []);
 
-  // Files a single read-in-place card away — unpin it (and drop it from keepVisible) so it
-  // re-partitions into the archive (channel) or out of view (The Pool). Used by a card's own check
-  // button. Unpinning is the part that actually moves it now; setUnpinTick forces the re-render a
-  // plain ref mutation wouldn't.
+  // Files a single read-in-place card away — unpin it so it re-partitions into the archive (channel)
+  // or out of view (The Pool). Used by a card's own check button. Unpinning is the ONLY thing needed:
+  // keepVisible is deliberately left alone, because it's this session's record that the card was
+  // marked read at all (see markReadInPlace), and both baseUnread and archive above now depend on
+  // that record to place the card correctly before the server confirms it. Clearing it here used to
+  // un-read the card instead of archiving it. setUnpinTick forces the re-render a plain ref mutation
+  // wouldn't.
   const archiveReadInPlace = useCallback((articleId: string) => {
     pinnedIdsRef.current.delete(articleId);
     setUnpinTick((t) => t + 1);
-    setKeepVisible((prev) => {
-      if (!prev.has(articleId)) return prev;
-      const next = new Set(prev);
-      next.delete(articleId);
-      return next;
-    });
   }, []);
 
   // Report how many cards would actually move if "Archive read" were tapped right now — i.e. pinned,
@@ -698,9 +745,10 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
         //
         // Unpin only what's actually read — an unread card that happens to be pinned should stay
         // exactly where it is; this button is "file away what I've read", not "reset the list".
+        // keepVisible is deliberately NOT cleared here: see archiveReadInPlace above for why doing
+        // so un-read these cards rather than archiving them.
         for (const id of dimmedReadIds) pinnedIdsRef.current.delete(id);
         setUnpinTick((t) => t + 1);
-        setKeepVisible(new Set());
       },
     }),
     [dimmedReadIds]
@@ -945,6 +993,7 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
           onLocalUnread={onLocalUnread}
           trustedSourceDomains={trustedSourceDomains}
           onToggleTrust={onToggleTrust}
+          localReadAt={localReadAtRef.current}
         />
       )}
 
