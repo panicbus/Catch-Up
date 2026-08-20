@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickSurvivingAnchor, type AnchorCandidate } from './scrollAnchor';
+import { pickSurvivingAnchor, hasOrderChanged, type AnchorCandidate } from './scrollAnchor';
 
 const card = (id: string, top: number, bottom: number): AnchorCandidate => ({ id, top, bottom });
 
@@ -34,5 +34,39 @@ describe('pickSurvivingAnchor', () => {
     const candidates = [card('a', -10, 0), card('b', -10, 1)];
     // 'a' bottom === visibleTop exactly → not selected; 'b' bottom just past it → selected.
     expect(pickSurvivingAnchor(candidates, 0, new Set())?.id).toBe('b');
+  });
+
+  it('an empty vanishing set (a pure insertion or reorder, nothing removed) still picks the topmost candidate', () => {
+    // NewsFeed passes an empty vanishingIds set whenever nothing was actually removed — this
+    // function doesn't need to know or care whether that's because nothing changed, something was
+    // inserted, or the list was reordered; it just anchors to whatever's topmost either way.
+    const candidates = [card('a', -50, -10), card('b', 20, 80), card('c', 90, 150)];
+    expect(pickSurvivingAnchor(candidates, 0, new Set())?.id).toBe('b');
+  });
+});
+
+describe('hasOrderChanged', () => {
+  it('is false when the sequence is identical', () => {
+    expect(hasOrderChanged(['a', 'b', 'c'], ['a', 'b', 'c'])).toBe(false);
+  });
+
+  it('is false for two empty lists', () => {
+    expect(hasOrderChanged([], [])).toBe(false);
+  });
+
+  it('is true for a removal', () => {
+    expect(hasOrderChanged(['a', 'b', 'c'], ['a', 'c'])).toBe(true);
+  });
+
+  it('is true for an insertion, even at the end (same relative order otherwise)', () => {
+    expect(hasOrderChanged(['a', 'b'], ['a', 'b', 'c'])).toBe(true);
+  });
+
+  it('is true for a pure reorder with IDENTICAL membership — the case a Set comparison would miss', () => {
+    expect(hasOrderChanged(['a', 'b', 'c'], ['c', 'b', 'a'])).toBe(true);
+  });
+
+  it('is true when a new story is inserted at the top, shifting everything else down a slot', () => {
+    expect(hasOrderChanged(['a', 'b', 'c'], ['new', 'a', 'b', 'c'])).toBe(true);
   });
 });

@@ -160,12 +160,18 @@ export class ArticlesCache {
             return diff !== 0 ? diff : byDate(a, b);
           }
         : byDate;
+    // Bury only if ANOTHER article shares this one's dedupe key and is read — not if this article
+    // is the one that's read. `buried` (readDedupeKeys(), below) can't tell those two cases apart
+    // on its own: it just marks "this key has a read article somewhere", which is also true of the
+    // read article itself. Without excluding it, marking a story read made it sink itself on the
+    // very next reload — same bug as, and fixed identically to, server/stores/articlesCache.ts's
+    // sinkAlreadyRead (see its own comment for the live-confirmed symptom this caused).
+    const shouldBury = (a: CachedArticle) => buried.has(titleDedupeKey(a.title)) && !this.isRead(a.id);
     return [...filtered]
       .sort(primarySort)
       // Stable second pass: sinks already-read-elsewhere duplicates to the bottom without
-      // disturbing the order established above, either among themselves or the rest — see
-      // server/stores/articlesCache.ts's sinkAlreadyRead for the identical server-side version.
-      .sort((a, b) => Number(buried.has(titleDedupeKey(a.title))) - Number(buried.has(titleDedupeKey(b.title))))
+      // disturbing the order established above, either among themselves or the rest.
+      .sort((a, b) => Number(shouldBury(a)) - Number(shouldBury(b)))
       .slice(0, limit);
   }
 

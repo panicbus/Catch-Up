@@ -36,3 +36,15 @@ export function pickSurvivingAnchor(
   }
   return null;
 }
+
+/** Whether the rendered article order changed AT ALL between two renders — a different length, a
+ * different member, or the exact same members in a different sequence. Compared as an ordered
+ * sequence rather than Set equality specifically because an insertion or a reorder can leave
+ * membership identical while still moving everything on screen: a Set comparison would miss both
+ * (confirmed live as a background poll silently re-ranking the "Most relevant" list with no card
+ * added or removed, which a membership-only check couldn't have caught). This is the trigger for
+ * NewsFeed's scroll-anchor compensation — see its own render-time comment — deliberately covering
+ * every cause (removal, insertion, reorder) with one check rather than a separate one per cause. */
+export function hasOrderChanged(prev: string[], next: string[]): boolean {
+  return prev.length !== next.length || prev.some((id, i) => id !== next[i]);
+}

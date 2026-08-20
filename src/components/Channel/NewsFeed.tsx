@@ -6,7 +6,7 @@ import { formatDateHeader } from '../../services/formatters';
 import { api } from '../../services/api';
 import { useScrollCatchUp } from '../../hooks/useScrollCatchUp';
 import { isEffectivelyRead as computeEffectivelyRead, buildUnreadKey } from './readState';
-import { pickSurvivingAnchor } from './scrollAnchor';
+import { pickSurvivingAnchor, hasOrderChanged } from './scrollAnchor';
 import { NewsCard, type NewsCardData } from './NewsCard';
 import { AllCaughtUp } from './AllCaughtUp';
 import { CaughtUpOverlay } from './CaughtUpOverlay';
@@ -437,29 +437,24 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   const prevUnreadCountRef = useRef<number | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
 
-  // Populated by the mainArticles-shrink check below (right after mainArticles itself is computed)
-  // whenever a render is about to drop a previously-shown card — covers every way that can happen:
-  // checkmark-archive, swipe-dismiss, the bulk flush button, and a background poll silently revealing
-  // a story as already read. Read (and cleared) by the layout effect further down. One shared
-  // mechanism rather than one per action, since all of them are the same shape: something that was
-  // visible a moment ago is gone now, with no browser-native compensation for the resulting scroll
-  // shift. Declared here, ahead of its first use.
+  // Populated by the mainArticles-order check below (right after mainArticles itself is computed)
+  // whenever a render is about to change what's shown, in ANY way — a removal (checkmark-archive,
+  // swipe-dismiss, the bulk flush button, a background poll revealing a story as already read) or an
+  // insertion/reorder (new stories from a refresh, a relevance re-rank). Read (and cleared) by the
+  // layout effect further down. One shared mechanism for all of it, since every case is the same
+  // shape: the screen is about to show something different at the same scroll position, with no
+  // browser-native compensation for the resulting visual shift.
   //
-  // anchorId/topBefore, not a total scrollHeight delta (the previous approach) — see scrollAnchor.ts's
+  // anchorId/topBefore, not a total scrollHeight delta (a previous approach) — see scrollAnchor.ts's
   // own doc comment for why that was provably wrong (it "corrected" scrollTop by the full size of
   // anything that vanished even when it was below the fold and the browser had moved nothing).
   // Anchoring to one real surviving card's own on-screen position is correct regardless of where the
-  // removal happened, by construction.
-  //
-  // The 'absolute' variant exists for "Archive read", which deliberately removes EVERY read card at
-  // once: there's frequently no surviving on-screen card left to anchor to at all, so that path
-  // records the raw scroll offset up front and puts it back instead (the browser clamps it on its
-  // own if the now-shorter list can't reach that far).
-  const pendingArchiveCompensationRef = useRef<
-    | { kind: 'anchor'; scrollRoot: HTMLElement; anchorId: string; topBefore: number }
-    | { kind: 'absolute'; scrollRoot: HTMLElement; scrollTop: number }
-    | null
-  >(null);
+  // change happened, by construction — including for "Archive read", which used to need its own
+  // separate raw-scroll-offset fallback here: with the trigger below no longer limited to "something
+  // was removed", that action's own state changes are enough to reach this mechanism on their own.
+  const pendingArchiveCompensationRef = useRef<{ scrollRoot: HTMLElement; anchorId: string; topBefore: number } | null>(
+    null
+  );
   // Every article id that has been shown in the main section at any point during THIS visit to the
   // channel. Load-bearing for the rule that read stories only leave the main list when you leave the
   // channel or tap "Archive read" — never on their own, mid-scroll.
@@ -475,9 +470,11 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // Bumped whenever pinnedIdsRef is mutated OUTSIDE of render (unpinning, via the checkmark or
   // "Archive read") — a ref alone can't trigger the re-render those need to actually take effect.
   const [, setUnpinTick] = useState(0);
-  // mainArticles' id set as of the last render, diffed fresh each render against the current set to
-  // detect that shrink regardless of what caused it. null until the first render has actually run.
-  const prevMainArticleIdsRef = useRef<Set<string> | null>(null);
+  // mainArticles' id ORDER as of the last render (an array, not a Set — order is exactly what an
+  // insertion or a reorder changes without necessarily changing membership at all), diffed fresh
+  // each render against the current order to detect any of it regardless of cause. null until the
+  // first render has actually run.
+  const prevMainArticleIdsRef = useRef<string[] | null>(null);
 
   const onLocalExit = useCallback((articleId: string) => {
     setLocallyExited((prev) => {
@@ -596,30 +593,36 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
   // walks several times is not worth that.
   const dimmedReadIds = new Set(mainArticles.filter((a) => isEffectivelyRead(a)).map((a) => a.id));
 
-  // Catches every way mainArticles can lose a card that was visible a render ago — a checkmark tap,
-  // a swipe, the bulk flush button, or (confirmed live via a screen recording) a background poll (see
-  // api.ts's 20s cycle) silently revealing a story as already read from a session before this mount's
-  // own: keepVisible resets on every remount (see its own comment above), so a story read anywhere
-  // other than THIS mount's own passive/active actions arrives as a fresh `articles` prop with no
-  // matching id in keepVisible, and drops out with no fly-off and no local callback to hook a
-  // measurement into — the recording showed the top story vanishing outright the instant the
-  // Archive-read count filled in, with nothing having scrolled past the top edge. Detected here
-  // during render, one mechanism for all of it: reading feedRef's DOM now still sees the PRE-commit
-  // layout for this update, which is exactly the "before" measurement the layout effect further down
-  // needs to compensate scrollTop once the removal actually lands.
-  const mainArticleIds = new Set(mainArticles.map((a) => a.id));
+  // Catches every way mainArticles can visibly move around between one render and the next — a
+  // checkmark tap, a swipe, the bulk flush button, a background poll silently revealing a story as
+  // already read (keepVisible resets on every remount, see its own comment above, so a story read
+  // anywhere other than THIS mount's own actions arrives as a fresh `articles` prop with no local
+  // record of it), a refresh inserting genuinely new stories above what's already shown, or a
+  // server-side reorder (both real causes of the latter fixed at the source — see
+  // server/stores/articlesCache.ts's sinkAlreadyRead/orderByFor — but a real one remains: new content
+  // arriving legitimately shifts what's below it). Compared as an ORDERED sequence, not just a Set of
+  // members, since an insertion or reorder can leave membership identical while still moving
+  // everything on screen. Detected here during render, one mechanism for all of it: reading feedRef's
+  // DOM now still sees the PRE-commit layout for this update, which is exactly the "before"
+  // measurement the layout effect further down needs to compensate scrollTop once the change lands.
+  const mainArticleIds = mainArticles.map((a) => a.id);
   if (prevMainArticleIdsRef.current && !pendingArchiveCompensationRef.current) {
-    const vanishedIds = new Set<string>();
-    for (const id of prevMainArticleIdsRef.current) {
-      if (!mainArticleIds.has(id)) vanishedIds.add(id);
-    }
-    if (vanishedIds.size > 0 && feedRef.current) {
+    const prevIds = prevMainArticleIdsRef.current;
+    const changed = hasOrderChanged(prevIds, mainArticleIds);
+    if (changed && feedRef.current) {
+      const mainArticleIdSet = new Set(mainArticleIds);
+      const vanishedIds = new Set<string>();
+      for (const id of prevIds) {
+        if (!mainArticleIdSet.has(id)) vanishedIds.add(id);
+      }
       const scrollRoot = feedRef.current.closest<HTMLElement>('.app-shell__main');
       // Skip the vanishing ids while picking the anchor, rather than picking one and discovering
-      // afterward that it's going away — see scrollAnchor.ts's own doc comment.
-      const anchor = scrollRoot ? findSurvivingTopAnchor(feedRef.current, scrollRoot, mainArticleIds, vanishedIds) : null;
+      // afterward that it's going away — see scrollAnchor.ts's own doc comment. Empty for a pure
+      // insertion or reorder (nothing vanishes), which is fine: the function just doesn't skip
+      // anything then, and picks whatever's topmost.
+      const anchor = scrollRoot ? findSurvivingTopAnchor(feedRef.current, scrollRoot, mainArticleIdSet, vanishedIds) : null;
       if (scrollRoot && anchor) {
-        pendingArchiveCompensationRef.current = { kind: 'anchor', scrollRoot, anchorId: anchor.id, topBefore: anchor.top };
+        pendingArchiveCompensationRef.current = { scrollRoot, anchorId: anchor.id, topBefore: anchor.top };
       }
       // Else: nothing currently visible survives (e.g. flushReadInPlace clearing the whole visible
       // screenful at once) — no stable reference left to compensate against. Accepted rather than
@@ -688,13 +691,11 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     ref,
     () => ({
       flushReadInPlace: () => {
-        // Records the raw scroll offset to put back afterward, rather than relying on the anchor
-        // mechanism: this removes every read card at once, so there's frequently nothing left on
-        // screen to anchor against at all (the exact case the anchor path documents as unhandled).
-        const scrollRoot = feedRef.current?.closest<HTMLElement>('.app-shell__main');
-        if (scrollRoot) {
-          pendingArchiveCompensationRef.current = { kind: 'absolute', scrollRoot, scrollTop: scrollRoot.scrollTop };
-        }
+        // No explicit scroll handling needed here — the render-time mainArticles-order check a few
+        // lines up now fires on ANY change to what's shown, not just a removal it was told about
+        // directly, so the state changes below are enough on their own to trigger it on the next
+        // render, the same as every other path that shrinks mainArticles.
+        //
         // Unpin only what's actually read — an unread card that happens to be pinned should stay
         // exactly where it is; this button is "file away what I've read", not "reset the list".
         for (const id of dimmedReadIds) pinnedIdsRef.current.delete(id);
@@ -705,21 +706,15 @@ export const NewsFeed = forwardRef<NewsFeedHandle, NewsFeedProps>(function NewsF
     [dimmedReadIds]
   );
 
-  // A no-op on most renders — only does something the ONE render right after the mainArticles-shrink
-  // check above (a few lines up) found a vanished id and populated pendingArchiveCompensationRef.
+  // A no-op on most renders — only does something the ONE render right after the mainArticles-order
+  // check above (a few lines up) found a change and populated pendingArchiveCompensationRef.
   // useLayoutEffect (not the async useEffect) specifically so this runs after the DOM commits the
-  // removal but BEFORE the browser paints, so the correction is invisible rather than a visible
+  // change but BEFORE the browser paints, so the correction is invisible rather than a visible
   // snap-back after the jump already showed.
   useLayoutEffect(() => {
     const pending = pendingArchiveCompensationRef.current;
     if (!pending) return;
     pendingArchiveCompensationRef.current = null;
-    if (pending.kind === 'absolute') {
-      // Straight restore of where the user was — assigning past the new maximum is harmless, the
-      // browser clamps it to the shorter list's own bottom.
-      pending.scrollRoot.scrollTop = pending.scrollTop;
-      return;
-    }
     const el = feedRef.current?.querySelector<HTMLElement>(`[data-article-id="${CSS.escape(pending.anchorId)}"]`);
     // The anchor itself vanished between capture and commit (e.g. a poll raced in on top of the
     // action that triggered this) — nothing safe left to compensate against; skip rather than guess.

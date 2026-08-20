@@ -194,26 +194,48 @@ export function ChannelPage() {
   // and the real page title at the same time and kept re-triggering the reveal transition —
   // confirmed live as exactly that regression.
   //
-  // Recomputed from the live scroll position on every scroll event rather than driven by an
-  // IntersectionObserver, which this used to use. An observer only fires on a CHANGE in
-  // intersection, so any missed or stale delivery leaves this state stuck until the next crossing —
-  // confirmed live as the sticky title staying visible after scrolling back to the top, with the
-  // real page title showing right above it at the same time. A plain measurement per scroll tick is
-  // self-correcting by construction: whatever state it was in, the next scroll event recomputes it
-  // from scratch.
+  // Recomputed from the live scroll position rather than driven by an IntersectionObserver (the
+  // original version) or a getBoundingClientRect() comparison run on every scroll tick (the first
+  // attempt at this fix, still reported stuck after shipping). Both of those compare two LIVE
+  // measurements against each other on every check; this instead measures a single fixed THRESHOLD
+  // once — the scrollTop value at which the title's bottom edge reaches the container's own visible
+  // top — and then every check is just `scrollRoot.scrollTop >= threshold`, a plain number
+  // comparison with nothing left to disagree with itself about. Self-correcting by construction
+  // either way (recomputed fresh on every scroll/resize rather than waiting for a delivered "change"
+  // event), but with only one measurement in play instead of two, there's less for iOS's own moving
+  // parts (the dynamic toolbar resizing the visual viewport mid-scroll) to desynchronize.
   useEffect(() => {
     if (!titleNode) return;
     // AppShell's .app-shell__main div is the actual scroll container (the browser viewport never
-    // scrolls in this layout), so the comparison has to be against ITS top edge, not the viewport's.
+    // scrolls in this layout), so the threshold has to be relative to ITS content, not the viewport.
     const scrollRoot = titleNode.closest<HTMLElement>('.app-shell__main');
     if (!scrollRoot) return;
-    const update = () => {
+
+    let threshold = 0;
+    const measure = () => {
+      // Converts the title's CURRENT viewport-relative position into a scroll-content-relative one
+      // (independent of however much is already scrolled), by adding back the current scrollTop.
+      const titleBottom = titleNode.getBoundingClientRect().bottom;
       const rootTop = scrollRoot.getBoundingClientRect().top;
-      setTitleScrolledOut(titleNode.getBoundingClientRect().bottom <= rootTop);
+      threshold = titleBottom - rootTop + scrollRoot.scrollTop;
     };
-    update();
+    const update = () => setTitleScrolledOut(scrollRoot.scrollTop >= threshold);
+    const recompute = () => {
+      measure();
+      update();
+    };
+    recompute();
+
+    // Resize covers anything that shifts the title's own position (the header reflowing, a refresh
+    // notice appearing above it) without a scroll event of its own to trigger a recheck.
+    const resizeObserver = new ResizeObserver(recompute);
+    resizeObserver.observe(titleNode);
+    resizeObserver.observe(scrollRoot);
     scrollRoot.addEventListener('scroll', update, { passive: true });
-    return () => scrollRoot.removeEventListener('scroll', update);
+    return () => {
+      resizeObserver.disconnect();
+      scrollRoot.removeEventListener('scroll', update);
+    };
   }, [titleNode, channelSlug]);
 
   if (!channel) {

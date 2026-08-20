@@ -94,22 +94,44 @@ async function alreadyReadDedupeKeys(userId: string, keys: string[]): Promise<Se
  * — NULLS LAST is explicit, not Postgres's own default, because Postgres defaults DESC to NULLS
  * FIRST, which would put every article merged before this field existed (or scored on the
  * defensive-catch path) at the very TOP of a "most relevant" sort, backwards from the intent —
- * with publishedAt desc as the tiebreak among equal (or equally absent) scores. */
+ * with publishedAt desc as the tiebreak among equal (or equally absent) scores.
+ *
+ * `{ id: 'asc' }` as the final key in both branches makes this a TOTAL order — without it, any two
+ * rows tying on every key above have no defined relative order at all, and Postgres does not
+ * guarantee returning them the same way twice; a concurrent insert/delete from the background
+ * refresh (which runs on its own schedule throughout an active session) can be enough to flip them.
+ * Confirmed live as stories silently changing position with no read action involved — a second,
+ * independent cause of the same "the list moved on its own" symptom `sinkAlreadyRead` below fixes
+ * the other, more common cause of. */
 function orderByFor(sortMode: SortMode): Prisma.ArticleOrderByWithRelationInput[] {
   if (sortMode === 'relevance') {
-    return [{ relevanceScore: { sort: 'desc', nulls: 'last' } }, { publishedAt: 'desc' }];
+    return [{ relevanceScore: { sort: 'desc', nulls: 'last' } }, { publishedAt: 'desc' }, { id: 'asc' }];
   }
-  return [{ publishedAt: 'desc' }];
+  return [{ publishedAt: 'desc' }, { id: 'asc' }];
 }
 
 /** Stable sort: pushes already-read-elsewhere duplicates (see alreadyReadDedupeKeys) to the bottom
  * without disturbing the relative order of everything else, or of the buried items among
  * themselves — `rows` arrives pre-sorted by the caller's own orderBy (newest-first today, also
  * relevance-first once sort-by-relevance lands), and this only adds one more, lower-priority key
- * on top of that, exactly like a second ORDER BY column would. */
-function sinkAlreadyRead<T extends { id: string; titleDedupeKey: string }>(rows: T[], buried: Set<string>): T[] {
+ * on top of that, exactly like a second ORDER BY column would.
+ *
+ * `readAtById` is what keeps this from burying a story because of ITS OWN read state: `buried`
+ * marks a dedupe key as having a read instance ANYWHERE (including the row being tested itself —
+ * alreadyReadDedupeKeys' query can't distinguish "another copy was read" from "this exact row was
+ * read", since read_state is joined on the same article id). Without excluding a row that is
+ * itself already read, marking a story read made it demote ITSELF on the very next poll — confirmed
+ * live via a screen recording: three stories on screen, gone ~20s later, replaced by the next three
+ * down. A story that's already read doesn't need repositioning anyway; it's already showing as
+ * read in place. */
+function sinkAlreadyRead<T extends { id: string; titleDedupeKey: string }>(
+  rows: T[],
+  buried: Set<string>,
+  readAtById: ReadonlyMap<string, Date>
+): T[] {
   if (buried.size === 0) return rows;
-  return [...rows].sort((a, b) => Number(buried.has(a.titleDedupeKey)) - Number(buried.has(b.titleDedupeKey)));
+  const shouldBury = (r: T) => buried.has(r.titleDedupeKey) && !readAtById.has(r.id);
+  return [...rows].sort((a, b) => Number(shouldBury(a)) - Number(shouldBury(b)));
 }
 
 export async function getArticles(
@@ -125,18 +147,22 @@ export async function getArticles(
     take: limit,
     select: { ...ARTICLE_SELECT, titleDedupeKey: true },
   });
-  const buried = await alreadyReadDedupeKeys(userId, [...new Set(fetched.map((r) => r.titleDedupeKey))]);
-  const rows = sinkAlreadyRead(fetched, buried);
   // Scoped to the articles actually being returned. Previously both of these pulled the user's
   // ENTIRE read-state and bookmark tables on every call — and this endpoint is hit several times
   // per 20-second poll tick, per channel. That made each call cost O(the user's whole history)
   // instead of O(one page of one channel).
-  const ids = rows.map((r) => r.id);
-  const [readRows, bookmarkedIds] = await Promise.all([
+  //
+  // readRows is fetched here, BEFORE sinking, not after: sinkAlreadyRead needs to know which of
+  // THESE rows are themselves already read, to avoid burying a story because of its own read state
+  // (see its own comment).
+  const ids = fetched.map((r) => r.id);
+  const [buried, readRows, bookmarkedIds] = await Promise.all([
+    alreadyReadDedupeKeys(userId, [...new Set(fetched.map((r) => r.titleDedupeKey))]),
     prisma.readState.findMany({ where: { userId, articleId: { in: ids } }, select: { articleId: true, readAt: true } }),
     prisma.bookmark.findMany({ where: { userId, articleId: { in: ids } }, select: { articleId: true } }),
   ]);
   const readAtById = new Map(readRows.map((r) => [r.articleId, r.readAt]));
+  const rows = sinkAlreadyRead(fetched, buried, readAtById);
   const bookmarked = new Set(bookmarkedIds.map((b) => b.articleId));
   return rows.map((a) => toArticle(a, readAtById.get(a.id) ?? null, bookmarked.has(a.id)));
 }
@@ -162,14 +188,16 @@ export async function getArticlesForChannels(
     take: limit,
     select: { ...ARTICLE_SELECT, titleDedupeKey: true },
   });
-  const buried = await alreadyReadDedupeKeys(userId, [...new Set(fetched.map((r) => r.titleDedupeKey))]);
-  const rows = sinkAlreadyRead(fetched, buried);
-  const ids = rows.map((r) => r.id);
-  const [readRows, bookmarkedIds] = await Promise.all([
+  // See getArticles' identical comment: readRows has to be fetched before sinking, not after, so
+  // sinkAlreadyRead can tell which of these rows are themselves already read.
+  const ids = fetched.map((r) => r.id);
+  const [buried, readRows, bookmarkedIds] = await Promise.all([
+    alreadyReadDedupeKeys(userId, [...new Set(fetched.map((r) => r.titleDedupeKey))]),
     prisma.readState.findMany({ where: { userId, articleId: { in: ids } }, select: { articleId: true, readAt: true } }),
     prisma.bookmark.findMany({ where: { userId, articleId: { in: ids } }, select: { articleId: true } }),
   ]);
   const readAtById = new Map(readRows.map((r) => [r.articleId, r.readAt]));
+  const rows = sinkAlreadyRead(fetched, buried, readAtById);
   const bookmarked = new Set(bookmarkedIds.map((b) => b.articleId));
   return rows.map((a) => toArticle(a, readAtById.get(a.id) ?? null, bookmarked.has(a.id)));
 }
