@@ -76,6 +76,14 @@
   animation: cold-start-notice-caption-fade 0.5s ease;
 }
 
+/* The last stage's second line. A block-level span inside the caption <p> rather than its own
+   sibling element, so it stays part of the same key={stage} remount and fades in with the line
+   above it instead of animating separately. */
+.cold-start-notice__caption-note {
+  display: block;
+  margin-top: 4px;
+}
+
 @keyframes cold-start-notice-caption-fade {
   from {
     opacity: 0;

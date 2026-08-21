@@ -39,11 +39,11 @@ function ClockFace() {
 // Rotated through in order while the wait drags on, so a real cold start (20-30+s) doesn't just
 // sit on one static line the whole time. Each entry's duration is how long IT stays up before
 // advancing; the last one has no duration because it just holds once reached.
-const CAPTION_STAGES: { text: string; durationMs?: number }[] = [
+const CAPTION_STAGES: { text: string; note?: string; durationMs?: number }[] = [
   { text: 'Waking up the server.', durationMs: 5000 },
   { text: 'This can take up to 30 seconds on the first load.', durationMs: 8000 },
   { text: 'Almost there…', durationMs: 10000 },
-  { text: 'Still going — thanks for your patience.' },
+  { text: 'Still going. Thanks for your patience.', note: 'We appreciate you! ♥️' },
 ];
 
 function useCaptionStage(): number {
@@ -77,6 +77,9 @@ export function ColdStartNotice() {
       {/* key={stage} remounts the <p> on every stage change so its fade-in keyframe replays. */}
       <p key={stage} className="cold-start-notice__caption">
         {CAPTION_STAGES[stage].text}
+        {CAPTION_STAGES[stage].note && (
+          <span className="cold-start-notice__caption-note">{CAPTION_STAGES[stage].note}</span>
+        )}
       </p>
     </div>
   );

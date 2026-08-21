@@ -13,15 +13,6 @@
   user-select: none;
   transition: box-shadow 0.15s;
   box-shadow: var(--shadow-card);
-  /* One card's .news-card__expand accordion changing height pushes every card below it down the
-     column, and without this, the browser repaints ALL of them at their new position each animation
-     frame, not just moves them — cheap with a handful of cards, visibly stuttery past ~50 (confirmed
-     live: smooth under that, janky over it). Containment marks each card an independent paint/layout
-     boundary, so a sibling that hasn't itself changed can be repositioned without re-rasterizing its
-     contents. Safe here: every absolutely-positioned child (__actions, __read-badge) already resolves
-     against this box via the existing `position: relative`, and nothing in this card is meant to
-     visually escape it, so there's nothing for the implied clipping to cut off. */
-  contain: layout paint;
 }
 
 /* No snippet, no image — the card body has nothing to expand into (see NewsCard.tsx's canExpand),
@@ -181,11 +172,25 @@
   gap: 0;
 }
 
-/* Expand/collapse via the CSS grid-rows accordion trick — no JS height measuring needed. */
+/* Expand/collapse via the CSS grid-rows accordion trick — no JS height measuring needed.
+   The row size is switched OUTRIGHT, with no transition on it, and that is deliberate.
+
+   grid-template-rows is a layout property, so transitioning it re-ran layout for the whole feed on
+   every frame of the animation, on the main thread. Measured off a 60fps screen recording of a long
+   channel: the expand/collapse rendered at a locked 20fps (a new frame only every third one), while
+   ordinary scrolling in the same recording held a clean 60 — scrolling is compositor-only and does
+   no layout, which is exactly the difference. That gap is the whole bug, and it gets worse the more
+   cards sit below the one opening, which is why it only showed up past ~50 stories.
+
+   Containment was tried first and did not help; a standalone benchmark of this exact structure at
+   10/50/100 cards put a full layout pass at well under a tenth of a millisecond either way, which is
+   what ruled the containment approach out rather than another round of guessing. Snapping the height
+   in one frame removes the per-frame layout altogether instead of trying to make it cheaper.
+
+   Grid view already worked this way (see below) — this brings list view in line with it. */
 .news-card__expand {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.3s ease;
 }
 .news-card__expand--open {
   grid-template-rows: 1fr;
@@ -194,12 +199,40 @@
   overflow: hidden;
 }
 
-/* Grid view: the whole open/close is driven by one View Transition (see NewsFeed's toggleExpand),
-   so the card morphs to its final expanded size in a single motion. Running the grid-rows accordion
-   at the same time made the content reveal a second, out-of-sync phase — "fits and starts." Let the
-   content just be there in the after-state and let the transition morph it. */
-.news-feed__grid .news-card__expand {
-  transition: none;
+/* What replaces the accordion: the revealed content fades and eases up into place. opacity and
+   transform are compositor-only, so this animates without touching layout at all — the card is
+   already at its final height on the first frame and nothing reflows underneath it. Open only; a
+   close has no element left to animate and snaps shut, same as grid view has always done.
+
+   Applied to every card and then turned back OFF for grid view, rather than scoped to
+   .news-feed__list: cards also render outside a feed list entirely (RollTheDiceModal puts one in
+   .roll-the-dice-modal__card), and a list-only selector left those with no reveal at all. */
+.news-card__expand--open .news-card__expand-inner {
+  animation: news-card-expand-reveal 0.22s ease;
+}
+
+/* Grid view's open/close is one View Transition (see NewsFeed's toggleExpand), which morphs the
+   whole card in a single motion — a second, independently-timed animation inside it is exactly the
+   out-of-sync "fits and starts" second phase that transition was there to avoid. */
+.news-feed__grid .news-card__expand--open .news-card__expand-inner {
+  animation: none;
+}
+
+@keyframes news-card-expand-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .news-card__expand--open .news-card__expand-inner {
+    animation: none;
+  }
 }
 
 .news-card__image {
