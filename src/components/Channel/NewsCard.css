@@ -13,6 +13,15 @@
   user-select: none;
   transition: box-shadow 0.15s;
   box-shadow: var(--shadow-card);
+  /* One card's .news-card__expand accordion changing height pushes every card below it down the
+     column, and without this, the browser repaints ALL of them at their new position each animation
+     frame, not just moves them — cheap with a handful of cards, visibly stuttery past ~50 (confirmed
+     live: smooth under that, janky over it). Containment marks each card an independent paint/layout
+     boundary, so a sibling that hasn't itself changed can be repositioned without re-rasterizing its
+     contents. Safe here: every absolutely-positioned child (__actions, __read-badge) already resolves
+     against this box via the existing `position: relative`, and nothing in this card is meant to
+     visually escape it, so there's nothing for the implied clipping to cut off. */
+  contain: layout paint;
 }
 
 /* No snippet, no image — the card body has nothing to expand into (see NewsCard.tsx's canExpand),

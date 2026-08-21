@@ -41,7 +41,7 @@ function ReadBadgeIcon() {
 // full size (expanded) that reads as one unreadable wall of small text. Capped here rather than
 // left alone because the reader view (or "Open original," right below this) already covers anyone
 // who wants the rest, properly formatted.
-const SNIPPET_WORD_CAP = 200;
+const SNIPPET_WORD_CAP = 100;
 function truncateSnippet(text: string): string {
   const words = text.split(/\s+/);
   if (words.length <= SNIPPET_WORD_CAP) return text;

@@ -18,7 +18,11 @@
 .new-badge__tooltip {
   position: absolute;
   top: calc(100% + 6px);
-  left: 0;
+  /* Centered under the badge rather than flush-left: the card it sits in now clips paint at its
+     own edge (NewsCard.css's contain: paint), so reaching just as far each direction instead of
+     entirely rightward halves the odds a long channel label pushes this past the card's edge. */
+  left: 50%;
+  transform: translateX(-50%);
   padding: 6px 9px;
   border-radius: var(--radius-sm);
   background: #241f1a;
@@ -33,13 +37,16 @@
   animation: new-badge-tooltip-in 0.12s ease;
 }
 
+/* Both keyframes re-assert translateX(-50%) alongside the slide — an animated `transform` fully
+   replaces the base rule's value for its duration, so leaving the centering out here would un-center
+   the tooltip for the animation's 0.12s before it snapped back into place once the animation ended. */
 @keyframes new-badge-tooltip-in {
   from {
     opacity: 0;
-    transform: translateY(-2px);
+    transform: translateX(-50%) translateY(-2px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(-50%) translateY(0);
   }
 }
