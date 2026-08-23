@@ -209,39 +209,52 @@ export class ArticlesCache {
    * are kept longer than the cache cap for busy channels), and stale results can be pruned right
    * back out — neither is something new to show the user, so neither should be counted as "found." */
   merge(channelId: string, subchannelId: string | null, incoming: FetchedArticle[]): number {
+    return this.mergeGroups(channelId, [{ subchannelId, articles: incoming }]);
+  }
+
+  /** Same as merge(), but inserts several (subchannelId, articles) groups against one shared dedup
+   * pass and a single prune()+write() at the end, instead of one of each per group — for
+   * runChannel's Politics routing (main/locality/politicsGeoRouting.ts), which splits one target's
+   * survivors into a main-feed group plus a group per matched subchannel. Calling plain merge() once
+   * per group there ran prune() — a full sort/dedupe/100-unread-cap pass over the ENTIRE channel,
+   * not just the new articles — and wrote the whole JSON store to disk once per group, for what is
+   * logically one batch of inserts from one refresh. */
+  mergeGroups(channelId: string, groups: { subchannelId: string | null; articles: FetchedArticle[] }[]): number {
     const bucket = (this.data.byChannel[channelId] ??= { ...DEFAULT_BUCKET, articles: [] });
     const seenIds = new Set(bucket.articles.map((a) => a.id));
     const seenKeys = new Set(bucket.articles.map((a) => titleDedupeKey(a.title)));
     const addedIds: string[] = [];
-    for (const article of incoming) {
-      const id = articleId(article.url);
-      const dedupeKey = titleDedupeKey(article.title);
-      if (seenIds.has(id) || seenKeys.has(dedupeKey)) continue;
-      seenIds.add(id);
-      seenKeys.add(dedupeKey);
-      let hostname = '';
-      try {
-        hostname = new URL(normalizeUrl(article.url)).hostname;
-      } catch {
-        /* malformed URL — leave hostname blank, still store the article */
+    for (const { subchannelId, articles: incoming } of groups) {
+      for (const article of incoming) {
+        const id = articleId(article.url);
+        const dedupeKey = titleDedupeKey(article.title);
+        if (seenIds.has(id) || seenKeys.has(dedupeKey)) continue;
+        seenIds.add(id);
+        seenKeys.add(dedupeKey);
+        let hostname = '';
+        try {
+          hostname = new URL(normalizeUrl(article.url)).hostname;
+        } catch {
+          /* malformed URL — leave hostname blank, still store the article */
+        }
+        bucket.articles.push({
+          id,
+          url: article.url,
+          title: article.title,
+          snippet: article.snippet,
+          source: article.source,
+          sourceDomain: hostname,
+          imageUrl: article.imageUrl,
+          publishedAt: article.publishedAt,
+          fetchedAt: new Date().toISOString(),
+          provider: article.provider,
+          channelId,
+          subchannelId,
+          paywalled: isPaywalledDomain(hostname),
+          relevanceScore: article.relevanceScore,
+        });
+        addedIds.push(id);
       }
-      bucket.articles.push({
-        id,
-        url: article.url,
-        title: article.title,
-        snippet: article.snippet,
-        source: article.source,
-        sourceDomain: hostname,
-        imageUrl: article.imageUrl,
-        publishedAt: article.publishedAt,
-        fetchedAt: new Date().toISOString(),
-        provider: article.provider,
-        channelId,
-        subchannelId,
-        paywalled: isPaywalledDomain(hostname),
-        relevanceScore: article.relevanceScore,
-      });
-      addedIds.push(id);
     }
     this.prune(bucket);
     this.write();

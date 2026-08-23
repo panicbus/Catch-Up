@@ -12,7 +12,7 @@
  *     to home is used — a false negative (missing a genuinely distant story) is a much better
  *     failure mode here than a false positive (burying a story that wasn't actually distant). */
 
-import { lookupCity, lookupCountry, lookupContinent, continentOfCountry, type CityRow, type Continent } from './gazetteer';
+import { lookupCity, lookupCountry, lookupContinent, continentOfCountry, lookupRegion, type CityRow, type Continent } from './gazetteer';
 
 // TUNABLE: originally set much higher (50,000) to filter single-word false positives (ordinary
 // English words that double as obscure place names), but that floor silently excluded Banff, AB
@@ -130,4 +130,59 @@ export function foreignPlaceSignal(
     return continents.has(homeContinent) ? null : 'continent';
   }
   return null;
+}
+
+export type StoryPlace =
+  | { kind: 'home' }
+  | { kind: 'foreign'; countryCode: string }
+  | { kind: 'none' };
+
+/** Same scan as foreignPlaceSignal, but resolves to a specific COUNTRY rather than a soft near/far
+ * distance or a country-vs-continent tier — used by relevance.ts's hard exclude for the Politics
+ * category (see that file), which needs an actual country code to check against a channel's
+ * subchannels, not just "this is foreign." Deliberately a separate function rather than a shared
+ * refactor of foreignPlaceSignal/nearestMentionKm: those two stay exactly as they were, still scoring
+ * Business/Health/Science/Technology exactly as before — this one is Politics-only, all-new
+ * consumers, and safest kept apart from code with years of tuned test coverage riding on it.
+ *
+ * Checks city, admin1 (state/province — the gap neither of the two functions above closes: "Osun"
+ * and "Kerala" are real Nigerian/Indian regions but aren't in the gazetteer as CITY names, see
+ * gazetteer.ts's BY_ADM1), and country name/alias matches uniformly, and — like foreignPlaceSignal —
+ * never flags a story as foreign if it ALSO names the home country somewhere ("U.S. signs trade deal
+ * with India" is a home-country story that happens to name India too, not routine foreign coverage).
+ *
+ * Deliberately narrower than foreignPlaceSignal in one respect: a bare CONTINENT mention with no
+ * specific country ("political unrest spreads across Africa") reports 'none' here, not 'foreign' —
+ * continent-only evidence is exactly the weaker signal foreignPlaceSignal's own -5-vs--7 weighting
+ * already treats as less confident than a named country, and the hard exclude this feeds is not the
+ * place to escalate that; a bare continent mention keeps going through the existing soft scoring
+ * unchanged. There's also no single country code to check a subchannel against for a continent. */
+export function detectStoryCountry(
+  title: string,
+  snippet: string | null,
+  homeCountryCode: string
+): StoryPlace {
+  const home = homeCountryCode.toUpperCase();
+  const countryCodes = new Set<string>();
+
+  for (const text of [title, snippet ?? '']) {
+    for (const { phrase, wordCount } of capitalizedPhrases(text, MAX_NGRAM_WORDS)) {
+      const directCc = lookupCountry(phrase);
+      if (directCc) countryCodes.add(directCc);
+
+      const cityRows = lookupCity(phrase);
+      if (cityRows) for (const row of eligibleRows(cityRows, wordCount)) countryCodes.add(row.cc);
+
+      const regionCcs = lookupRegion(phrase);
+      if (regionCcs) for (const cc of regionCcs) countryCodes.add(cc);
+    }
+  }
+
+  if (countryCodes.size === 0) return { kind: 'none' };
+  if (countryCodes.has(home)) return { kind: 'home' };
+  // Multiple different foreign countries named in the same story is rare and low-stakes either way
+  // (Set iteration order is insertion order, so this is simply "the first one the scan found") — the
+  // only two things riding on the specific code are the subchannel match and which bucket a routed
+  // story lands in, not a claim that it's the story's ONLY subject.
+  return { kind: 'foreign', countryCode: [...countryCodes][0] };
 }

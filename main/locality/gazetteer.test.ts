@@ -7,6 +7,8 @@ import {
   lookupContinent,
   continentOfCountry,
   countryDisplayName,
+  lookupRegion,
+  subchannelCountryCode,
 } from './gazetteer';
 
 describe('resolveCity', () => {
@@ -199,5 +201,71 @@ describe('countryDisplayName', () => {
 
   it('returns null for an unrecognized code rather than a raw ISO code', () => {
     expect(countryDisplayName('ZZ')).toBeNull();
+  });
+});
+
+describe('lookupRegion', () => {
+  it('resolves an Indian state that has no gazetteer city entry of its own', () => {
+    expect(lookupCity('Kerala')).toBeUndefined();
+    expect(lookupRegion('Kerala')).toEqual(['IN']);
+  });
+
+  it('resolves a Nigerian state whose admin1 value is suffixed "State" in the bundled data', () => {
+    expect(lookupCity('Osun')).toBeUndefined();
+    expect(lookupRegion('Osun')).toEqual(['NG']);
+  });
+
+  it('is case-insensitive', () => {
+    expect(lookupRegion('kerala')).toEqual(['IN']);
+    expect(lookupRegion('OSUN')).toEqual(['NG']);
+  });
+
+  it('returns undefined for a name with no admin1 entry', () => {
+    expect(lookupRegion('Nonexistentregionville')).toBeUndefined();
+  });
+
+  it('collects every country for a region name that genuinely repeats across borders', () => {
+    // Punjab is a real province in both Pakistan and India — collect-all is the correct behavior
+    // here, not a bug; subchannelCountryCode below is what refuses to guess between them.
+    expect(lookupRegion('Punjab')?.sort()).toEqual(['IN', 'PK']);
+  });
+
+  it('excludes generic/directional words that are also literal admin1 values in the bundled data', () => {
+    // Regression guard for the curated ADM1_EXCLUDE list — these would otherwise misfire on
+    // completely unrelated domestic coverage ("the East Coast", "Central bank", "raise the Bar").
+    expect(lookupRegion('East')).toBeUndefined();
+    expect(lookupRegion('Central')).toBeUndefined();
+    expect(lookupRegion('Bar')).toBeUndefined();
+    expect(lookupRegion('Delta')).toBeUndefined();
+  });
+});
+
+describe('subchannelCountryCode', () => {
+  it('resolves a subchannel named after a country', () => {
+    expect(subchannelCountryCode('India')).toBe('IN');
+    expect(subchannelCountryCode('Nigeria')).toBe('NG');
+  });
+
+  it('resolves a subchannel named after a region with no country-name match of its own', () => {
+    expect(subchannelCountryCode('Kerala')).toBe('IN');
+  });
+
+  it('resolves a multi-word country name as a whole before falling back to individual words', () => {
+    expect(subchannelCountryCode('United Kingdom')).toBe('GB');
+  });
+
+  it('resolves a subchannel name that PAIRS a country with another word', () => {
+    expect(subchannelCountryCode('Nigeria Politics')).toBe('NG');
+  });
+
+  it('returns null for a subchannel name that names no place at all', () => {
+    expect(subchannelCountryCode('Elections')).toBeNull();
+  });
+
+  it('returns null for a region name shared by more than one country, rather than guessing', () => {
+    // Punjab is a real province in both Pakistan and India (see lookupRegion's own test above) —
+    // subchannelCountryCode refuses to pick one, since a wrong guess here would wrongly exempt or
+    // misroute a story rather than just miss it.
+    expect(subchannelCountryCode('Punjab')).toBeNull();
   });
 });

@@ -9,6 +9,7 @@
 import { runProviders, getProviderStatus } from '../main/providers/registry';
 import { filterRelevant } from '../main/aiRelevance';
 import { channelProfile } from '../main/providers/channelProfiles';
+import { routeByCountry } from '../main/locality/politicsGeoRouting';
 import type { ProviderConfig, AiProvider } from '../main/providers/classifier';
 import * as dataStore from './stores/dataStore';
 import * as articlesCache from './stores/articlesCache';
@@ -160,6 +161,10 @@ export async function runChannel(
         subchannelId: target.subchannelId,
         category: profile.category,
       });
+      // channel.subchannels (the full list), not the possibly-staggered `subchannels` above: a
+      // subchannel skipped this cycle by staggering still exists and is still a valid exemption for
+      // the Politics hard exclude / a valid routing target below — staggering only decides which
+      // subchannels get their OWN dedicated fetch this cycle, not which ones exist.
       const relevant = await filterRelevant(
         fetched,
         target.topic,
@@ -170,9 +175,25 @@ export async function runChannel(
         classificationStore,
         aiConfig,
         homeLocation,
-        trustedSourceDomains
+        trustedSourceDomains,
+        channel.subchannels.map((sc) => sc.name)
       );
-      added += await articlesCache.merge(userId, channelId, target.subchannelId, relevant);
+      // Politics-only, and only for the main target: a subchannel-specific target already merges
+      // under its own real subchannel id, so there's nothing to route for it. See
+      // main/locality/politicsGeoRouting.ts for why this can't just be another rule inside
+      // filterRelevant's gate. One mergeGroups() call rather than one merge() per group — merge()
+      // re-fetches every existing article for the whole channel and re-runs prune() on every call,
+      // so calling it once per subchannel here would turn one refresh into that many redundant
+      // round-trips to Postgres.
+      if (target.subchannelId === null && profile.category === 'politics' && homeLocation?.countryCode) {
+        const routed = routeByCountry(relevant, homeLocation.countryCode, channel.subchannels);
+        added += await articlesCache.mergeGroups(userId, channelId, [
+          { subchannelId: null, articles: routed.main },
+          ...[...routed.toSubchannel].map(([subchannelId, articles]) => ({ subchannelId, articles })),
+        ]);
+      } else {
+        added += await articlesCache.merge(userId, channelId, target.subchannelId, relevant);
+      }
     } catch (e) {
       errors.push(String(e));
     }

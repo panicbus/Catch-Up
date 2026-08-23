@@ -58,6 +58,51 @@ export function lookupCity(name: string): CityRow[] | undefined {
   return BY_NAME.get(name.trim().toLowerCase());
 }
 
+// Admin1 (state/province) name -> every country code that has a region by that name. Built from the
+// same bundled rows as BY_NAME above (every CityRow already carries its own `adm1`) — no new data.
+// Exists for placeExtraction.ts's detectStoryCountry: a story naming "Osun" or "Kerala" names no
+// city and no country, but a real reader still instantly recognizes it as Nigerian/Indian. Neither
+// is in the gazetteer as a CITY name (confirmed directly against the bundled data), so without this,
+// region-only political coverage had no place signal to be caught by at all.
+//
+// A handful of real admin1 names are also ordinary English words with nothing to do with the place
+// they name — the same collision risk COUNTRY_ALIASES above curates around (its own Georgia/Jordan/
+// Chad/Jersey exclusions), just a bigger source list to have spot-checked. Excluded below rather
+// than trusted: the directional/generic ones ("East", "West", "Central", "Islands" and similar,
+// several of which are literal admin1 values in the bundled data) and a handful of single common
+// words that happen to name a real region ("Delta", "Plateau", "Bay", "Van", "Mono", "Bar", "Colon",
+// "Forest", "Grad") — each would misfire on totally unrelated domestic coverage far more often than
+// it would ever correctly flag the region it actually names.
+const ADM1_EXCLUDE = new Set([
+  'east', 'west', 'north', 'south', 'northern', 'eastern', 'western', 'northland', 'southland',
+  'north-east', 'north-west', 'south-east', 'south-west',
+  'central', 'islands', 'delta', 'plateau', 'bay', 'van', 'mono', 'bar', 'colon', 'forest', 'grad',
+]);
+
+const BY_ADM1 = new Map<string, Set<string>>();
+// Nigeria's admin1 values inconsistently suffix "State" ("Osun State") while others don't ("Lagos",
+// "Delta") — indexed with that suffix stripped so "Osun" alone matches. Doesn't lose "Osun State"
+// phrasing either: placeExtraction's n-gram scanner generates the 1-word "Osun" window on its own
+// regardless of what follows it, so nothing needs indexing under the unstripped form too.
+function indexAdm1(cc: string, adm1: string): void {
+  const key = normalize(adm1).replace(/ state$/, '');
+  if (!key || ADM1_EXCLUDE.has(key)) return;
+  const set = BY_ADM1.get(key);
+  if (set) set.add(cc);
+  else BY_ADM1.set(key, new Set([cc]));
+}
+for (const row of CITIES) {
+  if (row.adm1) indexAdm1(row.cc, row.adm1);
+}
+
+/** Country codes with a state/province named `name` (case-insensitive), or undefined if none. Most
+ * names map to exactly one country; a small number of admin1 names repeat across countries, in which
+ * case every match is returned (same "collect all, let the caller decide" shape lookupCity uses). */
+export function lookupRegion(name: string): string[] | undefined {
+  const set = BY_ADM1.get(name.trim().toLowerCase());
+  return set ? [...set] : undefined;
+}
+
 function normalize(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, ' ');
 }
@@ -344,4 +389,23 @@ export function looksLikePlaceChannel(channelName: string): boolean {
 const COUNTRY_CODES = new Set(CITIES.map((r) => r.cc.toLowerCase()));
 function isCountryCode(token: string): boolean {
   return token.length === 2 && COUNTRY_CODES.has(token);
+}
+
+/** Resolves `name` (tried whole, then word by word) to a single country code via lookupCountry/
+ * lookupRegion — used by relevance.ts's Politics hard exclude and its subchannel-routing companion
+ * to tell whether a subchannel name like "India", "Nigeria", or "Nigeria Politics" identifies a
+ * specific country, so that country's stories can be exempted from the hard exclude and routed there
+ * instead of dropped. The whole name is tried first (so a two-word country name like "United
+ * Kingdom" resolves as itself before falling back to individual words, which wouldn't match either
+ * word alone). A region name shared by more than one country (see lookupRegion) resolves to null
+ * here rather than guessing — an ambiguous match would wrongly exempt or misroute a story, which is
+ * the wrong direction to be permissive in for something a hard exclude's exception is keyed on. */
+export function subchannelCountryCode(name: string): string | null {
+  for (const candidate of [name, ...name.split(/[^A-Za-z0-9]+/).filter(Boolean)]) {
+    const direct = lookupCountry(candidate);
+    if (direct) return direct;
+    const region = lookupRegion(candidate);
+    if (region && region.length === 1) return region[0];
+  }
+  return null;
 }

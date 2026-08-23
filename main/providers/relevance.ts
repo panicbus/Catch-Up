@@ -30,8 +30,8 @@
 
 import { normalizeTitle, normalizeUrl } from './dedupe';
 import { sectionMatchesCategory, sectionIsForeign } from './channelProfiles';
-import { looksLikePlaceChannel } from '../locality/gazetteer';
-import { nearestMentionKm, foreignPlaceSignal } from '../locality/placeExtraction';
+import { looksLikePlaceChannel, subchannelCountryCode } from '../locality/gazetteer';
+import { nearestMentionKm, foreignPlaceSignal, detectStoryCountry } from '../locality/placeExtraction';
 import type { ChannelProfile, NewsCategory } from './channelProfiles';
 import type { FetchedArticle } from './types';
 
@@ -177,6 +177,15 @@ export interface RelevanceContext {
    * RelevanceContext by hand don't all need updating for a signal they aren't exercising —
    * buildGateContext treats undefined the same as an empty array. */
   trustedSourceDomains?: readonly string[];
+  /** Every subchannel configured on this channel (not just the current batch's own subchannelName,
+   * which is a single name or null) — used only by the Politics hard exclude below, to tell whether a
+   * detected foreign country has a matching subchannel ("India", "Nigeria") it should be exempted for
+   * rather than dropped. Exempting here only affects the keep/reject verdict — actually MOVING an
+   * exempted article out of the main feed and into that subchannel is routeByCountry's job
+   * (main/locality/politicsGeoRouting.ts), called separately from runChannel after this gate runs.
+   * Optional for the same reason trustedSourceDomains is: existing test call sites that don't
+   * exercise this signal don't need updating. */
+  siblingSubchannelNames?: readonly string[];
 }
 
 /** Tokenize a provider search topic into scorable terms. `normalizeTitle` already lowercases and
@@ -281,6 +290,10 @@ interface GateContext {
   /** See RelevanceContext.trustedSourceDomains — carried through unchanged, not gated by channel
    * type the way locality is. */
   trustedSourceDomains: readonly string[];
+  /** Country codes the Politics hard exclude (see judgeArticle) should NOT reject, because a sibling
+   * subchannel names that country. Always null outside a Politics category channel — computing this
+   * for every category would be wasted work for a set nothing else ever reads. */
+  politicsExemptCountryCodes: ReadonlySet<string> | null;
 }
 
 // Category channels where routine coverage of another country's own domestic affairs is exactly
@@ -318,10 +331,25 @@ function buildGateContext(ctx: RelevanceContext): GateContext {
   // whose entire purpose is far-away news (caught in review, not live — see the reverted broader
   // version's test coverage gap). Sports and Entertainment stay excluded too: a foreign team/event/
   // release is often exactly what those channels are expected to surface, not "uninteresting."
+  // Bug fix, found while adding the Politics hard exclude below: this only ever checked the PARENT
+  // channel's name, never the current batch's OWN subchannel name — so a "Politics · India"
+  // subchannel's own dedicated fetch was already being penalized by the locality signal for being
+  // about India, before this feature existed. A subchannel named after the very place it's about
+  // needs the same exemption a place-named channel gets, or it can never actually serve as an escape
+  // valve from its parent's locality scoring (or, after this change, its parent's hard exclude).
   const localityEligible =
     ctx.homeLocation != null &&
     !looksLikePlaceChannel(ctx.channelName) &&
+    !(ctx.subchannelName != null && looksLikePlaceChannel(ctx.subchannelName)) &&
     (ctx.profile.type === 'topic' || (ctx.profile.category != null && LOCALITY_CATEGORIES.has(ctx.profile.category)));
+  const politicsExemptCountryCodes =
+    ctx.profile.category === 'politics' && ctx.siblingSubchannelNames?.length
+      ? new Set(
+          ctx.siblingSubchannelNames
+            .map((name) => subchannelCountryCode(name))
+            .filter((cc): cc is string => cc != null)
+        )
+      : null;
   return {
     specificTerms,
     include: ctx.profile.include,
@@ -331,6 +359,7 @@ function buildGateContext(ctx: RelevanceContext): GateContext {
     requireSpecificTerm: ctx.subchannelName != null || ctx.profile.type === 'topic',
     locality: localityEligible ? ctx.homeLocation : null,
     trustedSourceDomains: ctx.trustedSourceDomains ?? [],
+    politicsExemptCountryCodes,
   };
 }
 
@@ -445,8 +474,23 @@ function scoreArticle(article: FetchedArticle, gate: GateContext): ScoredSignals
   // acceptable, not accidental: subchannels are already the strict tier elsewhere in this file
   // ("when in doubt, keep out"), so a subchannel story with no other corroborating evidence being
   // more sensitive to a distant, unrelated place mention is consistent with that existing bar.
+  //
+  // Politics: the city-distance and country tiers below are now judgeArticle's hard exclude's job
+  // entirely, and are skipped here — neither nearestMentionKm nor foreignPlaceSignal know about the
+  // hard exclude's subchannel exemption, so leaving them active would silently re-penalize (even
+  // reject, via score) a story judgeArticle specifically decided to let through. Confirmed live: a
+  // "kept" verdict for an exempted India story turned back into a net-negative reject once this
+  // block ran its own, unrelated -7 anyway, before this exclusion was added.
+  //
+  // The CONTINENT tier is the one part of this block Politics keeps. detectStoryCountry (the hard
+  // exclude's detector) deliberately never resolves a bare continent mention with no specific
+  // country — see its own comment — so the hard exclude never had an opinion on one to begin with,
+  // and there's no exemption state to leak. A bare "unrest spreads across Africa"-style story for a
+  // Politics channel keeps getting exactly the same soft, survivable -5 every other locality
+  // category still gets for one.
+  const isPolitics = gate.category === 'politics';
   if (gate.locality) {
-    const km = nearestMentionKm(article.title, article.snippet, gate.locality);
+    const km = isPolitics ? null : nearestMentionKm(article.title, article.snippet, gate.locality);
     if (km !== null) {
       if (km <= LOCALITY_NEAR_KM) score += W.localityNear;
       else if (km >= LOCALITY_FAR_KM) score += W.localityFar;
@@ -459,7 +503,7 @@ function scoreArticle(article: FetchedArticle, gate: GateContext): ScoredSignals
       // ABOUT a foreign person/place/thing must not have its own core content wiped out by the very
       // geography it's about (see W.foreignCountry's comment for the concrete regression this avoids).
       const signal = foreignPlaceSignal(article.title, article.snippet, gate.locality.countryCode);
-      if (signal === 'country') score += gate.category ? W.foreignCountry : W.localityFar;
+      if (!isPolitics && signal === 'country') score += gate.category ? W.foreignCountry : W.localityFar;
       else if (signal === 'continent') score += gate.category ? W.foreignContinent : W.localityFar;
     }
   }
@@ -496,6 +540,28 @@ interface Judgment {
  * result, same as before. See judgeArticle's two 'borderline' branches for exactly which cases
  * qualify. */
 function judgeArticle(article: FetchedArticle, gate: GateContext): Judgment {
+  // Politics hard exclude: every other locality-eligible category still uses the soft, additive
+  // W.foreignCountry/-Continent penalty above, which a real section match plus a couple of keyword
+  // hits routinely survives (confirmed live — that's the actual loophole this closes). Politics gets
+  // an unconditional rule instead: a confidently-detected foreign country is rejected outright,
+  // before any scoring, and nothing computed afterward can rescue it. Checked here rather than
+  // folded into scoreArticle's signals so it stays a genuine short-circuit, not one more addend a
+  // large enough positive score could out-vote.
+  //
+  // A country matching one of the channel's own subchannels (gate.politicsExemptCountryCodes) is
+  // exempted rather than rejected — this function only ever decides keep-or-reject for THIS target's
+  // own bucket; actually moving an exempted article out of the main feed and into that subchannel is
+  // routeByCountry's job (main/locality/politicsGeoRouting.ts), run separately in runChannel right
+  // after this gate. gate.locality is already null here for a subchannel target whose OWN name is a
+  // place (see buildGateContext's fix above), so this block naturally doesn't run against a
+  // "Politics · India" subchannel's own India-targeted fetch.
+  if (gate.category === 'politics' && gate.locality?.countryCode) {
+    const place = detectStoryCountry(article.title, article.snippet, gate.locality.countryCode);
+    if (place.kind === 'foreign' && !gate.politicsExemptCountryCodes?.has(place.countryCode)) {
+      return { verdict: 'reject', score: W.foreignCountry };
+    }
+  }
+
   const signals = scoreArticle(article, gate);
   const score = signals.score;
 

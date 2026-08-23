@@ -313,14 +313,19 @@ describe('locality signal — foreign country (Politics, no city named at all)',
     expect(keeps(a, ctx)).toBe(false);
   });
 
-  it('a subchannel story with genuinely stacked evidence (its own term counted twice, plus a section match) survives the penalty', () => {
-    // The concrete "exceptionally well-covered story" case: the subchannel's own term scores once as
-    // a specificTerm (termTitle +3) and again via CATEGORY_RULES.politics.include still containing
-    // that same word (includeTitle +2), plus a real section match (+3) = +8 before locality; 8-7=1.
+  it('a subchannel story with genuinely stacked evidence no longer survives — the Politics hard exclude (see below) is unconditional, unlike every other locality-eligible category', () => {
+    // This used to document the opposite: the subchannel's own term scoring once as a specificTerm
+    // (termTitle +3) and again via CATEGORY_RULES.politics.include (+2), plus a section match (+3) =
+    // +8 before locality, survived the old soft -7 penalty (8-7=1, kept) as the deliberate
+    // "exceptionally well-covered story survives" design. That survivability is exactly the loophole
+    // reported live (a real section tag plus a couple of keyword hits routinely got a foreign
+    // political story through) and is why Politics now has its own hard exclude instead — see
+    // "Politics hard exclude" below. Business/Health/Science/Technology keep the old, survivable
+    // behavior this test used to assert; the equivalent case for those is covered there.
     const profile = channelProfile('Politics');
     const ctx: RelevanceContext = { topic: 'Politics "Elections"', channelName: 'Politics', subchannelName: 'Elections', profile, homeLocation: LA };
     const a = article({ title: 'Elections held across India amid record turnout', section: 'politics' });
-    expect(keeps(a, ctx)).toBe(true);
+    expect(keeps(a, ctx)).toBe(false);
   });
 });
 
@@ -431,6 +436,97 @@ describe('locality signal — subchannels (a topic channel with a subchannel tar
   it('keeps when BOTH the channel word and the subchannel term appear, even far from home', () => {
     const ctx: RelevanceContext = { topic: 'Wildfires Drought', channelName: 'Wildfires', subchannelName: 'Drought', profile, homeLocation: LA };
     const a = article({ title: `Wildfires and drought force new restrictions ${BANFF_MENTION}` });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+});
+
+describe('Politics hard exclude — a confidently-foreign story is rejected outright, not scored', () => {
+  const politics = channelProfile('Politics');
+
+  it('rejects a foreign-country Politics story even with a real section match AND a keyword hit', () => {
+    // A section match (+3) plus a title keyword hit (+2) is exactly the shape of evidence that
+    // routinely cleared the old soft -7 penalty in production (a section field is the publisher's
+    // own structured categorization, not a coincidental word) — this combination surviving is the
+    // actual loophole the hard exclude exists to close, regardless of the precise arithmetic under
+    // the old scheme in any one channel-type/evidence combination.
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile: politics, homeLocation: LA };
+    const a = article({ title: 'India announces new election reform policy', section: 'politics' });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+
+  it('does not reject a home-country Politics story', () => {
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile: politics, homeLocation: LA };
+    const a = article({ title: 'Senate advances new budget bill', section: 'politics' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  it('does not reject a Politics story naming both a foreign country and home', () => {
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile: politics, homeLocation: LA };
+    const a = article({ title: 'United States and India sign new trade deal', section: 'politics' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  it('rejects a foreign REGION mention with no country name (Osun/Kerala) just as confidently as a named country', () => {
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile: politics, homeLocation: LA };
+    const a = article({ title: 'Osun 2026: Parade of Paradox and Parody of Politics', section: 'politics' });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+
+  it('does not apply the hard exclude to other locality-eligible categories — Business keeps the exact "genuinely stacked evidence survives" behavior the equivalent Politics case above no longer has', () => {
+    // Mirrors the Politics subchannel test above (now updated to expect rejection) exactly, on a
+    // Business channel instead: term counted twice (specificTerm + include) plus a section match =
+    // +8, 8-7=1, kept. This must still behave exactly as it did before this feature — the ask was
+    // Politics-only, and this is the direct proof the other locality categories were left alone.
+    const business = channelProfile('Business');
+    const ctx: RelevanceContext = { topic: 'Business "Tariffs"', channelName: 'Business', subchannelName: 'Tariffs', profile: business, homeLocation: LA };
+    const a = article({ title: 'Tariffs imposed across India amid trade tensions', section: 'business' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  it('a bare foreign continent mention (no specific country) is untouched by the hard exclude, same as before', () => {
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile: politics, homeLocation: LA };
+    const a = article({ title: 'Political unrest spreads across Africa', section: 'politics' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+});
+
+describe('Politics hard exclude — subchannel exemption', () => {
+  const politics = channelProfile('Politics');
+
+  it('exempts a foreign country matching a sibling subchannel from the hard exclude, on the MAIN target', () => {
+    const ctx: RelevanceContext = {
+      topic: 'Politics',
+      channelName: 'Politics',
+      subchannelName: null,
+      profile: politics,
+      homeLocation: LA,
+      siblingSubchannelNames: ['India'],
+    };
+    const a = article({ title: 'India announces new election reform policy', section: 'politics' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  it('still hard-excludes a foreign country with NO matching subchannel, even when other subchannels exist', () => {
+    const ctx: RelevanceContext = {
+      topic: 'Politics',
+      channelName: 'Politics',
+      subchannelName: null,
+      profile: politics,
+      homeLocation: LA,
+      siblingSubchannelNames: ['Elections'],
+    };
+    const a = article({ title: 'India announces new election reform policy', section: 'politics' });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+
+  it('prerequisite bug fix: a subchannel named after the very place it is about is no longer penalized on its OWN dedicated fetch', () => {
+    // Found while building this feature: buildGateContext's place-channel exemption only ever
+    // checked the PARENT channel's name, never the current batch's own subchannelName — so a
+    // "Politics · India" subchannel's own dedicated fetch (topic: "Politics India") was already
+    // being penalized by the pre-existing soft foreign-country signal for being about India, before
+    // this feature existed. Without this fix, the escape valve this feature relies on doesn't work.
+    const ctx: RelevanceContext = { topic: 'Politics India', channelName: 'Politics', subchannelName: 'India', profile: politics, homeLocation: LA };
+    const a = article({ title: 'India announces new election reform policy', section: 'politics' });
     expect(keeps(a, ctx)).toBe(true);
   });
 });

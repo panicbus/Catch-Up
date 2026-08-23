@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nearestMentionKm, foreignPlaceSignal } from './placeExtraction';
+import { nearestMentionKm, foreignPlaceSignal, detectStoryCountry } from './placeExtraction';
 import { resolveCity } from './gazetteer';
 
 const LA = resolveCity('Los Angeles, CA')!;
@@ -151,5 +151,72 @@ describe('foreignPlaceSignal', () => {
 
   it('deliberately does not match a lowercase, non-sentence-initial country mention (capitalization gate)', () => {
     expect(foreignPlaceSignal('Officials met to discuss trade with india this week', null, 'US')).toBeNull();
+  });
+});
+
+describe('detectStoryCountry', () => {
+  it("reports 'home' when the mentioned country IS home", () => {
+    expect(detectStoryCountry('US lawmakers pass new budget bill', null, 'US')).toEqual({ kind: 'home' });
+  });
+
+  it("reports 'foreign' with the specific country code for a named foreign country", () => {
+    expect(detectStoryCountry('India announces new trade policy', null, 'US')).toEqual({
+      kind: 'foreign',
+      countryCode: 'IN',
+    });
+  });
+
+  it("reports 'home', not 'foreign', when a story names both a foreign country and home", () => {
+    // "U.S. signs trade deal with India" is fundamentally a home-country story that happens to
+    // name India too, not routine foreign coverage — same leniency foreignPlaceSignal already has.
+    expect(detectStoryCountry('United States and India sign new trade deal', null, 'US')).toEqual({
+      kind: 'home',
+    });
+  });
+
+  it("reports 'foreign' for a region with no city or country name of its own (Osun/Kerala) — the actual gap this exists for", () => {
+    expect(detectStoryCountry('Osun 2026: Parade of Paradox and Parody of Politics', null, 'US')).toEqual({
+      kind: 'foreign',
+      countryCode: 'NG',
+    });
+    expect(
+      detectStoryCountry("Politics hasn't changed much in Kerala, says Ramesh Pisharody", null, 'US')
+    ).toEqual({ kind: 'foreign', countryCode: 'IN' });
+  });
+
+  it('reports \'foreign\' for a city with no region or country name mentioned', () => {
+    expect(detectStoryCountry('Protests continue in Lagos over fuel prices', null, 'US')).toEqual({
+      kind: 'foreign',
+      countryCode: 'NG',
+    });
+  });
+
+  it("reports 'none' for a bare continent mention with no specific country — deliberately weaker than foreignPlaceSignal's 'continent' tier, left to the existing soft scoring", () => {
+    expect(detectStoryCountry('Political unrest spreads across Africa', null, 'US')).toEqual({ kind: 'none' });
+  });
+
+  it("reports 'none' when no place of any kind is named — the one gap this function cannot close (a foreign figure's name alone)", () => {
+    expect(
+      detectStoryCountry('Committee chairman rejects allegations against him', null, 'US')
+    ).toEqual({ kind: 'none' });
+  });
+
+  it('known accepted false positive: "Bar" is also a real city in Montenegro, so a story that never names a place still resolves as foreign', () => {
+    // Same class of limitation nearestMentionKm's own tests already document ("Independence, US",
+    // "Man, CI") — the capitalization heuristic is a cheap proper-noun filter, not real NER, and a
+    // handful of ordinary English words are also real, populous gazetteer entries. This is the exact
+    // headline from the report that motivated this feature ("Bar Council chairman Manan Mishra
+    // rejects allegations..."): it gets excluded, just not for the reason a human would give.
+    expect(detectStoryCountry('Bar Council chairman rejects allegations against him', null, 'US')).toEqual({
+      kind: 'foreign',
+      countryCode: 'ME',
+    });
+  });
+
+  it('scans the snippet as well as the title', () => {
+    expect(detectStoryCountry('Update issued this morning', 'Officials in Nigeria responded.', 'US')).toEqual({
+      kind: 'foreign',
+      countryCode: 'NG',
+    });
   });
 });

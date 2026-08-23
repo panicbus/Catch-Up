@@ -4,6 +4,7 @@ import type { ClassificationStore } from './classificationStore';
 import { runProviders, getProviderStatus } from './providers/registry';
 import { filterRelevant } from './aiRelevance';
 import { channelProfile } from './providers/channelProfiles';
+import { routeByCountry } from './locality/politicsGeoRouting';
 import type { ProviderConfig } from './providers/classifier';
 import type { DataChangeEvent } from '../ipc-contract';
 
@@ -157,6 +158,11 @@ export async function runChannel(
       // Relevance stage: free heuristic first (soft additive gate), then the AI classifier when a
       // key is configured (drops tangential/wrong-sense results the keywords can't catch). Always
       // degrades to the heuristic on any AI failure — see aiRelevance.ts.
+      //
+      // channel.subchannels (the full list), not the possibly-staggered `subchannels` above: a
+      // subchannel skipped this cycle by staggering still exists and is still a valid exemption for
+      // the Politics hard exclude / a valid routing target below — staggering only decides which
+      // subchannels get their OWN dedicated fetch this cycle, not which ones exist.
       const relevant = await filterRelevant(
         fetched,
         target.topic,
@@ -167,9 +173,24 @@ export async function runChannel(
         deps.classificationStore,
         buildAiConfig(deps.dataStore),
         homeLocation,
-        trustedSourceDomains
+        trustedSourceDomains,
+        channel.subchannels.map((sc) => sc.name)
       );
-      added += deps.articlesCache.merge(channelId, target.subchannelId, relevant);
+      // Politics-only, and only for the main target: a subchannel-specific target already merges
+      // under its own real subchannel id, so there's nothing to route for it. See
+      // politicsGeoRouting.ts for why this can't just be another rule inside filterRelevant's gate.
+      // One mergeGroups() call rather than one merge() per group — merge() re-sorts/dedupes/caps the
+      // ENTIRE channel bucket and writes the whole store to disk on every call, so calling it once
+      // per subchannel here would turn one refresh's worth of inserts into that many redundant passes.
+      if (target.subchannelId === null && profile.category === 'politics' && homeLocation?.countryCode) {
+        const routed = routeByCountry(relevant, homeLocation.countryCode, channel.subchannels);
+        added += deps.articlesCache.mergeGroups(channelId, [
+          { subchannelId: null, articles: routed.main },
+          ...[...routed.toSubchannel].map(([subchannelId, articles]) => ({ subchannelId, articles })),
+        ]);
+      } else {
+        added += deps.articlesCache.merge(channelId, target.subchannelId, relevant);
+      }
     } catch (e) {
       errors.push(String(e));
     }

@@ -267,15 +267,25 @@ function buildPrompt(input: ClassifyInput): { system: string; user: string } {
   if (profile?.include.length) guidance.push(`On-topic stories often involve: ${profile.include.slice(0, 20).join(', ')}.`);
   if (profile?.exclude.length) guidance.push(`Off-topic for this channel: ${profile.exclude.join(', ')}.`);
   // Politics-specific, and only when we know the reader's home country: the heuristic gate in
-  // relevance.ts already deprioritizes foreign countries/continents named in a story, but has
-  // nothing to work with when a story names only a foreign political figure ("Modi defends reform
-  // bill") with no place word at all. The model can catch that semantically instead.
+  // relevance.ts now hard-excludes a story that NAMES a foreign country/region/city outright, with
+  // no rescue path — but that heuristic has nothing to work with when a story names only a foreign
+  // political figure ("Modi defends reform bill") with no place word at all. The model is the one
+  // remaining thing that can catch that case semantically, so it's the narrow backstop for that gap
+  // specifically, not a second layer of the same rule the heuristic already enforces.
+  //
+  // Deliberately no "unless it's a major story with clear global significance" clause, which this
+  // used to have: that was found to be exactly permissive enough to let through the kind of
+  // widely-wired foreign political story the heuristic's hard exclude exists to stop — a viral
+  // regional election, a prominent official's remarks — since "major" and "significant" are precisely
+  // the words that describe why a story went wide in the first place. The one exception kept is a
+  // real, substantive tie to the reader's own country, which is the same leniency the deterministic
+  // layer already gives a story that names both a foreign country and the home one.
   if (profile?.category === 'politics' && input.homeCountryName) {
     guidance.push(
       `The reader is in ${input.homeCountryName}. Treat routine coverage of another country's own ` +
-        `domestic politics — even if it never names that country, e.g. only naming a foreign ` +
-        `political figure — as off-topic, unless it's a major story with clear global significance ` +
-        `or a direct connection to ${input.homeCountryName}.`
+        `domestic politics as off-topic, even if it never names that country (e.g. only naming a ` +
+        `foreign political figure) and even if it's a major, widely-covered story — unless it has a ` +
+        `direct, substantive connection to ${input.homeCountryName}'s own politics or government.`
     );
   }
 

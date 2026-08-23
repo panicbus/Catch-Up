@@ -254,6 +254,22 @@ export async function merge(
   subchannelId: string | null,
   incoming: FetchedArticle[]
 ): Promise<number> {
+  return mergeGroups(userId, channelId, [{ subchannelId, articles: incoming }]);
+}
+
+/** Same as merge(), but inserts several (subchannelId, articles) groups against one shared
+ * existing-articles fetch, one createMany, and one prune() — instead of one of each per group — for
+ * runChannel's Politics routing (main/locality/politicsGeoRouting.ts), which splits one target's
+ * survivors into a main-feed group plus a group per matched subchannel. Calling plain merge() once
+ * per group there ran `findMany` (every existing article for the whole channel, not just the new
+ * ones) and prune() (the same full channel-wide pass) once per group, for what is logically one
+ * batch of inserts from one refresh — N+1 identical queries instead of one, scaling with how many
+ * subchannels a single Politics channel has. */
+export async function mergeGroups(
+  userId: string,
+  channelId: string,
+  groups: { subchannelId: string | null; articles: FetchedArticle[] }[]
+): Promise<number> {
   const existing = await prisma.article.findMany({
     where: { userId, channelId },
     select: { id: true, titleDedupeKey: true },
@@ -263,38 +279,40 @@ export async function merge(
 
   const toCreate: Prisma.ArticleCreateManyInput[] = [];
   const addedIds: string[] = [];
-  for (const article of incoming) {
-    const id = articleId(article.url);
-    const dedupeKey = titleDedupeKey(article.title);
-    if (seenIds.has(id) || seenKeys.has(dedupeKey)) continue;
-    seenIds.add(id);
-    seenKeys.add(dedupeKey);
+  for (const { subchannelId, articles: incoming } of groups) {
+    for (const article of incoming) {
+      const id = articleId(article.url);
+      const dedupeKey = titleDedupeKey(article.title);
+      if (seenIds.has(id) || seenKeys.has(dedupeKey)) continue;
+      seenIds.add(id);
+      seenKeys.add(dedupeKey);
 
-    let hostname = '';
-    try {
-      hostname = new URL(normalizeUrl(article.url)).hostname;
-    } catch {
-      /* malformed URL — leave hostname blank, still store the article */
+      let hostname = '';
+      try {
+        hostname = new URL(normalizeUrl(article.url)).hostname;
+      } catch {
+        /* malformed URL — leave hostname blank, still store the article */
+      }
+      toCreate.push({
+        id,
+        userId,
+        channelId,
+        subchannelId,
+        url: article.url,
+        title: article.title,
+        snippet: article.snippet,
+        source: article.source,
+        sourceDomain: hostname,
+        imageUrl: article.imageUrl,
+        publishedAt: new Date(article.publishedAt),
+        fetchedAt: new Date(),
+        provider: article.provider,
+        paywalled: isPaywalledDomain(hostname),
+        titleDedupeKey: dedupeKey,
+        relevanceScore: article.relevanceScore ?? null,
+      });
+      addedIds.push(id);
     }
-    toCreate.push({
-      id,
-      userId,
-      channelId,
-      subchannelId,
-      url: article.url,
-      title: article.title,
-      snippet: article.snippet,
-      source: article.source,
-      sourceDomain: hostname,
-      imageUrl: article.imageUrl,
-      publishedAt: new Date(article.publishedAt),
-      fetchedAt: new Date(),
-      provider: article.provider,
-      paywalled: isPaywalledDomain(hostname),
-      titleDedupeKey: dedupeKey,
-      relevanceScore: article.relevanceScore ?? null,
-    });
-    addedIds.push(id);
   }
   if (toCreate.length > 0) {
     await prisma.article.createMany({ data: toCreate, skipDuplicates: true });
