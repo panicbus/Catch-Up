@@ -209,6 +209,16 @@
   color: var(--text);
 }
 
+/* Echoes .channel-page__title-sub (the real title's own " · Subchannel"), sized relative to this
+   span's own font-size (em, not a fixed px) so it stays proportional across both the desktop and
+   mobile sticky-title sizes above/below rather than needing a second override in the mobile media
+   query the way the real title's version does. */
+.channel-page__sticky-title-sub {
+  font-size: 0.75em;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
 .channel-page__refresh-icon--spinning {
   animation: channel-page-refresh-spin 0.8s linear infinite;
 }

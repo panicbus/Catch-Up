@@ -69,11 +69,19 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
  * it is isn't a prop at all — it reads the --sticky-title-progress variable the handoff effect in
  * ChannelPage writes on the sticky bar (see that effect for why it bypasses React). `slotOpen` only
  * controls whether it takes up width, which is desktop's 0fr/1fr collapse and a real layout change.
- * Extracted so both the mobile and desktop controls layouts below can render it identically. */
-function StickyTitleEcho({ slotOpen, name }: { slotOpen: boolean; name: string }) {
+ * Extracted so both the mobile and desktop controls layouts below can render it identically.
+ *
+ * `subchannelName`, when set, echoes the same " · Subchannel" the real title shows (see the mobile
+ * <h1> below) — otherwise the one on-screen indication of which subchannel you're looking at
+ * disappeared the moment you scrolled past it. Only ever passed at the mobile call site: desktop's
+ * own title doesn't show the subchannel there either, so the sticky copy matches what it's echoing. */
+function StickyTitleEcho({ slotOpen, name, subchannelName }: { slotOpen: boolean; name: string; subchannelName?: string }) {
   return (
     <span className={`channel-page__sticky-title ${slotOpen ? 'channel-page__sticky-title--visible' : ''}`}>
-      <span className="channel-page__sticky-title-inner">{name}</span>
+      <span className="channel-page__sticky-title-inner">
+        {name}
+        {subchannelName && <span className="channel-page__sticky-title-sub"> · {subchannelName}</span>}
+      </span>
     </span>
   );
 }
@@ -507,7 +515,11 @@ export function ChannelPage() {
             // rendered), so it's simply not rendered here rather than mounted and immediately hidden.
             <>
               <div className="channel-page__controls-row1">
-                <StickyTitleEcho slotOpen={titleHandoffStarted} name={channel.name} />
+                <StickyTitleEcho
+                  slotOpen={titleHandoffStarted}
+                  name={channel.name}
+                  subchannelName={activeSubchannel?.name}
+                />
                 <SortModeToggle value={settings.defaultSortMode} onChange={(mode) => update({ defaultSortMode: mode })} />
               </div>
               <ArchiveReadButton count={readInPlaceCount} onClick={() => feedRef.current?.flushReadInPlace()} />
