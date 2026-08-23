@@ -65,6 +65,7 @@
 }
 
 .channel-tile {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -76,6 +77,28 @@
   color: #fff;
   box-shadow: 0 4px 14px -8px rgba(60, 30, 20, 0.35);
   transition: box-shadow 0.15s, filter 0.15s, opacity 0.15s;
+}
+
+/* Darkens the tile's OWN copy (the count/name/meta text and its colorful background) while
+   rearranging, via a pseudo-element scoped to .channel-tile itself — not .channel-tile-wrap, which
+   is where the drag handle and delete button actually live as separate sibling elements, so this
+   can never paint over them regardless of z-index. Exists because the unread count renders at
+   32px/900-weight in the same top-right corner the delete button now occupies (see
+   .channel-tile__count) — invisible against it when there's no count, but the two read as a
+   confusing overlap the instant a real number's there. Always present (opacity 0 at rest, so it
+   transitions in/out smoothly) rather than only existing once rearranging starts. */
+.channel-tile::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+.channel-grid--rearranging .channel-tile::after {
+  opacity: 1;
 }
 
 /* Paused channels read as muted. */
