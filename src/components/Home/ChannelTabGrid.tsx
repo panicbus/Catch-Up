@@ -4,6 +4,8 @@ import { getTileColor } from '../../utils/channelColor';
 import { api, revalidateNow } from '../../services/api';
 import * as channelsStore from '../../services/channelsStore';
 import { PauseChannelControl, isChannelPaused } from '../common/PauseChannelControl';
+import { useDeleteChannelFlow } from '../../hooks/useDeleteChannelFlow';
+import { DeleteChannelModal } from '../common/DeleteChannelModal';
 import type { ChannelCount } from '../../hooks/useChannelCounts';
 import type { Channel } from '../../../ipc-contract';
 import './ChannelTabGrid.css';
@@ -14,6 +16,13 @@ function GripIcon() {
       <circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" />
       <circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" />
       <circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" />
+    </svg>
+  );
+}
+function DeleteIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" />
     </svg>
   );
 }
@@ -171,6 +180,10 @@ const TAP_SLOP_PX = 10;
 const NO_SELECT_CLASS = 'catch-up-suppress-select';
 
 export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
+  // Same confirm-before-delete flow Settings' own channel list uses (useDeleteChannelFlow +
+  // DeleteChannelModal) — shared rather than reimplemented, so the copy/behavior can't drift between
+  // the two places a channel can be deleted from.
+  const { pendingChannel, requestDelete, cancel, confirm } = useDeleteChannelFlow(channels);
   const [drag, setDrag] = useState<DragState | null>(null);
   // Live translate offset for the tile currently being dragged (mouse or touch alike) — null
   // whenever no drag is in progress. Both input methods share this one floating-ghost rendering
@@ -486,7 +499,7 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
 
     const onTouchStart = (e: TouchEvent) => {
       const target = e.target as HTMLElement;
-      if (target.closest('.channel-tile__controls, .channel-tile__handle')) return;
+      if (target.closest('.channel-tile__controls, .channel-tile__handle, .channel-tile__delete')) return;
       const touch = e.changedTouches[0];
       if (!touch) return;
       const wrapEl = target.closest<HTMLElement>('.channel-tile-wrap');
@@ -646,6 +659,12 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
     revalidateNow();
   };
 
+  const requestDeleteFromTile = (e: React.MouseEvent, channelId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    requestDelete(channelId);
+  };
+
   // Count/name/meta content shared by both the real tile (inside its Link) and the floating drag
   // ghost (below), so the two can never visually drift apart.
   const tileInner = (channel: Channel) => {
@@ -676,183 +695,203 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
   const showGhost = !!draggingChannel && !!touchOffset && !!ghostOrigin;
 
   return (
-    <div
-      ref={gridRef}
-      className={`channel-grid ${drag ? 'channel-grid--dragging' : ''} ${rearranging ? 'channel-grid--rearranging' : ''}`}
-      // The live drag itself is tracked from HERE, not from the tile that was actually pressed — a
-      // captured pointer's events stop targeting a DOM node that's been physically repositioned
-      // among its siblings (which is exactly what happens once React reorders `ordered` to match
-      // the live preview), so anything bound to the tile itself would silently lose the gesture
-      // mid-drag. The grid container never moves, so capturing there survives the reorder. This
-      // handles BOTH input methods — mouse drags (armed instantly from the grip handle) and touch
-      // drags (armed by the raw touch effect below, either via the long-press that enters
-      // rearranging mode or instantly once already rearranging) — since neither branch below checks
-      // pointer type. Everything BEFORE a drag is armed (the long-press hold, tap-to-exit) is
-      // handled by that raw touch effect instead, not here — see its own file comment for why.
-      onPointerMove={(e) => {
-        const t = dragRef.current;
-        if (!t || e.pointerId !== t.pointerId) return;
-        e.preventDefault();
-        t.lastClientY = e.clientY;
-        t.pendingOffset = { x: e.clientX - t.startX, y: e.clientY - t.startY };
-        if (!t.rafId) {
-          t.rafId = requestAnimationFrame(() => {
-            const cur = dragRef.current;
-            if (!cur) return;
-            cur.rafId = 0;
-            setTouchOffset(cur.pendingOffset);
-          });
-        }
-        // Which cell is the pointer over? Pure arithmetic against the slot geometry frozen at drag
-        // start — deliberately NOT elementFromPoint against the live DOM, which is what made tiles
-        // fly around: hit-testing the reordered DOM let the reorder decide its own input, so at a
-        // slot boundary the preview ping-ponged every frame (see the long comment above `orderedIds`
-        // in the render). Frozen geometry can't feed back, so a given pointer position resolves to
-        // one stable answer no matter what's currently drawn there.
-        //
-        // Converted into grid space on every move rather than cached, so the answer stays right
-        // even while auto-scroll is moving the page under the pointer.
-        const gridBox = t.captureEl.getBoundingClientRect();
-        const px = e.clientX - gridBox.left;
-        const py = e.clientY - gridBox.top;
-        const hit = t.slots.find(
-          (s) => px >= s.left && px <= s.left + s.width && py >= s.top && py <= s.top + s.height
-        );
-        // Only ADVANCES overId when the pointer is genuinely inside a cell — never clears it back to
-        // null just because this one instant landed in the gaps between cells. A real finger/cursor
-        // crosses those constantly while dragging, and since the drop commits whatever overId was
-        // live at release, a gap landed on at the exact instant of lift-off would otherwise silently
-        // cancel an otherwise-clear reorder — confirmed live: an unlucky last frame in a gap
-        // reverted the whole drop back to the original order.
-        if (hit) {
-          setDrag((d) => (d && d.overId !== hit.id ? { ...d, overId: hit.id } : d));
-        }
-      }}
-      onPointerUp={finishDrag}
-      onPointerCancel={finishDrag}
-    >
-      {ordered.map((channel) => {
-        const isDraggingThis = drag?.draggingId === channel.id;
+    <>
+      <div
+        ref={gridRef}
+        className={`channel-grid ${drag ? 'channel-grid--dragging' : ''} ${rearranging ? 'channel-grid--rearranging' : ''}`}
+        // The live drag itself is tracked from HERE, not from the tile that was actually pressed — a
+        // captured pointer's events stop targeting a DOM node that's been physically repositioned
+        // among its siblings (which is exactly what happens once React reorders `ordered` to match
+        // the live preview), so anything bound to the tile itself would silently lose the gesture
+        // mid-drag. The grid container never moves, so capturing there survives the reorder. This
+        // handles BOTH input methods — mouse drags (armed instantly from the grip handle) and touch
+        // drags (armed by the raw touch effect below, either via the long-press that enters
+        // rearranging mode or instantly once already rearranging) — since neither branch below checks
+        // pointer type. Everything BEFORE a drag is armed (the long-press hold, tap-to-exit) is
+        // handled by that raw touch effect instead, not here — see its own file comment for why.
+        onPointerMove={(e) => {
+          const t = dragRef.current;
+          if (!t || e.pointerId !== t.pointerId) return;
+          e.preventDefault();
+          t.lastClientY = e.clientY;
+          t.pendingOffset = { x: e.clientX - t.startX, y: e.clientY - t.startY };
+          if (!t.rafId) {
+            t.rafId = requestAnimationFrame(() => {
+              const cur = dragRef.current;
+              if (!cur) return;
+              cur.rafId = 0;
+              setTouchOffset(cur.pendingOffset);
+            });
+          }
+          // Which cell is the pointer over? Pure arithmetic against the slot geometry frozen at drag
+          // start — deliberately NOT elementFromPoint against the live DOM, which is what made tiles
+          // fly around: hit-testing the reordered DOM let the reorder decide its own input, so at a
+          // slot boundary the preview ping-ponged every frame (see the long comment above `orderedIds`
+          // in the render). Frozen geometry can't feed back, so a given pointer position resolves to
+          // one stable answer no matter what's currently drawn there.
+          //
+          // Converted into grid space on every move rather than cached, so the answer stays right
+          // even while auto-scroll is moving the page under the pointer.
+          const gridBox = t.captureEl.getBoundingClientRect();
+          const px = e.clientX - gridBox.left;
+          const py = e.clientY - gridBox.top;
+          const hit = t.slots.find(
+            (s) => px >= s.left && px <= s.left + s.width && py >= s.top && py <= s.top + s.height
+          );
+          // Only ADVANCES overId when the pointer is genuinely inside a cell — never clears it back to
+          // null just because this one instant landed in the gaps between cells. A real finger/cursor
+          // crosses those constantly while dragging, and since the drop commits whatever overId was
+          // live at release, a gap landed on at the exact instant of lift-off would otherwise silently
+          // cancel an otherwise-clear reorder — confirmed live: an unlucky last frame in a gap
+          // reverted the whole drop back to the original order.
+          if (hit) {
+            setDrag((d) => (d && d.overId !== hit.id ? { ...d, overId: hit.id } : d));
+          }
+        }}
+        onPointerUp={finishDrag}
+        onPointerCancel={finishDrag}
+      >
+        {ordered.map((channel) => {
+          const isDraggingThis = drag?.draggingId === channel.id;
 
-        return (
-          <div
-            key={channel.id}
-            data-channel-id={channel.id}
-            // The dragged tile's real slot is hidden (not display:none) the instant it's lifted, so
-            // it keeps holding its cell open as a stable hole instead of the grid collapsing —
-            // the floating ghost below is its only visible stand-in for the rest of the gesture.
-            className={`channel-tile-wrap ${isDraggingThis ? 'channel-tile-wrap--touch-source' : ''}`}
-            // Displaced tiles are moved into their previewed cell with a transform rather than by
-            // being re-placed in the DOM — see the comment above `orderedIds` for why that's what
-            // keeps this stable. The dragged tile itself is invisible, so it never needs one.
-            style={isDraggingThis ? undefined : { transform: tileShift(channel.id) }}
-            // Belt-and-suspenders alongside the CSS -webkit-touch-callout:none (see
-            // ChannelTabGrid.css) — a long press on a link/text can still surface iOS's native
-            // context menu even with that CSS in place in some cases; explicitly blocking the event
-            // closes that gap too.
-            onContextMenu={(e) => e.preventDefault()}
-            // Touch only. All the actual gesture logic (long-press to enter rearranging, instant
-            // arm once already rearranging, tap-to-exit) lives in the raw touch effect below, which
-            // needs real Touch events to reliably suppress iOS's magnifier — this handler's only
-            // remaining job is handing that effect a real PointerEvent.pointerId (Touch events don't
-            // carry one, but armDrag needs one for setPointerCapture), plus suppressing the ~300ms
-            // synthetic compatibility mouse events every touch sequence otherwise fires. Skips
-            // presses that started on the always-visible controls or the (mobile, rearranging-only)
-            // handle, both of which have their own behavior. Mouse never reaches here — it arms
-            // instantly from the grip handle instead (see its own onPointerDown below).
-            onPointerDown={(e) => {
-              if (e.pointerType !== 'touch') return;
-              if ((e.target as HTMLElement).closest('.channel-tile__controls, .channel-tile__handle')) return;
-              e.preventDefault();
-              touchPointerHintRef.current = { pointerId: e.pointerId, tileEl: e.currentTarget, channelId: channel.id };
-            }}
-          >
-            <Link
-              className={`channel-tile ${isChannelPaused(channel.pausedUntil) ? 'channel-tile--paused' : ''}`}
-              style={{ background: getTileColor(channel.id) }}
-              to={`/channel/${channel.slug}`}
-              draggable={false}
-              onClick={(e) => {
-                if (justDraggedRef.current) {
-                  e.preventDefault();
-                  justDraggedRef.current = false;
-                }
-              }}
-            >
-              {tileInner(channel)}
-            </Link>
-
-            {/* Drag handle (top-left). Desktop/mouse: hidden until hover (see CSS), arms the SAME
-                drag machinery as touch, immediately (no hold delay) — grabbing the handle is
-                already the deliberate "I want to drag" signal, so there's no scroll-vs-drag
-                ambiguity to wait out the way there is for an anywhere-on-tile touch gesture.
-                Mobile: shown ONLY while rearranging (see CSS), purely as a visual affordance that
-                dragging is available — pointer-events:none there lets a touch on it fall straight
-                through to .channel-tile-wrap beneath, which is what actually arms the drag (see the
-                raw touch effect's continuation-arm branch), so the whole tile stays the grab target,
-                not just this icon. */}
-            <button
-              type="button"
-              className="channel-tile__handle"
-              title="Drag to reorder"
-              aria-label={`Reorder ${channel.name}`}
+          return (
+            <div
+              key={channel.id}
+              data-channel-id={channel.id}
+              // The dragged tile's real slot is hidden (not display:none) the instant it's lifted, so
+              // it keeps holding its cell open as a stable hole instead of the grid collapsing —
+              // the floating ghost below is its only visible stand-in for the rest of the gesture.
+              className={`channel-tile-wrap ${isDraggingThis ? 'channel-tile-wrap--touch-source' : ''}`}
+              // Displaced tiles are moved into their previewed cell with a transform rather than by
+              // being re-placed in the DOM — see the comment above `orderedIds` for why that's what
+              // keeps this stable. The dragged tile itself is invisible, so it never needs one.
+              style={isDraggingThis ? undefined : { transform: tileShift(channel.id) }}
+              // Belt-and-suspenders alongside the CSS -webkit-touch-callout:none (see
+              // ChannelTabGrid.css) — a long press on a link/text can still surface iOS's native
+              // context menu even with that CSS in place in some cases; explicitly blocking the event
+              // closes that gap too.
+              onContextMenu={(e) => e.preventDefault()}
+              // Touch only. All the actual gesture logic (long-press to enter rearranging, instant
+              // arm once already rearranging, tap-to-exit) lives in the raw touch effect below, which
+              // needs real Touch events to reliably suppress iOS's magnifier — this handler's only
+              // remaining job is handing that effect a real PointerEvent.pointerId (Touch events don't
+              // carry one, but armDrag needs one for setPointerCapture), plus suppressing the ~300ms
+              // synthetic compatibility mouse events every touch sequence otherwise fires. Skips
+              // presses that started on the always-visible controls or the (mobile, rearranging-only)
+              // handle, both of which have their own behavior. Mouse never reaches here — it arms
+              // instantly from the grip handle instead (see its own onPointerDown below).
               onPointerDown={(e) => {
-                if (e.pointerType !== 'mouse') return;
+                if (e.pointerType !== 'touch') return;
+                if ((e.target as HTMLElement).closest('.channel-tile__controls, .channel-tile__handle, .channel-tile__delete')) return;
                 e.preventDefault();
-                const wrapEl = e.currentTarget.closest<HTMLElement>('.channel-tile-wrap');
-                if (wrapEl) armDrag(e.pointerId, channel.id, wrapEl, e.clientX, e.clientY, false);
+                touchPointerHintRef.current = { pointerId: e.pointerId, tileEl: e.currentTarget, channelId: channel.id };
               }}
             >
-              <GripIcon />
-            </button>
+              <Link
+                className={`channel-tile ${isChannelPaused(channel.pausedUntil) ? 'channel-tile--paused' : ''}`}
+                style={{ background: getTileColor(channel.id) }}
+                to={`/channel/${channel.slug}`}
+                draggable={false}
+                onClick={(e) => {
+                  if (justDraggedRef.current) {
+                    e.preventDefault();
+                    justDraggedRef.current = false;
+                  }
+                }}
+              >
+                {tileInner(channel)}
+              </Link>
 
-            {/* Always-visible mini controls (bottom-right): pause + clear (clear is desktop-only —
-                see CSS; mobile relies on the channel view's own clear, not a Home-tile shortcut). */}
-            <div className="channel-tile__controls">
-              <PauseChannelControl channelId={channel.id} pausedUntil={channel.pausedUntil} variant="icon" />
+              {/* Delete (top-right, mirroring the drag handle's top-left). Same visibility rule as
+                  the handle — always present (softly) on desktop, shown only while rearranging on
+                  mobile — but unlike the handle this IS its own real tap target even while rearranging
+                  (no pointer-events:none): the whole point is deleting FROM the jiggle/rearrange mode,
+                  so a tap here must register as a delete, not fall through and arm a drag. Both the raw
+                  touch effect above and the tap-to-exit-rearranging check exclude
+                  .channel-tile__delete from their target matching for exactly this reason. */}
               <button
                 type="button"
-                className="channel-tile__ctrl channel-tile__ctrl--clear"
-                title="Clear — mark all read"
-                aria-label={`Clear ${channel.name}`}
-                onClick={(e) => clear(e, channel.id)}
+                className="channel-tile__delete"
+                title={`Delete ${channel.name}`}
+                aria-label={`Delete ${channel.name}`}
+                onClick={(e) => requestDeleteFromTile(e, channel.id)}
               >
-                <CheckIcon />
+                <DeleteIcon />
               </button>
+
+              {/* Drag handle (top-left). Desktop/mouse: hidden until hover (see CSS), arms the SAME
+                  drag machinery as touch, immediately (no hold delay) — grabbing the handle is
+                  already the deliberate "I want to drag" signal, so there's no scroll-vs-drag
+                  ambiguity to wait out the way there is for an anywhere-on-tile touch gesture.
+                  Mobile: shown ONLY while rearranging (see CSS), purely as a visual affordance that
+                  dragging is available — pointer-events:none there lets a touch on it fall straight
+                  through to .channel-tile-wrap beneath, which is what actually arms the drag (see the
+                  raw touch effect's continuation-arm branch), so the whole tile stays the grab target,
+                  not just this icon. */}
+              <button
+                type="button"
+                className="channel-tile__handle"
+                title="Drag to reorder"
+                aria-label={`Reorder ${channel.name}`}
+                onPointerDown={(e) => {
+                  if (e.pointerType !== 'mouse') return;
+                  e.preventDefault();
+                  const wrapEl = e.currentTarget.closest<HTMLElement>('.channel-tile-wrap');
+                  if (wrapEl) armDrag(e.pointerId, channel.id, wrapEl, e.clientX, e.clientY, false);
+                }}
+              >
+                <GripIcon />
+              </button>
+
+              {/* Always-visible mini controls (bottom-right): pause + clear (clear is desktop-only —
+                  see CSS; mobile relies on the channel view's own clear, not a Home-tile shortcut). */}
+              <div className="channel-tile__controls">
+                <PauseChannelControl channelId={channel.id} pausedUntil={channel.pausedUntil} variant="icon" />
+                <button
+                  type="button"
+                  className="channel-tile__ctrl channel-tile__ctrl--clear"
+                  title="Clear — mark all read"
+                  aria-label={`Clear ${channel.name}`}
+                  onClick={(e) => clear(e, channel.id)}
+                >
+                  <CheckIcon />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Floating drag ghost — the ONLY visible representation of the tile being dragged, for
+            either input method. position:fixed roots it in viewport coordinates (the same space
+            getBoundingClientRect and clientX/clientY already use), seeded once from where the tile
+            actually sat when the drag armed (origin) plus the live pointer delta (touchOffset) —
+            completely independent of wherever CSS Grid auto-places the tile's own (hidden) DOM node
+            as the reorder preview reshuffles the OTHER tiles around it. That independence, plus never
+            handing rendering off to the browser's own (uncontrollable, throttled) native drag image,
+            is what keeps this smooth on both mouse and touch: previously mouse dragging used native
+            HTML5 DnD instead of this ghost, and the browser's own dragover/dragenter throttling was
+            the actual source of the reported desktop jutter. */}
+        {showGhost && draggingChannel && touchOffset && ghostOrigin && (
+          <div
+            className="channel-tile-ghost"
+            style={{
+              top: ghostOrigin.top,
+              left: ghostOrigin.left,
+              width: ghostOrigin.width,
+              height: ghostOrigin.height,
+              transform: `translate(${touchOffset.x}px, ${touchOffset.y}px)`,
+            }}
+          >
+            <div
+              className={`channel-tile ${isChannelPaused(draggingChannel.pausedUntil) ? 'channel-tile--paused' : ''}`}
+              style={{ background: getTileColor(draggingChannel.id) }}
+            >
+              {tileInner(draggingChannel)}
             </div>
           </div>
-        );
-      })}
-
-      {/* Floating drag ghost — the ONLY visible representation of the tile being dragged, for
-          either input method. position:fixed roots it in viewport coordinates (the same space
-          getBoundingClientRect and clientX/clientY already use), seeded once from where the tile
-          actually sat when the drag armed (origin) plus the live pointer delta (touchOffset) —
-          completely independent of wherever CSS Grid auto-places the tile's own (hidden) DOM node
-          as the reorder preview reshuffles the OTHER tiles around it. That independence, plus never
-          handing rendering off to the browser's own (uncontrollable, throttled) native drag image,
-          is what keeps this smooth on both mouse and touch: previously mouse dragging used native
-          HTML5 DnD instead of this ghost, and the browser's own dragover/dragenter throttling was
-          the actual source of the reported desktop jutter. */}
-      {showGhost && draggingChannel && touchOffset && ghostOrigin && (
-        <div
-          className="channel-tile-ghost"
-          style={{
-            top: ghostOrigin.top,
-            left: ghostOrigin.left,
-            width: ghostOrigin.width,
-            height: ghostOrigin.height,
-            transform: `translate(${touchOffset.x}px, ${touchOffset.y}px)`,
-          }}
-        >
-          <div
-            className={`channel-tile ${isChannelPaused(draggingChannel.pausedUntil) ? 'channel-tile--paused' : ''}`}
-            style={{ background: getTileColor(draggingChannel.id) }}
-          >
-            {tileInner(draggingChannel)}
-          </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+      <DeleteChannelModal channel={pendingChannel} onCancel={cancel} onConfirm={confirm} />
+    </>
   );
 }

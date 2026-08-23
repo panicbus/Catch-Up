@@ -19,11 +19,13 @@
 
 /* Fixed (not in-flow) so it can't shift the header/toolbar/feed underneath it as it appears and
    disappears, and so it's immune to .app-shell__main's own scrolling — it stays put at the top of
-   the content pane regardless of where you've scrolled to. Bare text, deliberately — no pill
-   background/border, per explicit direction against the earlier boxed version. Centered over the
-   CONTENT pane, not the whole window: the sidebar is a fixed width with no responsive breakpoints
-   above 767px, so offsetting by half of it is a safe, static calculation there. Below 767px the
-   sidebar is hidden (see AppShell.css), so the mobile breakpoint resets this to true center. */
+   the content pane regardless of where you've scrolled to. A white pill with a red border, not bare
+   text sitting directly on the page background — confirmed live as reading "wrong" (no shape of its
+   own) floating loose over the toolbar. This reverses an earlier explicit call to drop a boxed
+   version in favor of bare text; that direction has since changed. Centered over the CONTENT pane,
+   not the whole window: the sidebar is a fixed width with no responsive breakpoints above 767px, so
+   offsetting by half of it is a safe, static calculation there. Below 767px the sidebar is hidden
+   (see AppShell.css), so the mobile breakpoint resets this to true center. */
 .channel-page__refresh-status {
   position: fixed;
   top: 44px; /* clears .app-shell__drag-bar's 34px with a little room to spare */
@@ -31,22 +33,23 @@
   transform: translateX(-50%);
   z-index: 60; /* above the sticky toolbar (3) and the pause menu (40); below Modal (100) */
   margin: 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1.5px solid var(--accent-strong);
+  box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.25);
   font-size: 12px;
-  font-weight: 400;
+  font-weight: 500;
+  /* Fixed white background regardless of theme (per the pill's own design), so --accent-strong's
+     text-on-white tuning is correct in both themes now — the dark-theme color swap this rule used to
+     need (back when this text sat directly on the dark page background with no pill of its own) no
+     longer applies. */
   color: var(--accent-strong);
   text-align: center;
   white-space: nowrap;
   /* It floats directly over the Refresh button and the subchannel pills — must never intercept a
      click meant for whatever's actually underneath it. */
   pointer-events: none;
-}
-
-/* --accent-strong (#c23b2e) is tuned for text-on-white and reads at only ~2.6:1 on the dark theme's
-   background — fine as a small UI accent, not as a bare-text status message. Scoped to this one
-   rule rather than changing --accent-strong itself, which also drives sidebar active-link and hover
-   states that already work fine as-is. */
-:root[data-theme='dark'] .channel-page__refresh-status {
-  color: #ff6b5a;
 }
 
 @media (max-width: 767px) {

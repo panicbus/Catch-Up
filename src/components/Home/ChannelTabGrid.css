@@ -114,6 +114,35 @@
   cursor: grabbing;
 }
 
+/* Delete, top-right — mirrors the drag handle's top-left. Same base look as the other overlay
+   buttons (translucent white), reddening on hover/press as the one visual hint that this one is
+   destructive, unlike the handle/pause/clear beside it. */
+.channel-tile__delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: background 0.12s, opacity 0.12s;
+}
+.channel-tile__delete:hover {
+  background: rgba(214, 62, 48, 0.75);
+  opacity: 1;
+}
+.channel-tile__delete:active {
+  background: rgba(214, 62, 48, 0.9);
+}
+
 /* Always-visible mini controls, bottom-right. */
 .channel-tile__controls {
   position: absolute;
@@ -174,8 +203,11 @@
   }
 
   /* No grip handle on mobile UNTIL rearranging mode is on (see the override further down and
-     ChannelTabGrid.tsx) — otherwise the whole tile is the long-press-to-drag target. */
-  .channel-tile__handle {
+     ChannelTabGrid.tsx) — otherwise the whole tile is the long-press-to-drag target. Delete follows
+     the same rule: only appears once the long press has already put the grid into rearrange mode,
+     matching the iOS-home-screen convention this jiggle interaction is modeled on. */
+  .channel-tile__handle,
+  .channel-tile__delete {
     display: none;
   }
 
@@ -261,6 +293,14 @@
     height: 34px;
   }
 
+  /* Same reasoning and same size as .channel-tile__ctrl above — unlike the drag handle, this IS a
+     real tap target on mobile (see the rearranging override below), so it gets the same enlarged
+     touch target rather than the handle's untouched 24px. */
+  .channel-tile__delete {
+    width: 34px;
+    height: 34px;
+  }
+
   /* Rearranging mode (see ChannelTabGrid.tsx): the whole grid reads as "picked up," iOS-home-screen
      style — every tile jiggles, and a drag handle appears as a visual cue that dragging is available
      (the whole tile stays the actual grab target; see .channel-tile__handle's own rule below for
@@ -282,6 +322,15 @@
     pointer-events: none;
   }
 
+  /* Unlike the handle above, deliberately NO pointer-events:none — this one has a real onClick
+     (ChannelTabGrid.tsx's requestDeleteFromTile) that a tap here must actually reach, matching the
+     iOS convention that the delete badge is itself tappable during the jiggle, not just decorative.
+     The raw touch effect's target-matching already excludes .channel-tile__delete so a touch landing
+     here is never mistaken for the start of a drag. */
+  .channel-grid--rearranging .channel-tile__delete {
+    display: flex;
+  }
+
   @keyframes channel-tile-jiggle {
     0% {
       transform: rotate(-1deg);
@@ -294,13 +343,14 @@
     }
   }
 
-  /* Applied to the Link and the handle, NOT .channel-tile-wrap — the wrap carries tileShift's own
-     inline translate() for the reorder slide (ChannelTabGrid.tsx), so keeping the jiggle's rotate()
-     on the child instead of the wrap lets the two transforms compose instead of one overwriting the
-     other. Excludes the currently-lifted tile (visibility:hidden anyway, see --touch-source above —
-     it has nothing to jiggle). */
+  /* Applied to the Link and the handle/delete buttons, NOT .channel-tile-wrap — the wrap carries
+     tileShift's own inline translate() for the reorder slide (ChannelTabGrid.tsx), so keeping the
+     jiggle's rotate() on the children instead of the wrap lets the two transforms compose instead of
+     one overwriting the other. Excludes the currently-lifted tile (visibility:hidden anyway, see
+     --touch-source above — it has nothing to jiggle). */
   .channel-grid--rearranging .channel-tile-wrap:not(.channel-tile-wrap--touch-source) .channel-tile,
-  .channel-grid--rearranging .channel-tile-wrap:not(.channel-tile-wrap--touch-source) .channel-tile__handle {
+  .channel-grid--rearranging .channel-tile-wrap:not(.channel-tile-wrap--touch-source) .channel-tile__handle,
+  .channel-grid--rearranging .channel-tile-wrap:not(.channel-tile-wrap--touch-source) .channel-tile__delete {
     animation: channel-tile-jiggle 260ms ease-in-out infinite;
   }
   /* Per-tile phase offset so the grid doesn't jiggle in a visibly synced block — negative delays
@@ -308,21 +358,25 @@
      apart. nth-child counts among ALL of .channel-grid's children, but the drag ghost (the only
      non-.channel-tile-wrap child) is always last, so it can't shift these indices. */
   .channel-grid--rearranging .channel-tile-wrap:nth-child(4n+2) .channel-tile,
-  .channel-grid--rearranging .channel-tile-wrap:nth-child(4n+2) .channel-tile__handle {
+  .channel-grid--rearranging .channel-tile-wrap:nth-child(4n+2) .channel-tile__handle,
+  .channel-grid--rearranging .channel-tile-wrap:nth-child(4n+2) .channel-tile__delete {
     animation-delay: -70ms;
   }
   .channel-grid--rearranging .channel-tile-wrap:nth-child(4n+3) .channel-tile,
-  .channel-grid--rearranging .channel-tile-wrap:nth-child(4n+3) .channel-tile__handle {
+  .channel-grid--rearranging .channel-tile-wrap:nth-child(4n+3) .channel-tile__handle,
+  .channel-grid--rearranging .channel-tile-wrap:nth-child(4n+3) .channel-tile__delete {
     animation-delay: -140ms;
   }
   .channel-grid--rearranging .channel-tile-wrap:nth-child(4n+4) .channel-tile,
-  .channel-grid--rearranging .channel-tile-wrap:nth-child(4n+4) .channel-tile__handle {
+  .channel-grid--rearranging .channel-tile-wrap:nth-child(4n+4) .channel-tile__handle,
+  .channel-grid--rearranging .channel-tile-wrap:nth-child(4n+4) .channel-tile__delete {
     animation-delay: -210ms;
   }
 
   @media (prefers-reduced-motion: reduce) {
     .channel-grid--rearranging .channel-tile,
-    .channel-grid--rearranging .channel-tile__handle {
+    .channel-grid--rearranging .channel-tile__handle,
+    .channel-grid--rearranging .channel-tile__delete {
       animation: none;
     }
   }
