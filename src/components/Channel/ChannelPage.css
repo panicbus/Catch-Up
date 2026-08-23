@@ -176,15 +176,29 @@
   /* Never give up width to the wrapping subchannel bar beside it — without this the title's column
      gets squeezed and the name clips once the pills wrap to a second row. */
   flex-shrink: 0;
-  opacity: 0;
+  /* NOT transitioned, and not a class toggle either: this tracks scroll position directly, via the
+     variable ChannelPage's handoff effect writes on .channel-page__sticky. A timed opacity fade is
+     what used to make this flash and double up against the real page title — the fade ran on a clock
+     while the scroll ran off the user's finger, so scrolling back to the top showed both titles at
+     once for the length of the transition. See that effect for the full account. */
+  opacity: var(--sticky-title-progress, 0);
   margin-right: 0;
   /* Vertically center the single-line title against the ~30px-tall first pill row. */
   padding-top: 4px;
-  transition: grid-template-columns 0.35s ease, opacity 0.25s ease, margin-right 0.35s ease;
+  /* No transition: width/margin snap instantly rather than easing. The opacity fade above spans the
+     real title's whole height — on a phone that's a slow scroll, but on desktop a single wheel notch
+     can clear it in well under 100ms, far faster than a 0.35s width ease could keep up with. An eased
+     width lost that race: opacity was already at 1 while grid-template-columns was still short of
+     1fr, and .channel-page__sticky-title-inner's overflow:hidden was clipping the fully-opaque name
+     to that partial width — a left-to-right wipe instead of a fade. Snapping removes the race
+     instead of trying to time it: the slot opens the instant the fade starts (while opacity is still
+     ~0, so an instant width change isn't visible) and closes the instant it ends (opacity already
+     back at 0). The pills beside it shift at exactly those two moments too, but never while the
+     title itself is visible enough for the shift to register. */
+  transition: none;
 }
 .channel-page__sticky-title--visible {
   grid-template-columns: 1fr;
-  opacity: 1;
   margin-right: 14px;
 }
 .channel-page__sticky-title-inner {
@@ -313,7 +327,10 @@
     flex: 1 1 auto;
     min-width: 0;
     margin-right: 10px;
-    transition: opacity 0.25s ease;
+    /* Nothing left to transition here: the width is constant on mobile (per the note above) and
+       opacity now follows scroll position directly rather than a timer, so a transition on it would
+       only reintroduce the lag between the two titles that this whole approach exists to remove. */
+    transition: none;
   }
 
   /* Mobile's own controls layout (see ChannelPage.tsx's isMobile branch) — two children stacked

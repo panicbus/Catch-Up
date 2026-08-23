@@ -65,13 +65,14 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
   );
 }
 
-/** The sticky bar's echo of the page's own title, once it's scrolled out of view (see ChannelPage's
- * IntersectionObserver effect and ChannelPage.css's own comment on the width-only 0fr/1fr collapse
- * this animates through). Extracted so both the mobile and desktop controls layouts below can render
- * it identically without duplicating the markup. */
-function StickyTitleEcho({ visible, name }: { visible: boolean; name: string }) {
+/** The sticky bar's echo of the page's own title, faded up as that title scrolls away. How visible
+ * it is isn't a prop at all — it reads the --sticky-title-progress variable the handoff effect in
+ * ChannelPage writes on the sticky bar (see that effect for why it bypasses React). `slotOpen` only
+ * controls whether it takes up width, which is desktop's 0fr/1fr collapse and a real layout change.
+ * Extracted so both the mobile and desktop controls layouts below can render it identically. */
+function StickyTitleEcho({ slotOpen, name }: { slotOpen: boolean; name: string }) {
   return (
-    <span className={`channel-page__sticky-title ${visible ? 'channel-page__sticky-title--visible' : ''}`}>
+    <span className={`channel-page__sticky-title ${slotOpen ? 'channel-page__sticky-title--visible' : ''}`}>
       <span className="channel-page__sticky-title-inner">{name}</span>
     </span>
   );
@@ -132,7 +133,10 @@ export function ChannelPage() {
   const channelIdRef = useRef(channel?.id);
   const [managingSubchannels, setManagingSubchannels] = useState(false);
   const [subchannelPickerOpen, setSubchannelPickerOpen] = useState(false);
-  const [titleScrolledOut, setTitleScrolledOut] = useState(false);
+  // Only whether the title occupies a layout slot in the toolbar (desktop's width collapse), NOT
+  // whether it's painted — that's a continuous value driven straight off scroll position, written
+  // to a CSS variable below so it never round-trips through React on a scroll frame.
+  const [titleHandoffStarted, setTitleHandoffStarted] = useState(false);
   const [readInPlaceCount, setReadInPlaceCount] = useState(0);
   const feedRef = useRef<NewsFeedHandle>(null);
   const clearSuppressRef = useRef(false);
@@ -141,6 +145,9 @@ export function ChannelPage() {
   // render `channel` is still null and the early `if (!channel) return null` below skips rendering
   // the title entirely; a plain useRef effect would run once against that null ref and never retry.
   const [titleNode, setTitleNode] = useState<HTMLHeadingElement | null>(null);
+  // Same callback-ref reasoning as titleNode — this is the element the handoff progress variable is
+  // written to, and the echo inside it inherits the value.
+  const [stickyNode, setStickyNode] = useState<HTMLDivElement | null>(null);
 
   // Both refresh timers, cleared together — wired into every site that needs to invalidate one or
   // both, so the two can't drift (e.g. one site remembering to clear refreshSlowTimerRef but not
@@ -198,51 +205,88 @@ export function ChannelPage() {
     document.querySelector<HTMLElement>('.app-shell__main')?.scrollTo({ top: 0 });
   }, [settings.defaultSortMode]);
 
-  // The sticky controls bar picks up the channel name once the page's own title has scrolled
-  // behind it. Plain threshold: 0 against the root's raw bounds, deliberately with no rootMargin
-  // offset for the sticky bar's own height — a rootMargin correction was tried here and reverted:
-  // the title sits IMMEDIATELY above the sticky bar with no content between them (unlike the
-  // article cards further down, which useScrollCatchUp DOES need to offset for), so the title
-  // finishes scrolling out of raw view at essentially the same scroll position the sticky bar pins
-  // at anyway — there's no real gap to correct for. Offsetting it anyway made titleScrolledOut turn
-  // true immediately at rest (before any scrolling at all), which showed the small sticky-bar title
-  // and the real page title at the same time and kept re-triggering the reveal transition —
-  // confirmed live as exactly that regression.
+  // The toolbar's copy of the channel name fades up in exact proportion to how much of the page's
+  // own title has scrolled out of view — a continuous 0..1 handoff, not an on/off threshold.
   //
-  // Recomputed from the live scroll position rather than driven by an IntersectionObserver (the
-  // original version) or a getBoundingClientRect() comparison run on every scroll tick (the first
-  // attempt at this fix, still reported stuck after shipping). Both of those compare two LIVE
-  // measurements against each other on every check; this instead measures a single fixed THRESHOLD
-  // once — the scrollTop value at which the title's bottom edge reaches the container's own visible
-  // top — and then every check is just `scrollRoot.scrollTop >= threshold`, a plain number
-  // comparison with nothing left to disagree with itself about. Self-correcting by construction
-  // either way (recomputed fresh on every scroll/resize rather than waiting for a delivered "change"
-  // event), but with only one measurement in play instead of two, there's less for iOS's own moving
-  // parts (the dynamic toolbar resizing the visual viewport mid-scroll) to desynchronize.
+  // This replaces a boolean + a 0.25s CSS opacity transition, and that pairing was the actual bug
+  // behind every "flashes / duplicates / flickers" report: the fade ran on a clock while the scroll
+  // ran off your finger, so the two could never stay in agreement. Scrolling back to the top was the
+  // worst case and the one most often reported — the real title is back on screen the instant you
+  // scroll, but the toolbar copy was still a quarter-second into fading out, so both were visible at
+  // once. Flicking across the threshold repeatedly just restarted a transition that never finished.
+  // Tying opacity to position instead makes the two titles exact complements at every scroll offset:
+  // nothing lags, reversing mid-gesture reverses the fade immediately, and there is no timer left to
+  // interrupt.
+  //
+  // The band is the title's own height: progress hits 0 the moment its top edge reaches the
+  // container's visible top and 1 when its bottom edge does, so the toolbar copy is fully up exactly
+  // as the real one finishes leaving. Written to a CSS variable rather than React state on purpose —
+  // a setState per scroll frame would re-render the whole channel page (and the feed under it) sixty
+  // times a second. React is told only when the title needs a layout SLOT, which changes twice per
+  // scroll-through, not per frame.
+  //
+  // Still measured the same way as before (one fixed band recomputed on scroll/resize, rather than
+  // comparing two live getBoundingClientRect reads against each other on every tick) — that part was
+  // sound and iOS's dynamic toolbar resizing the visual viewport mid-scroll has less to desync.
   useEffect(() => {
-    if (!titleNode) return;
+    if (!titleNode || !stickyNode) return;
     // AppShell's .app-shell__main div is the actual scroll container (the browser viewport never
-    // scrolls in this layout), so the threshold has to be relative to ITS content, not the viewport.
+    // scrolls in this layout), so the band has to be relative to ITS content, not the viewport.
     const scrollRoot = titleNode.closest<HTMLElement>('.app-shell__main');
     if (!scrollRoot) return;
 
-    // Infinity, NOT 0, until a real measurement lands: the test below is `scrollTop >= threshold`,
-    // and `scrollTop >= 0` is true at EVERY scroll position including the very top — so a threshold
-    // of 0 pins the title permanently on, which is exactly the reported symptom. Any moment the
-    // title has no layout box to measure (mid-mount, or briefly during a remount) would otherwise
-    // land on that value. Infinity fails the other way, keeping it hidden until genuinely measured.
-    let threshold = Infinity;
+    let bandStart = 0;
+    let bandEnd = 0;
+    // Until a real measurement lands the handoff reports 0 (hidden), never 1. The previous version
+    // of this had to learn the same lesson the hard way in the other direction: it seeded its
+    // threshold at 0, and `scrollTop >= 0` is true at every position including the very top, which
+    // pinned the title permanently on — the exact "it never goes away" symptom. Failing to hidden is
+    // the safe direction, since the real title is on screen in that state anyway.
+    let measured = false;
     const measure = () => {
       // Converts the title's CURRENT viewport-relative position into a scroll-content-relative one
       // (independent of however much is already scrolled), by adding back the current scrollTop.
       const rect = titleNode.getBoundingClientRect();
-      // A zero-height rect means the element isn't laid out right now — measuring it would produce a
-      // meaningless (and, per above, actively harmful) threshold. Keep whatever was last known good.
+      // A zero-height rect means the element isn't laid out right now (mid-mount, or briefly during
+      // a remount) — measuring it would produce a meaningless band. Keep the last known good one.
       if (rect.height === 0) return;
       const rootTop = scrollRoot.getBoundingClientRect().top;
-      threshold = rect.bottom - rootTop + scrollRoot.scrollTop;
+      bandEnd = rect.bottom - rootTop + scrollRoot.scrollTop;
+      bandStart = bandEnd - rect.height;
+      measured = true;
     };
-    const update = () => setTitleScrolledOut(scrollRoot.scrollTop >= threshold);
+
+    let slotOpen = false;
+    // The scroll listener runs on every scroll event regardless of whether the band was reached —
+    // i.e. on essentially every scroll, anywhere in the feed, for the entire time a channel is open.
+    // Outside the band (a few dozen px around the title) progress clamps to the same 0 or 1 it was
+    // already at, so skip the DOM write when it hasn't actually changed: setProperty marks the whole
+    // sticky toolbar subtree (title, sort toggle, archive button, subchannel pills) style-dirty, and
+    // paying that every frame for scrolling that has nothing to do with the title defeats the point
+    // of moving this off React state in the first place.
+    let lastProgress = -1;
+    const update = () => {
+      const span = bandEnd - bandStart;
+      const raw = measured && span > 0 ? (scrollRoot.scrollTop - bandStart) / span : 0;
+      const progress = raw < 0 ? 0 : raw > 1 ? 1 : raw;
+      if (progress !== lastProgress) {
+        lastProgress = progress;
+        stickyNode.style.setProperty('--sticky-title-progress', String(progress));
+      }
+      // Desktop collapses the title's width away when it isn't showing, to give the subchannel pills
+      // the full row (see ChannelPage.css). That's a layout change, so it stays a discrete class
+      // toggle driven off React rather than following progress per frame — animating a width on
+      // every scroll frame is exactly the per-frame layout cost NewsCard.css just got rid of. Unlike
+      // the opacity fade, this one doesn't need to track progress precisely: ChannelPage.css snaps
+      // this width instantly rather than easing it, specifically so it can open/close a few dozen ms
+      // into/out of the fade without a mismatched-speed reveal, which is what let it stay a plain
+      // on/off toggle instead of also needing to read progress continuously.
+      const open = progress > 0;
+      if (open !== slotOpen) {
+        slotOpen = open;
+        setTitleHandoffStarted(open);
+      }
+    };
     const recompute = () => {
       measure();
       update();
@@ -259,7 +303,7 @@ export function ChannelPage() {
       resizeObserver.disconnect();
       scrollRoot.removeEventListener('scroll', update);
     };
-  }, [titleNode, channelSlug]);
+  }, [titleNode, stickyNode, channelSlug]);
 
   if (!channel) {
     // Two genuinely different states used to look identical (a blank page): the channel list just
@@ -451,7 +495,7 @@ export function ChannelPage() {
           sticky unit, so the manage panel stays put with the nav instead of scrolling away. Tagged
           data-sticky-nav so useScrollCatchUp can measure its height and offset the scroll-to-read
           trigger below it. */}
-      <div className="channel-page__sticky" data-sticky-nav>
+      <div className="channel-page__sticky" data-sticky-nav ref={setStickyNode}>
         <div className="channel-page__controls">
           {isMobile ? (
             // Own layout, not a squeezed/wrapped version of desktop's: the title shares a row with
@@ -463,7 +507,7 @@ export function ChannelPage() {
             // rendered), so it's simply not rendered here rather than mounted and immediately hidden.
             <>
               <div className="channel-page__controls-row1">
-                <StickyTitleEcho visible={titleScrolledOut} name={channel.name} />
+                <StickyTitleEcho slotOpen={titleHandoffStarted} name={channel.name} />
                 <SortModeToggle value={settings.defaultSortMode} onChange={(mode) => update({ defaultSortMode: mode })} />
               </div>
               <ArchiveReadButton count={readInPlaceCount} onClick={() => feedRef.current?.flushReadInPlace()} />
@@ -471,7 +515,7 @@ export function ChannelPage() {
           ) : (
             <>
               <div className="channel-page__controls-left">
-                <StickyTitleEcho visible={titleScrolledOut} name={channel.name} />
+                <StickyTitleEcho slotOpen={titleHandoffStarted} name={channel.name} />
                 <SubchannelBar
                   subchannels={channel.subchannels}
                   activeId={subchannelId}
