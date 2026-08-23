@@ -16,7 +16,7 @@ vi.mock('./providers/registry', () => ({
   getProviderStatus: vi.fn(() => []),
 }));
 
-import { runChannel } from './refreshAgent';
+import { runChannel, runAll } from './refreshAgent';
 import { runProviders } from './providers/registry';
 
 const LA = { query: 'Los Angeles, CA', ...resolveCity('Los Angeles, CA')! };
@@ -120,5 +120,89 @@ describe('runChannel — end-to-end locality threading (mocked providers, real o
 
     expect(result.errors).toEqual(['Channel not found: does-not-exist']);
     expect(runProviders).not.toHaveBeenCalled();
+  });
+});
+
+describe('runAll — channel-level stagger (CHANNEL_STAGGER_FACTOR)', () => {
+  // A distinct id set from the runChannel suite above — channels here don't need real locality
+  // behavior, just distinct ids for the hash-based rotation to spread across.
+  function manyChannels(count: number): Channel[] {
+    return Array.from({ length: count }, (_, i) => ({
+      id: `stagger-ch-${i}`,
+      name: `Channel ${i}`,
+      slug: `channel-${i}`,
+      createdAt: new Date().toISOString(),
+      sortOrder: i,
+      subchannels: [],
+      pausedUntil: null,
+      pausedLabel: null,
+    }));
+  }
+
+  function fakeMultiDataStore(channels: Channel[]): DataStore {
+    return {
+      getChannels: () => channels,
+      isChannelPaused: () => false,
+      getSettings: () => ({
+        defaultViewMode: 'list',
+        refreshIntervalMinutes: 30,
+        theme: 'light',
+        rollTheDiceChannelIds: null,
+        maxStoriesShown: 25,
+        homeLocation: null,
+      }),
+      getAiProvider: () => null,
+    } as unknown as DataStore;
+  }
+
+  it('runs only a subset of channels per cycle, and covers every channel exactly once over one full rotation', async () => {
+    vi.mocked(runProviders).mockResolvedValue([]);
+    const channels = manyChannels(22); // 2 full periods of the 11-cycle rotation
+    const deps = {
+      dataStore: fakeMultiDataStore(channels),
+      articlesCache: { merge: vi.fn(() => 0) } as unknown as ArticlesCache,
+      classificationStore: {} as unknown as ClassificationStore,
+      broadcast: vi.fn() as (event: DataChangeEvent) => void,
+    };
+
+    // backgroundCycle is module-private and keeps incrementing across calls, so this doesn't
+    // assume any particular starting value — 11 CONSECUTIVE calls always complete exactly one full
+    // sweep of the rotation regardless of where the counter happened to start.
+    const perCycleTouched: Set<string>[] = [];
+    for (let i = 0; i < 11; i++) {
+      vi.mocked(runProviders).mockClear();
+      await runAll(deps);
+      perCycleTouched.push(new Set(vi.mocked(runProviders).mock.calls.map((c) => c[0].channelId)));
+    }
+
+    // Genuine staggering: no single cycle touches every channel.
+    for (const touched of perCycleTouched) {
+      expect(touched.size).toBeLessThan(channels.length);
+      expect(touched.size).toBeGreaterThan(0);
+    }
+
+    // Full coverage: every channel is due on exactly one of the 11 cycles.
+    const union = new Set(perCycleTouched.flatMap((s) => [...s]));
+    expect(union.size).toBe(channels.length);
+  });
+
+  it('a manual runChannel call is never subject to channel-level staggering', async () => {
+    // Regression guard for the thing this feature must never break: a manual "Refresh" click (or a
+    // newly created channel) calls runChannel directly, bypassing runAll's loop entirely, so it
+    // must always fetch regardless of whether this channel would currently be "due".
+    vi.mocked(runProviders).mockResolvedValue([]);
+    const channel = manyChannels(1)[0];
+    const deps = {
+      dataStore: fakeMultiDataStore([channel]),
+      articlesCache: { merge: vi.fn(() => 0) } as unknown as ArticlesCache,
+      classificationStore: {} as unknown as ClassificationStore,
+      broadcast: vi.fn() as (event: DataChangeEvent) => void,
+    };
+
+    for (let i = 0; i < 11; i++) {
+      vi.mocked(runProviders).mockClear();
+      await runChannel(deps, channel.id);
+      expect(runProviders).toHaveBeenCalledTimes(1);
+    }
   });
 });

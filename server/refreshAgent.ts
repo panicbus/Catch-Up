@@ -37,6 +37,24 @@ export function buildAiConfig(
 const PROVIDER_PACING_MS = 300;
 const STAGGER_FACTOR = 3;
 
+/** Same rotating-bucket idea as STAGGER_FACTOR above, one level up: which CHANNELS run this cycle
+ * at all, not just which of a running channel's subchannels do. Confirmed live as a real problem,
+ * not a hypothetical one — the news-provider API keys are shared across every account on this
+ * server (see providerBudget.ts), and refreshing every channel across every account every 30
+ * minutes burned a free key's entire daily allowance within the first couple of hours, leaving
+ * every account with nothing new for the rest of the day. Each channel now lands roughly 48/11 ≈ 4
+ * refreshes a day, spread across the whole day instead of front-loaded.
+ *
+ * Deliberately 11, not a rounder number like 10 or 12: it must share no common factor with
+ * STAGGER_FACTOR (3). Both this and the subchannel rotation below key off the SAME cycle number —
+ * if the two factors shared a factor, a given channel would always land on the exact same `cycle %
+ * STAGGER_FACTOR` remainder every single time it happened to run, permanently starving 2 of its 3
+ * subchannel buckets rather than rotating through all of them. 11 and 3 are coprime, so the pair of
+ * remainders still visits every combination over time (one full cycle every 33 runs, ~16.5 hours) —
+ * verified by construction, not just by choosing a large prime and hoping. If either constant ever
+ * changes, keep them coprime. Same constant, same reasoning, as main/refreshAgent.ts's copy. */
+const CHANNEL_STAGGER_FACTOR = 11;
+
 export interface RunResult {
   channelId: string | null;
   added: number;
@@ -73,7 +91,14 @@ export async function runAll(userId: string): Promise<RunResult[]> {
   // entrypoint), each invocation is its own independent "cycle", unlike the desktop app's
   // long-running in-memory counter.
   const cycle = Math.floor(Date.now() / (30 * 60 * 1000));
-  for (const channel of active) {
+  // Channel-level rotation (see CHANNEL_STAGGER_FACTOR) — only this automatic sweep filters here;
+  // a manual "Refresh" click (server/routes.ts) calls runChannel directly and never reaches this
+  // loop, so it always fetches immediately regardless of whose turn it is. Applies to every
+  // account including the owner's — throttling the owner's own consumption down from "every
+  // channel, every 30 minutes" is a real part of what stops one heavy account from burning a
+  // shared key's entire daily allowance before anyone else gets a turn.
+  const due = active.filter((c) => hashToInt(c.id) % CHANNEL_STAGGER_FACTOR === cycle % CHANNEL_STAGGER_FACTOR);
+  for (const channel of due) {
     try {
       results.push(await runChannel(userId, channel.id, { staggerCycle: cycle }));
     } catch (e) {

@@ -30,6 +30,23 @@ const PROVIDER_PACING_MS = 300;
  * (see the `staggerCycle` param below, which those call sites simply omit). */
 const STAGGER_FACTOR = 3;
 
+/** Same rotating-bucket idea as STAGGER_FACTOR above, one level up: which CHANNELS run this cycle
+ * at all, not just which of a running channel's subchannels do. Confirmed live as a real problem,
+ * not a hypothetical one — a user with enough channels refreshing every 30 minutes can burn a free
+ * news-API key's entire daily allowance in the first couple of hours, leaving the rest of the day
+ * with nothing new arriving. Each channel now lands roughly 48/11 ≈ 4 refreshes a day, spread across
+ * the whole day instead of front-loaded.
+ *
+ * Deliberately 11, not a rounder number like 10 or 12: it must share no common factor with
+ * STAGGER_FACTOR (3). Both this and the subchannel rotation below key off the SAME cycle counter —
+ * if the two factors shared a factor, a given channel would always land on the exact same `cycle %
+ * STAGGER_FACTOR` remainder every single time it happened to run, permanently starving 2 of its 3
+ * subchannel buckets rather than rotating through all of them. 11 and 3 are coprime, so the pair of
+ * remainders still visits every combination over time (one full cycle every 33 runs, ~16.5 hours) —
+ * verified by construction, not just by choosing a large prime and hoping. If either constant ever
+ * changes, keep them coprime. */
+const CHANNEL_STAGGER_FACTOR = 11;
+
 export interface RefreshDeps {
   dataStore: DataStore;
   articlesCache: ArticlesCache;
@@ -93,7 +110,11 @@ export async function runAll(deps: RefreshDeps): Promise<RunResult[]> {
     const channels = deps.dataStore.getChannels().filter((c) => !deps.dataStore.isChannelPaused(c.id));
     const results: RunResult[] = [];
     const cycle = backgroundCycle++;
-    for (const channel of channels) {
+    // Channel-level rotation (see CHANNEL_STAGGER_FACTOR) — only the automatic sweep filters here;
+    // a manual "Refresh" or a newly created channel calls runChannel directly and never reaches
+    // this loop at all, so both already fetch immediately regardless of whose turn it is.
+    const due = channels.filter((c) => hashToInt(c.id) % CHANNEL_STAGGER_FACTOR === cycle % CHANNEL_STAGGER_FACTOR);
+    for (const channel of due) {
       results.push(await runChannel(deps, channel.id, { staggerCycle: cycle }));
     }
     return results;
