@@ -490,6 +490,32 @@ describe('Politics hard exclude — a confidently-foreign story is rejected outr
   });
 });
 
+describe('Politics hard exclude — home institution signal (regression coverage for a real, confirmed bug)', () => {
+  // Confirmed live: the hard exclude above was rejecting the MAJORITY of a real Politics channel's
+  // content, not just the regional coverage it was built for — any ordinary US political story that
+  // discusses foreign policy (a sanctions bill, a foreign aid package, a tariff fight) names the
+  // foreign country as the OBJECT of a US action without ever needing to also say "United States,"
+  // which is most of what real political news actually is. See placeExtraction.test.ts's own
+  // "home institution signal" tests for the detection logic itself — these confirm the fix reaches
+  // all the way through the actual keep/reject decision, not just the detector in isolation.
+  const politics = channelProfile('Politics');
+
+  it.each([
+    'Senate approves new sanctions package targeting Russia',
+    'Congress moves to restrict TikTok over China ties',
+  ])('keeps a genuine US political story that names a foreign country only as the object of US action: %s', (title) => {
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile: politics, homeLocation: LA };
+    const a = article({ title, section: 'politics' });
+    expect(keeps(a, ctx)).toBe(true);
+  });
+
+  it('still rejects the original motivating case — a foreign story with no home institution mentioned', () => {
+    const ctx: RelevanceContext = { topic: 'Politics', channelName: 'Politics', subchannelName: null, profile: politics, homeLocation: LA };
+    const a = article({ title: 'Osun 2026: Parade of Paradox and Parody of Politics', section: 'politics' });
+    expect(keeps(a, ctx)).toBe(false);
+  });
+});
+
 describe('Politics hard exclude — subchannel exemption', () => {
   const politics = channelProfile('Politics');
 

@@ -220,3 +220,58 @@ describe('detectStoryCountry', () => {
     });
   });
 });
+
+describe('detectStoryCountry — home institution signal (regression coverage for a real, confirmed bug)', () => {
+  // Confirmed live: ordinary US political coverage that discusses foreign policy — most of what a
+  // real Politics feed actually carries — routinely names a foreign country as the OBJECT of a US
+  // action (sanctions ON Russia, aid FOR Ukraine, tariffs on China) without ever needing to also say
+  // "United States." Before this signal existed, every one of these read as nothing but a foreign
+  // mention and got hard-excluded — not an occasional miss, the majority of a real feed.
+  it.each([
+    ['Senate approves new sanctions package targeting Russia', 'The bipartisan bill passed 78-19 and now heads to the House for a final vote before reaching the president\'s desk.'],
+    ['Lawmakers debate new aid package for Ukraine', 'The proposal includes billions in military assistance as Congress weighs competing budget priorities this session.'],
+    ['Senate committee advances bill on China trade tariffs', 'The legislation would impose new restrictions on imports amid ongoing trade tensions between the two countries.'],
+    ['Congress moves to restrict TikTok over China ties', 'Lawmakers cited national security concerns tied to the app\'s parent company in a bipartisan vote Wednesday.'],
+  ])('%s -> home, not foreign', (title, snippet) => {
+    expect(detectStoryCountry(title, snippet, 'US').kind).toBe('home');
+  });
+
+  it('deliberately excludes generic legislature names that other countries also use for their own institutions', () => {
+    // Nigeria's National Assembly has its own Senate; India's ruling/opposition party is literally
+    // named "Congress" — both exactly the countries this feature exists to filter OUT. Only terms
+    // distinctive enough to reliably mean the US specifically are on the safe list, which is why a
+    // story otherwise indistinguishable from genuine domestic coverage still gets excluded here.
+    expect(detectStoryCountry('Osun 2026: Parade of Paradox and Parody of Politics', null, 'US')).toEqual({
+      kind: 'foreign',
+      countryCode: 'NG',
+    });
+  });
+
+  it('is inert for a home country with no term list populated (US only, for now)', () => {
+    // Same story that reads as 'home' for a US reader (via "Senate") reads as plain 'foreign' for a
+    // Canadian one — there's no equivalent term list for CA yet, so this correctly falls back to
+    // "no signal" rather than guessing that US terms mean anything for a different home country.
+    expect(
+      detectStoryCountry('Senate approves new sanctions package targeting Russia', null, 'CA')
+    ).toEqual({ kind: 'foreign', countryCode: 'RU' });
+  });
+
+  it('known accepted gap: a story naming only "lawmakers," with no specific institution or party name, still has nothing to distinguish it from foreign coverage', () => {
+    // A genuinely harder case than the ones above: real US content, but the only political-actor
+    // word present ("Lawmakers") is exactly as generic as any other country's legislature would be
+    // described. Narrower and rarer than the bug this signal fixes — most real headlines DO name a
+    // specific chamber, party, or the White House — so left as a known limitation rather than
+    // widening the safe list into the same generic-word risk that caused the original bug.
+    expect(detectStoryCountry('Lawmakers spar over Israel aid amid Gaza conflict', null, 'US').kind).toBe('foreign');
+  });
+
+  it('matches an institution term even with punctuation immediately after it', () => {
+    // A raw-text, merely-lowercased match would miss this: "representatives," has no trailing space
+    // for " house of representatives " to find. Real snippets put a comma or period right after an
+    // institution name constantly ("...the House of Representatives, which reconvenes Monday...") —
+    // this is exactly that shape, caught in review before shipping.
+    expect(
+      detectStoryCountry('Bill heads to House of Representatives, which reconvenes Monday', 'Targets new tariffs on China.', 'US').kind
+    ).toBe('home');
+  });
+});

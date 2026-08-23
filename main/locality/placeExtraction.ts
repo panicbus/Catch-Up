@@ -13,6 +13,7 @@
  *     failure mode here than a false positive (burying a story that wasn't actually distant). */
 
 import { lookupCity, lookupCountry, lookupContinent, continentOfCountry, lookupRegion, type CityRow, type Continent } from './gazetteer';
+import { normalizeTitle } from '../providers/dedupe';
 
 // TUNABLE: originally set much higher (50,000) to filter single-word false positives (ordinary
 // English words that double as obscure place names), but that floor silently excluded Banff, AB
@@ -157,6 +158,49 @@ export type StoryPlace =
  * already treats as less confident than a named country, and the hard exclude this feeds is not the
  * place to escalate that; a bare continent mention keeps going through the existing soft scoring
  * unchanged. There's also no single country code to check a subchannel against for a continent. */
+// Confirmed live as a severe false-positive source, not a hypothetical: "Senate approves new
+// sanctions package targeting Russia," "Lawmakers debate new aid package for Ukraine," "Congress
+// moves to restrict TikTok over China ties" — genuine, common domestic political coverage that
+// discusses foreign policy, which is most of what a real "Politics" feed carries. None of these need
+// to say "United States" — a story about the US Senate doesn't need to also name the country — so
+// the plain "mentions home too" check above never sees it, and the story reads as nothing but a
+// foreign-country mention. A hard exclude with no escape hatch turned that gap into blocking the
+// majority of a Politics channel's real content, not just the regional coverage this was built for.
+//
+// Deliberately a curated per-country term list, not a blanket "any political-institution word,"
+// and deliberately narrow even within that: ordinary political-science vocabulary (parliament,
+// president, governor, "the Senate"/"the Congress" as generic legislature names) is excluded on
+// purpose because it isn't home-specific — Nigeria's National Assembly has its own Senate, and
+// India's ruling/opposition party is literally named "Congress," both of which are exactly the
+// countries this feature exists to filter OUT. Only terms distinctive enough to reliably mean THIS
+// country specifically are included. Populated for US only for now, since that's the confirmed,
+// reported case — reads as "no signal" (same as today) for every other home country rather than
+// guessing at another country's equivalent vocabulary.
+const HOME_INSTITUTION_TERMS: Partial<Record<string, readonly string[]>> = {
+  US: [
+    'white house', 'capitol hill', 'gop',
+    'senate', 'senator', 'senators',
+    'congress', 'congressional',
+    'house of representatives',
+    'democrat', 'democrats', 'democratic party',
+    'republican', 'republicans', 'republican party',
+  ],
+};
+
+function hasHomeInstitutionSignal(title: string, snippet: string | null, homeCountryCode: string): boolean {
+  const terms = HOME_INSTITUTION_TERMS[homeCountryCode.toUpperCase()];
+  if (!terms) return false;
+  // normalizeTitle (not a plain .toLowerCase()) matters here, not just for consistency with the rest
+  // of this codebase's whole-word matching: it also collapses punctuation to spaces, and real
+  // snippets constantly put a comma or period right after an institution name ("...the House of
+  // Representatives, which reconvenes Monday..."). A raw-text space-padded match would miss that —
+  // "representatives," has no trailing space for " house of representatives " to find — silently
+  // undoing this fix for exactly the punctuation-heavy real text it's meant to handle, while every
+  // clean, comma-free test case kept passing.
+  const haystack = ` ${normalizeTitle(`${title} ${snippet ?? ''}`)} `;
+  return terms.some((t) => haystack.includes(` ${t} `));
+}
+
 export function detectStoryCountry(
   title: string,
   snippet: string | null,
@@ -180,6 +224,7 @@ export function detectStoryCountry(
 
   if (countryCodes.size === 0) return { kind: 'none' };
   if (countryCodes.has(home)) return { kind: 'home' };
+  if (hasHomeInstitutionSignal(title, snippet, home)) return { kind: 'home' };
   // Multiple different foreign countries named in the same story is rare and low-stakes either way
   // (Set iteration order is insertion order, so this is simply "the first one the scan found") — the
   // only two things riding on the specific code are the subchannel match and which bucket a routed
