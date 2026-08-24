@@ -10,6 +10,13 @@ export interface ProviderQuery {
   /** The channel's news category (from channelProfile) — providers that support it narrow the query
    * to that category/section. null for topic/entity channels or unmapped providers. */
   category?: NewsCategory | null;
+  /** Uppercase ISO 3166-1 alpha-2 for the reader's home country, set ONLY when the same conditions
+   * that activate relevance.ts's locality signal hold — see providerCountryCode there, which is the
+   * single place this is derived. null/absent means "worldwide," exactly as before this existed.
+   * Each provider maps it to its OWN parameter format and omits the param when unmapped; the formats
+   * are NOT interchangeable and a wrong value fails silently rather than erroring, which is why they
+   * live in providerCountry.ts's allowlists rather than being lowercased at the call site. */
+  countryCode?: string | null;
 }
 
 export interface ProviderArticle {

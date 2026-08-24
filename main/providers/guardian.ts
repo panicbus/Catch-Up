@@ -1,5 +1,6 @@
 import type { NewsProvider, ProviderArticle, ProviderQuery } from './types';
 import { PROVIDER_CATEGORY } from './channelProfiles';
+import { guardianProductionOffice, guardianSection } from './providerCountry';
 import { isCoolingDown, isHardFailureStatus, startCooldown, RATE_LIMIT_COOLDOWN_MS } from './cooldown';
 import { fetchWithTimeout } from './fetchWithTimeout';
 
@@ -24,9 +25,17 @@ export const guardianProvider: NewsProvider = {
     if (!key) return [];
     if (isCoolingDown(PROVIDER_ID)) return [];
 
-    const section = query.category ? PROVIDER_CATEGORY.guardian[query.category] : undefined;
-    const sectionParam = section ? `&section=${section}` : '';
-    const url = `https://content.guardianapis.com/search?q=${encodeURIComponent(query.topic)}&api-key=${key}&show-fields=trailText,thumbnail&show-tags=keyword${sectionParam}`;
+    // The Guardian is the one provider where the country and category params INTERACT and must be
+    // set together — its `politics` section means UK politics, so narrowing the office to `us`
+    // without also widening the section to us-news collapses the result set to almost nothing
+    // (verified live: 52 matches vs 11,271). guardianSection owns that pairing; never set one of
+    // these two without the other. Note the office values are `uk`/`us`/`aus`, NOT ISO codes.
+    const office = guardianProductionOffice(query.countryCode);
+    const baseSection = query.category ? PROVIDER_CATEGORY.guardian[query.category] : undefined;
+    const section = guardianSection(query.category, office, baseSection);
+    const sectionParam = section ? `&section=${encodeURIComponent(section)}` : '';
+    const officeParam = office ? `&production-office=${office}` : '';
+    const url = `https://content.guardianapis.com/search?q=${encodeURIComponent(query.topic)}&api-key=${key}&show-fields=trailText,thumbnail&show-tags=keyword${sectionParam}${officeParam}`;
     try {
       const res = await fetchWithTimeout(url);
       if (!res.ok) {

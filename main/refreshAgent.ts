@@ -4,6 +4,7 @@ import type { ClassificationStore } from './classificationStore';
 import { runProviders, getProviderStatus } from './providers/registry';
 import { filterRelevant } from './aiRelevance';
 import { channelProfile } from './providers/channelProfiles';
+import { providerCountryCode } from './providers/relevance';
 import { routeByCountry } from './locality/politicsGeoRouting';
 import type { ProviderConfig } from './providers/classifier';
 import type { DataChangeEvent } from '../ipc-contract';
@@ -170,11 +171,16 @@ export async function runChannel(
   for (let i = 0; i < targets.length; i++) {
     const target = targets[i];
     try {
+      // The one place this is derived — the provider query below and the routeByCountry condition
+      // further down both read it, so the two can't disagree. See providerCountryCode's own comment
+      // for the "US Politics" bug that deriving them separately caused.
+      const scopedCountry = providerCountryCode(profile, channel.name, target.subchannelName, homeLocation);
       const fetched = await runProviders({
         topic: target.topic,
         channelId,
         subchannelId: target.subchannelId,
         category: profile.category,
+        countryCode: scopedCountry,
       });
       // Relevance stage: free heuristic first (soft additive gate), then the AI classifier when a
       // key is configured (drops tangential/wrong-sense results the keywords can't catch). Always
@@ -203,8 +209,8 @@ export async function runChannel(
       // One mergeGroups() call rather than one merge() per group — merge() re-sorts/dedupes/caps the
       // ENTIRE channel bucket and writes the whole store to disk on every call, so calling it once
       // per subchannel here would turn one refresh's worth of inserts into that many redundant passes.
-      if (target.subchannelId === null && profile.category === 'politics' && homeLocation?.countryCode) {
-        const routed = routeByCountry(relevant, homeLocation.countryCode, channel.subchannels);
+      if (target.subchannelId === null && profile.category === 'politics' && scopedCountry) {
+        const routed = routeByCountry(relevant, scopedCountry, channel.subchannels);
         added += deps.articlesCache.mergeGroups(channelId, [
           { subchannelId: null, articles: routed.main },
           ...[...routed.toSubchannel].map(([subchannelId, articles]) => ({ subchannelId, articles })),

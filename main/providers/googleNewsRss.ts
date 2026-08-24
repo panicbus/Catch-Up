@@ -1,5 +1,6 @@
 import Parser from 'rss-parser';
 import type { NewsProvider, ProviderArticle, ProviderQuery } from './types';
+import { googleNewsLocale } from './providerCountry';
 import { isCoolingDown, isHardFailureStatus, startCooldown, RATE_LIMIT_COOLDOWN_MS } from './cooldown';
 import { fetchWithTimeout } from './fetchWithTimeout';
 
@@ -20,7 +21,12 @@ export const googleNewsRssProvider: NewsProvider = {
   async fetchArticles(query: ProviderQuery): Promise<ProviderArticle[]> {
     if (isCoolingDown(PROVIDER_ID)) return [];
 
-    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query.topic)}&hl=en-US&gl=US&ceid=US:en`;
+    // Was hardcoded en-US/US; now follows the reader's home country, but ONLY where Google has an
+    // English edition — googleNewsLocale falls back to that same en-US default otherwise, because a
+    // plausible-looking but unsupported combination (gl=FR&hl=en-FR) returns a nearly empty feed
+    // rather than an error, which would be strictly worse than not narrowing at all.
+    const { hl, gl, ceid } = googleNewsLocale(query.countryCode);
+    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query.topic)}&hl=${hl}&gl=${gl}&ceid=${encodeURIComponent(ceid)}`;
     try {
       const res = await fetchWithTimeout(url);
       if (!res.ok) {

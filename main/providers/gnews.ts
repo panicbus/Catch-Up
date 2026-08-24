@@ -1,4 +1,5 @@
 import type { NewsProvider, ProviderArticle, ProviderQuery } from './types';
+import { gnewsCountry } from './providerCountry';
 import { isCoolingDown, isHardFailureStatus, startCooldown, RATE_LIMIT_COOLDOWN_MS } from './cooldown';
 import { fetchWithTimeout } from './fetchWithTimeout';
 
@@ -29,7 +30,10 @@ export const gNewsProvider: NewsProvider = {
     // channel word (e.g. "Music") rarely appears verbatim in a real headline — and rely on the
     // relevance scorer + AI layer downstream instead.
     const inParam = query.category ? '' : '&in=title,description';
-    const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(query.topic)}&lang=en&token=${key}${inParam}`;
+    // See newsdata.ts's matching comment — narrows the ask rather than discarding the answer.
+    const country = gnewsCountry(query.countryCode);
+    const countryParam = country ? `&country=${country}` : '';
+    const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(query.topic)}&lang=en&token=${key}${inParam}${countryParam}`;
     try {
       const res = await fetchWithTimeout(url);
       if (!res.ok) {

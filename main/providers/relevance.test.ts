@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterByRelevance, borderlineArticles, type RelevanceContext } from './relevance';
+import { filterByRelevance, borderlineArticles, providerCountryCode, type RelevanceContext } from './relevance';
 import { channelProfile } from './channelProfiles';
 import { resolveCity } from '../locality/gazetteer';
 import type { FetchedArticle } from './types';
@@ -721,5 +721,52 @@ describe('trusted sources', () => {
     };
     const a = article({ title: 'Virginia Tech Hokies win the quarterback showdown', section: null, url: 'https://reuters.com/sports/story' });
     expect(keeps(a, ctx)).toBe(false);
+  });
+});
+
+describe('providerCountryCode — narrows the provider ASK, and is the single source the routing shares', () => {
+  const home = { countryCode: 'US' };
+
+  it.each(['Politics', 'Business', 'Health', 'Science', 'Tech'])(
+    'returns the home country for the locality category %s, whose foreign stories get discarded anyway',
+    (name) => {
+      expect(providerCountryCode(channelProfile(name), name, null, home)).toBe('US');
+    }
+  );
+
+  it.each(['World', 'Sports', 'Entertainment'])(
+    'returns null for %s, where international coverage is the entire point',
+    (name) => {
+      expect(providerCountryCode(channelProfile(name), name, null, home)).toBeNull();
+    }
+  );
+
+  it('returns null for a topic/entity channel — it gets locality SCORING but must not have its search narrowed', () => {
+    // A channel about a foreign band or event would fetch nothing at all to score if the provider
+    // query itself were country-locked, which is why this is narrower than the scoring gate.
+    expect(providerCountryCode(channelProfile('Phish'), 'Phish', null, home)).toBeNull();
+  });
+
+  it('returns null when no home location is configured', () => {
+    expect(providerCountryCode(channelProfile('Politics'), 'Politics', null, null)).toBeNull();
+    expect(providerCountryCode(channelProfile('Politics'), 'Politics', null, {})).toBeNull();
+  });
+
+  it('uppercases whatever casing the stored home location happens to have', () => {
+    expect(providerCountryCode(channelProfile('Politics'), 'Politics', null, { countryCode: 'us' })).toBe('US');
+  });
+
+  it('returns null for a place-NAMED politics channel — the shared guard behind the "US Politics" bug', () => {
+    // The real bug this closes: "US Politics" satisfies looksLikePlaceChannel, so buildGateContext
+    // disables the hard exclude for it — but the refresh agents used to gate routeByCountry on a
+    // separately-derived condition that stayed TRUE, and routeByCountry DROPS a foreign-detected
+    // story with no matching subchannel. Exclude off + routing on = silent data loss. Both now read
+    // this one function, so that combination can't be represented.
+    expect(providerCountryCode(channelProfile('US Politics'), 'US Politics', null, home)).toBeNull();
+    expect(providerCountryCode(channelProfile('Washington Politics'), 'Washington Politics', null, home)).toBeNull();
+  });
+
+  it('returns null when the SUBCHANNEL is the place, so a "Politics · India" fetch is not country-locked to the US', () => {
+    expect(providerCountryCode(channelProfile('Politics'), 'Politics', 'India', home)).toBeNull();
   });
 });

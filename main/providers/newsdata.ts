@@ -1,5 +1,6 @@
 import type { NewsProvider, ProviderArticle, ProviderQuery } from './types';
 import { PROVIDER_CATEGORY } from './channelProfiles';
+import { newsdataCountry } from './providerCountry';
 import { isCoolingDown, isHardFailureStatus, startCooldown, RATE_LIMIT_COOLDOWN_MS } from './cooldown';
 import { fetchWithTimeout } from './fetchWithTimeout';
 
@@ -28,7 +29,12 @@ export const newsDataProvider: NewsProvider = {
 
     const cat = query.category ? PROVIDER_CATEGORY.newsdata[query.category] : undefined;
     const catParam = cat ? `&category=${cat}` : '';
-    const url = `https://newsdata.io/api/1/news?apikey=${key}&q=${encodeURIComponent(query.topic)}&language=en${catParam}`;
+    // Narrows the ASK to the reader's own country for the categories that would otherwise discard
+    // most of a worldwide result set anyway (see relevance.ts's providerCountryCode). Omitted
+    // entirely when unset or unmapped, which is exactly the previous worldwide behavior.
+    const country = newsdataCountry(query.countryCode);
+    const countryParam = country ? `&country=${country}` : '';
+    const url = `https://newsdata.io/api/1/news?apikey=${key}&q=${encodeURIComponent(query.topic)}&language=en${catParam}${countryParam}`;
     try {
       const res = await fetchWithTimeout(url);
       if (!res.ok) {

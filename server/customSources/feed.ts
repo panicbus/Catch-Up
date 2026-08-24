@@ -67,7 +67,43 @@ export function mapItem(item: Parser.Item): ProviderArticle | null {
   // caller (server/customSources/refresh.ts) fills it in from the CustomSource row's own `label`
   // once it knows which source this batch came from. Keeps this mapper agnostic of anything beyond
   // "one feed item in, one ProviderArticle out."
-  return { url: item.link, title: item.title.trim(), snippet, source: '', publishedAt, imageUrl };
+  return { url: item.link, title: item.title.trim(), snippet, source: '', publishedAt, imageUrl, tags: feedCategories(item) };
+}
+
+/** The feed's own <category> labels, normalized to plain strings — rss-parser already parses these
+ * and they were previously discarded outright, which was the single biggest reason a custom source's
+ * stories almost never made it into any channel. Custom sources are a "loose" provider (see
+ * relevance.ts's isLooseProvider), so they must clear a higher bar than a normal provider: either a
+ * section match or TWO distinct category keywords in the text. Long-form investigative headlines
+ * ("The Bail Machine") routinely have neither, so with the feed's own labels thrown away there was
+ * effectively no path in at all. A ProPublica item tagged `Politics, Government, Congress` now clears
+ * that bar on its labels alone.
+ *
+ * Mapped to `tags` and deliberately NOT to `section`: tags only ever ADD evidence (they feed
+ * includeHitCount), whereas section additionally makes sectionIsForeign reachable — so a feed whose
+ * own label happened to be "Culture" would start taking a penalty in a Politics channel. Pure
+ * downside, and not something the feed's author meant to signal.
+ *
+ * Atom's `<category term="x"/>` parses to an object rather than a string (RSS 2.0's plain
+ * `<category>x</category>` gives a string), so both shapes are normalized here rather than trusting
+ * rss-parser's `string[]` typing, which only describes the RSS case. */
+function feedCategories(item: Parser.Item): string[] | null {
+  const raw: unknown = item.categories;
+  if (!Array.isArray(raw)) return null;
+  const names = raw
+    .map((c) => {
+      if (typeof c === 'string') return c;
+      if (c && typeof c === 'object') {
+        const attrTerm = (c as { $?: { term?: unknown } }).$?.term;
+        if (typeof attrTerm === 'string') return attrTerm;
+        const text = (c as { _?: unknown })._;
+        if (typeof text === 'string') return text;
+      }
+      return '';
+    })
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return names.length > 0 ? names : null;
 }
 
 /** Fetches and parses a known feed URL. `validators` (from the last successful fetch, if any) are

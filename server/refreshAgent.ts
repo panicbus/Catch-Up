@@ -9,6 +9,7 @@
 import { runProviders, getProviderStatus } from '../main/providers/registry';
 import { filterRelevant } from '../main/aiRelevance';
 import { channelProfile } from '../main/providers/channelProfiles';
+import { providerCountryCode } from '../main/providers/relevance';
 import { routeByCountry } from '../main/locality/politicsGeoRouting';
 import type { ProviderConfig, AiProvider } from '../main/providers/classifier';
 import * as dataStore from './stores/dataStore';
@@ -180,11 +181,16 @@ export async function runChannel(
   for (let i = 0; i < targets.length; i++) {
     const target = targets[i];
     try {
+      // The one place this is derived — the provider query below and the routeByCountry condition
+      // further down both read it, so the two can't disagree. See providerCountryCode's own comment
+      // for the "US Politics" bug that deriving them separately caused.
+      const scopedCountry = providerCountryCode(profile, channel.name, target.subchannelName, homeLocation);
       const fetched = await runProviders({
         topic: target.topic,
         channelId,
         subchannelId: target.subchannelId,
         category: profile.category,
+        countryCode: scopedCountry,
       });
       // channel.subchannels (the full list), not the possibly-staggered `subchannels` above: a
       // subchannel skipped this cycle by staggering still exists and is still a valid exemption for
@@ -210,8 +216,8 @@ export async function runChannel(
       // re-fetches every existing article for the whole channel and re-runs prune() on every call,
       // so calling it once per subchannel here would turn one refresh into that many redundant
       // round-trips to Postgres.
-      if (target.subchannelId === null && profile.category === 'politics' && homeLocation?.countryCode) {
-        const routed = routeByCountry(relevant, homeLocation.countryCode, channel.subchannels);
+      if (target.subchannelId === null && profile.category === 'politics' && scopedCountry) {
+        const routed = routeByCountry(relevant, scopedCountry, channel.subchannels);
         added += await articlesCache.mergeGroups(userId, channelId, [
           { subchannelId: null, articles: routed.main },
           ...[...routed.toSubchannel].map(([subchannelId, articles]) => ({ subchannelId, articles })),

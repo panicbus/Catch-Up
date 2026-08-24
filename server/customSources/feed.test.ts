@@ -51,6 +51,7 @@ describe('mapItem', () => {
       source: '',
       publishedAt: new Date('Sat, 16 Aug 2026 13:00:00 +0000').toISOString(),
       imageUrl: 'https://missionlocal.org/wp-content/uploads/housing.jpg',
+      tags: null,
     });
   });
 
@@ -63,6 +64,51 @@ describe('mapItem', () => {
     const mapped = mapItem({ link: 'https://example.com/y', title: 'Bare item' });
     expect(mapped?.snippet).toBeNull();
     expect(mapped?.imageUrl).toBeNull();
+  });
+});
+
+describe('mapItem — feed categories become tags (the custom-source relevance fix)', () => {
+  // These labels were parsed and then thrown away, which is why a custom source's stories almost
+  // never cleared the loose-provider bar (see feedCategories' own comment in feed.ts). A tagged
+  // ProPublica-style item clears it on its labels alone.
+  const TAGGED_RSS = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>The Bail Machine</title>
+      <link>https://propublica.org/article/bail-machine</link>
+      <category>Politics</category>
+      <category>Government</category>
+      <category>Criminal Justice</category>
+    </item>
+  </channel>
+</rss>`;
+
+  it('maps plain RSS <category> strings onto tags', async () => {
+    const feed = await new Parser().parseString(TAGGED_RSS);
+    expect(mapItem(feed.items[0])?.tags).toEqual(['Politics', 'Government', 'Criminal Justice']);
+  });
+
+  it("maps Atom's object-shaped categories (term attribute), which rss-parser's string[] typing doesn't describe", () => {
+    const mapped = mapItem({
+      link: 'https://example.com/atom',
+      title: 'Atom item',
+      categories: [{ $: { term: 'Politics' } }, { $: { term: 'Health' } }] as unknown as string[],
+    });
+    expect(mapped?.tags).toEqual(['Politics', 'Health']);
+  });
+
+  it('is null when the feed supplies no categories at all', () => {
+    expect(mapItem({ link: 'https://example.com/z', title: 'Untagged' })?.tags).toBeNull();
+  });
+
+  it('is null rather than an array of empties when every category is blank', () => {
+    const mapped = mapItem({
+      link: 'https://example.com/blank',
+      title: 'Blank tags',
+      categories: ['', '   '],
+    });
+    expect(mapped?.tags).toBeNull();
   });
 });
 

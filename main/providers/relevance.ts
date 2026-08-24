@@ -309,6 +309,45 @@ const LOCALITY_CATEGORIES: ReadonlySet<NewsCategory> = new Set([
   'technology',
 ]);
 
+/** Is this batch's channel (or its own subchannel) named after a place? Extracted so the locality
+ * gate below and providerCountryCode() below it can't drift apart on the question — they used to
+ * derive it independently, which is exactly how the routing bug described in providerCountryCode's
+ * comment got in. */
+function isPlaceNamedTarget(channelName: string, subchannelName: string | null): boolean {
+  return looksLikePlaceChannel(channelName) || (subchannelName != null && looksLikePlaceChannel(subchannelName));
+}
+
+/** The ISO 3166-1 alpha-2 country to narrow PROVIDER QUERIES to for this batch, or null to fetch
+ * worldwide exactly as before. Deliberately the same conditions that activate the locality signal in
+ * buildGateContext below, minus its topic/entity-channel branch: a topic channel gets locality
+ * SCORING but must not have its provider search narrowed by country, since a channel about a foreign
+ * band or a foreign event would then fetch nothing to score in the first place.
+ *
+ * Why this exists at all: the app was fetching worldwide English news and then discarding ~80% of it
+ * as foreign — measured on real cached Politics articles, the gate correctly keeps 62% and correctly
+ * rejects 38%. The filter was right; it was being fed the wrong material, and every discarded story
+ * had cost one request against a shared free-tier daily allowance that was being exhausted before
+ * 2am. Narrowing the ASK is what makes those scarce requests count.
+ *
+ * Exported so both refresh agents use this one function for the provider query AND for the condition
+ * on politicsGeoRouting's routeByCountry. Those two used to be derived separately, which produced a
+ * real (verified) bug: a channel named "US Politics" satisfies looksLikePlaceChannel, so the hard
+ * exclude was disabled for it while routeByCountry still ran — and routeByCountry DROPS a
+ * foreign-detected story that has no matching subchannel. Exclude off, routing on: silent data loss.
+ * Sharing one predicate makes that combination unrepresentable. */
+export function providerCountryCode(
+  profile: ChannelProfile,
+  channelName: string,
+  subchannelName: string | null,
+  homeLocation: { countryCode?: string } | null
+): string | null {
+  const cc = homeLocation?.countryCode;
+  if (!cc) return null;
+  if (profile.category == null || !LOCALITY_CATEGORIES.has(profile.category)) return null;
+  if (isPlaceNamedTarget(channelName, subchannelName)) return null;
+  return cc.toUpperCase();
+}
+
 function buildGateContext(ctx: RelevanceContext): GateContext {
   const allTerms = buildQueryTerms(ctx.topic).terms;
   // For a category channel the channel-name word(s) are ambiguous (they're why it's a category), so
@@ -339,8 +378,7 @@ function buildGateContext(ctx: RelevanceContext): GateContext {
   // valve from its parent's locality scoring (or, after this change, its parent's hard exclude).
   const localityEligible =
     ctx.homeLocation != null &&
-    !looksLikePlaceChannel(ctx.channelName) &&
-    !(ctx.subchannelName != null && looksLikePlaceChannel(ctx.subchannelName)) &&
+    !isPlaceNamedTarget(ctx.channelName, ctx.subchannelName) &&
     (ctx.profile.type === 'topic' || (ctx.profile.category != null && LOCALITY_CATEGORIES.has(ctx.profile.category)));
   const politicsExemptCountryCodes =
     ctx.profile.category === 'politics' && ctx.siblingSubchannelNames?.length
