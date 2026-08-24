@@ -286,3 +286,18 @@ model ProviderDailyBudget {
   @@id([userId, date])
   @@map("provider_daily_budget")
 }
+
+// GLOBAL, not per-user — unlike ProviderDailyBudget above (a per-account runaway guard), this tracks
+// how much of each provider's OWN shared daily allowance (NewsData 200/day, GNews 100/day, etc.) the
+// whole app has spent today, across every account combined. server/stores/providerUsage.ts reads this
+// once per cron run to compute how much a single run may still spend on each provider, so the day's
+// capacity is paced evenly across the day's runs instead of being available to whichever run gets
+// there first. `date` is a UTC DATE, same bucketing as ProviderDailyBudget/ClassificationDailyBudget.
+model ProviderUsage {
+  provider String
+  date     DateTime @db.Date
+  count    Int      @default(0)
+
+  @@id([provider, date])
+  @@map("provider_usage")
+}

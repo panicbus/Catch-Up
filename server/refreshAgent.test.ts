@@ -77,18 +77,18 @@ beforeEach(() => {
 
 describe('runAll — channel-level stagger (CHANNEL_STAGGER_FACTOR)', () => {
   it('runs only a subset of channels per cycle, and covers every channel exactly once over one full rotation', async () => {
-    const channels = manyChannels(22); // 2 full periods of the 11-cycle rotation
+    const channels = manyChannels(8); // 2 full periods of the current 4-cycle rotation
     vi.mocked(dataStore.getChannels).mockResolvedValue(channels);
 
     // The server derives its cycle from wall-clock time (Date.now() / 30min), unlike the desktop
     // app's ever-incrementing in-memory counter — real 30-minute-apart calls would each land on a
     // different cycle automatically, but calling it back-to-back in a test would hit the SAME
-    // cycle every time. Advance fake time by exactly one interval between calls so 11 calls here
-    // are equivalent to 11 real, consecutive scheduled runs.
+    // cycle every time. Advance fake time by exactly one interval between calls so 4 calls here
+    // are equivalent to 4 real, consecutive scheduled runs.
     vi.useFakeTimers();
     const perCycleTouched: Set<string>[] = [];
     try {
-      for (let i = 0; i < 11; i++) {
+      for (let i = 0; i < 4; i++) {
         vi.mocked(runProviders).mockClear();
         await runAll('user1');
         perCycleTouched.push(new Set(vi.mocked(runProviders).mock.calls.map((c) => c[0].channelId)));
@@ -113,7 +113,7 @@ describe('runAll — channel-level stagger (CHANNEL_STAGGER_FACTOR)', () => {
 
     vi.useFakeTimers();
     try {
-      for (let i = 0; i < 11; i++) {
+      for (let i = 0; i < 4; i++) {
         vi.mocked(runProviders).mockClear();
         await runChannel('user1', channel.id);
         expect(runProviders).toHaveBeenCalledTimes(1);
@@ -121,6 +121,31 @@ describe('runAll — channel-level stagger (CHANNEL_STAGGER_FACTOR)', () => {
       }
     } finally {
       vi.useRealTimers();
+    }
+  });
+});
+
+describe('runAll — the paced provider gate is threaded through, not built per call', () => {
+  it('passes the gate given to runAll straight through to every runProviders call', async () => {
+    const channels = manyChannels(1);
+    vi.mocked(dataStore.getChannels).mockResolvedValue(channels);
+    const gate = { allow: vi.fn(() => true), spent: vi.fn() };
+
+    await runAll('user1', gate);
+
+    for (const call of vi.mocked(runProviders).mock.calls) {
+      expect(call[1]).toBe(gate);
+    }
+  });
+
+  it('a manual runChannel call with no gate runs ungated, same as before this existed', async () => {
+    const channel = manyChannels(1)[0];
+    vi.mocked(dataStore.getChannels).mockResolvedValue([channel]);
+
+    await runChannel('user1', channel.id);
+
+    for (const call of vi.mocked(runProviders).mock.calls) {
+      expect(call[1]).toBeUndefined();
     }
   });
 });

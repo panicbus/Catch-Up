@@ -7,6 +7,7 @@
  * "Live-updates" section for why that's the right tradeoff here). */
 
 import { runProviders, getProviderStatus } from '../main/providers/registry';
+import type { ProviderGate } from '../main/providers/registry';
 import { filterRelevant } from '../main/aiRelevance';
 import { channelProfile } from '../main/providers/channelProfiles';
 import { providerCountryCode } from '../main/providers/relevance';
@@ -43,18 +44,27 @@ const STAGGER_FACTOR = 3;
  * not a hypothetical one — the news-provider API keys are shared across every account on this
  * server (see providerBudget.ts), and refreshing every channel across every account every 30
  * minutes burned a free key's entire daily allowance within the first couple of hours, leaving
- * every account with nothing new for the rest of the day. Each channel now lands roughly 48/11 ≈ 4
- * refreshes a day, spread across the whole day instead of front-loaded.
+ * every account with nothing new for the rest of the day.
  *
- * Deliberately 11, not a rounder number like 10 or 12: it must share no common factor with
- * STAGGER_FACTOR (3). Both this and the subchannel rotation below key off the SAME cycle number —
- * if the two factors shared a factor, a given channel would always land on the exact same `cycle %
- * STAGGER_FACTOR` remainder every single time it happened to run, permanently starving 2 of its 3
- * subchannel buckets rather than rotating through all of them. 11 and 3 are coprime, so the pair of
- * remainders still visits every combination over time (one full cycle every 33 runs, ~16.5 hours) —
- * verified by construction, not just by choosing a large prime and hoping. If either constant ever
- * changes, keep them coprime. Same constant, same reasoning, as main/refreshAgent.ts's copy. */
-const CHANNEL_STAGGER_FACTOR = 11;
+ * Relaxed from the original 11 to 4 (each channel now lands roughly 48/4 = 12 refreshes a day, once
+ * every ~2 hours) now that buildPacedGate (see providerUsage.ts, wired into runAll below) is the
+ * thing actually protecting the shared quota — it caps real provider SPEND directly, so this no
+ * longer has to be blunt enough to do that job alone. It still exists for a reason unrelated to
+ * quota: it spreads channels' fetches across the day rather than firing all of them in the same
+ * cron tick, which is its own kind of fairness (every channel gets a turn) independent of budget.
+ *
+ * Must share no common factor with STAGGER_FACTOR (3) — both this and the subchannel rotation below
+ * key off the SAME cycle number. If the two factors shared a factor, a given channel would always
+ * land on the exact same `cycle % STAGGER_FACTOR` remainder every single time it happened to run,
+ * permanently starving 2 of its 3 subchannel buckets rather than rotating through all of them. 4 and
+ * 3 are coprime, so the pair of remainders still visits every combination over time (one full cycle
+ * every 12 runs, ~6 hours). If either constant ever changes, keep them coprime.
+ *
+ * NOT mirrored in main/refreshAgent.ts (the desktop twin), which stays at 11: desktop has no
+ * buildPacedGate equivalent (no shared database, no cross-account quota to pace — the whole reason
+ * that store exists), so its own free-tier key is still only protected by this blunt throttle alone,
+ * and loosening it there would reopen the exact overshoot both files were originally built to fix. */
+const CHANNEL_STAGGER_FACTOR = 4;
 
 export interface RunResult {
   channelId: string | null;
@@ -84,7 +94,7 @@ function asSearchPhrase(name: string): string {
   return trimmed.includes(' ') ? `"${trimmed}"` : trimmed;
 }
 
-export async function runAll(userId: string): Promise<RunResult[]> {
+export async function runAll(userId: string, gate?: ProviderGate): Promise<RunResult[]> {
   const channels = await dataStore.getChannels(userId);
   const active = channels.filter((c) => !c.pausedUntil || new Date(c.pausedUntil).getTime() <= Date.now());
   const results: RunResult[] = [];
@@ -101,7 +111,14 @@ export async function runAll(userId: string): Promise<RunResult[]> {
   const due = active.filter((c) => hashToInt(c.id) % CHANNEL_STAGGER_FACTOR === cycle % CHANNEL_STAGGER_FACTOR);
   for (const channel of due) {
     try {
-      results.push(await runChannel(userId, channel.id, { staggerCycle: cycle }));
+      // `gate` is built ONCE per cron invocation, by the caller (server/cron/refresh.ts), and
+      // handed to every user's runAll call in that same run — never built here. This function is
+      // itself called once PER USER inside that job's own loop, so a gate built fresh on every
+      // call would let every account spend up to the same "per run" allowance independently,
+      // multiplying real spend by however many accounts exist instead of pacing it. Undefined for
+      // any other caller (there are none today), same as options?.gate below — ungated, exactly
+      // like the desktop app.
+      results.push(await runChannel(userId, channel.id, { staggerCycle: cycle, gate }));
     } catch (e) {
       if (!(e instanceof RateLimitedError)) throw e;
       // Out of budget for the day (never true for the owner — see providerBudget.ts). Record it
@@ -135,7 +152,7 @@ export async function runAll(userId: string): Promise<RunResult[]> {
 export async function runChannel(
   userId: string,
   channelId: string,
-  options?: { staggerCycle?: number }
+  options?: { staggerCycle?: number; gate?: ProviderGate }
 ): Promise<RunResult> {
   const channels = await dataStore.getChannels(userId);
   const channel = channels.find((c) => c.id === channelId);
@@ -185,13 +202,16 @@ export async function runChannel(
       // further down both read it, so the two can't disagree. See providerCountryCode's own comment
       // for the "US Politics" bug that deriving them separately caused.
       const scopedCountry = providerCountryCode(profile, channel.name, target.subchannelName, homeLocation);
-      const fetched = await runProviders({
-        topic: target.topic,
-        channelId,
-        subchannelId: target.subchannelId,
-        category: profile.category,
-        countryCode: scopedCountry,
-      });
+      const fetched = await runProviders(
+        {
+          topic: target.topic,
+          channelId,
+          subchannelId: target.subchannelId,
+          category: profile.category,
+          countryCode: scopedCountry,
+        },
+        options?.gate
+      );
       // channel.subchannels (the full list), not the possibly-staggered `subchannels` above: a
       // subchannel skipped this cycle by staggering still exists and is still a valid exemption for
       // the Politics hard exclude / a valid routing target below — staggering only decides which
