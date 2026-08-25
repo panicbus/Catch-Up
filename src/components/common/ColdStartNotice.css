@@ -94,3 +94,41 @@
     transform: translateY(0);
   }
 }
+
+/* The typewriter's blinking cursor — sits right after whichever line (main or note) is currently
+   being typed, see ColdStartNotice.tsx's caretInMain. Gone entirely once that stage's full text has
+   been revealed, rather than blinking indefinitely through the held final stage. */
+.cold-start-notice__caret {
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  margin-left: 1px;
+  background: currentColor;
+  vertical-align: text-bottom;
+  animation: cold-start-notice-caret-blink 0.8s step-end infinite;
+}
+
+@keyframes cold-start-notice-caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Standard visually-hidden technique — present for screen readers/text search, invisible and
+   zero-footprint for sighted layout. See ColdStartNotice.tsx for why the caption needs both this
+   AND an aria-hidden animated twin, rather than just one or the other. */
+.cold-start-notice__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

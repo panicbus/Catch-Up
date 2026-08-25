@@ -1,0 +1,48 @@
+/* Same grid-rows accordion trick as SettingsAccordion (one field, not a long list — the
+   layout-cost concern that ruled it out for NewsCard's per-item expand doesn't apply here). Two of
+   these sit stacked, exactly one open at a time: the empty/editable form, or the saved summary. */
+.digest-email-field__panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease;
+}
+.digest-email-field__panel--open {
+  grid-template-rows: 1fr;
+}
+.digest-email-field__panel-inner {
+  overflow: hidden;
+}
+
+.digest-email-field__confirm {
+  margin: 8px 0 0;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  animation: digest-email-field-fade-in 0.2s ease;
+}
+
+.digest-email-field__summary {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.digest-email-field__remove {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@keyframes digest-email-field-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

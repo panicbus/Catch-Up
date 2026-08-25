@@ -1,13 +1,12 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings';
-import { useSettleFieldOnLoad } from '../../hooks/useSettleFieldOnLoad';
 import { useChannels } from '../../hooks/useChannels';
 import { useAiConfig } from '../../hooks/useAiConfig';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { Button } from '../common/Button';
 import { SettingsAccordion } from './SettingsAccordion';
 import { ChannelChecklist } from './ChannelChecklist';
-import { EMAIL_PATTERN } from '../../utils/email';
+import { DigestEmailField } from './DigestEmailField';
 import type { AppSettings } from '../../../ipc-contract';
 import './DigestSetting.css';
 
@@ -29,18 +28,10 @@ const SUPPORTED_TIMEZONES: string[] | null =
   typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : null;
 
 function DigestSettingInner() {
-  const { settings, update, loading } = useSettings();
+  const { settings, update } = useSettings();
   const { channels } = useChannels();
   const { config: aiConfig, loading: aiConfigLoading, setProvider } = useAiConfig();
   const currentUser = useCurrentUser();
-  // Same stale-initial-state bug as LocationSetting.tsx's `text`/`editing` — see useSettleFieldOnLoad
-  // for the fix and why it backs off once the field's been typed into.
-  const [emailDraft, setEmailDraft] = useState(settings.digestEmailOverride ?? '');
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const hasInteractedRef = useRef(false);
-  useSettleFieldOnLoad(loading, hasInteractedRef.current, () => {
-    setEmailDraft(settings.digestEmailOverride ?? '');
-  });
   // Closed by default — clicking "Turn on" forces it open (see enable() below) since that's
   // exactly the moment there's something worth looking at; toggling it after that is otherwise
   // just the accordion's own normal open/close, via onOpenChange.
@@ -57,11 +48,12 @@ function DigestSettingInner() {
     // The digest now only ever sends to this field — no more falling back to the sign-in email when
     // it's blank (see server/cron/digest.ts) — so turning the digest on with nothing here yet would
     // silently configure something that can never actually send. Pre-filling with the account's own
-    // email keeps "Turn on" a genuine one-step action; explicitly clearing the field afterward (in
-    // the accordion below) is what opts back out, same as before.
+    // email keeps "Turn on" a genuine one-step action; DigestEmailField reads the pre-filled value
+    // straight off settings (see its own doc comment), so it renders already-collapsed rather than
+    // replaying the "just saved" animation for a value the user didn't type. Removing it afterward
+    // (via DigestEmailField's own Remove link) is what opts back out, same as before.
     if (!settings.digestEmailOverride && currentUser?.email) {
       updates.digestEmailOverride = currentUser.email;
-      setEmailDraft(currentUser.email);
     }
     update(updates);
     // The recap needs AI configured to actually write anything — turning the digest on also turns
@@ -78,16 +70,6 @@ function DigestSettingInner() {
         ? settings.digestChannelIds.filter((id) => id !== channelId)
         : [...settings.digestChannelIds, channelId],
     });
-  };
-
-  const saveEmail = () => {
-    const trimmed = emailDraft.trim();
-    if (trimmed && !EMAIL_PATTERN.test(trimmed)) {
-      setEmailError("That doesn't look like a valid email address.");
-      return;
-    }
-    setEmailError(null);
-    update({ digestEmailOverride: trimmed || null });
   };
 
   return (
@@ -175,46 +157,16 @@ function DigestSettingInner() {
               />
             </div>
 
-            <div className="digest-setting__field">
-              {/* Required now, not optional — the digest no longer falls back to the sign-in email
-                  (see server/cron/digest.ts), so an empty field here means the digest is configured
-                  but silently never sends. Pre-filled with the account email the first time the
-                  digest is turned on (see enable() above); clearing it and saving is the deliberate
-                  way to opt back out without turning the whole feature off. */}
-              <label className="digest-setting__field-label" htmlFor="digest-email">
-                Digest email address
-              </label>
-              <p className="digest-setting__field-hint">
-                Where your daily digest gets sent. Clear this and save to stop receiving it.
-              </p>
-              <div className="digest-setting__email-row">
-                <input
-                  id="digest-email"
-                  className="digest-setting__input"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={emailDraft}
-                  onChange={(e) => {
-                    hasInteractedRef.current = true;
-                    setEmailDraft(e.target.value);
-                    if (emailError) setEmailError(null);
-                  }}
-                  onBlur={saveEmail}
-                />
-                {/* Blur-only saving meant a typed address was silently lost if the page closed
-                    before the input ever lost focus — an explicit action that doesn't depend on
-                    that, matching every other free-text Settings field (LocationSetting,
-                    TrustedSourcesSetting both use a real Save/Add button, not blur alone). */}
-                <Button
-                  size="sm"
-                  onClick={saveEmail}
-                  disabled={emailDraft.trim() === (settings.digestEmailOverride ?? '')}
-                >
-                  Save
-                </Button>
-              </div>
-              {emailError && <p className="digest-setting__error">{emailError}</p>}
-            </div>
+            {/* Required now, not optional — the digest no longer falls back to the sign-in email
+                (see server/cron/digest.ts), so no email here means the digest is configured but
+                silently never sends. Pre-filled with the account email the first time the digest
+                is turned on (see enable() above); the Remove link inside is the deliberate way to
+                opt back out without turning the whole feature off. */}
+            <DigestEmailField
+              email={settings.digestEmailOverride}
+              onSave={(value) => update({ digestEmailOverride: value })}
+              onRemove={() => update({ digestEmailOverride: null })}
+            />
           </div>
         </SettingsAccordion>
       )}
