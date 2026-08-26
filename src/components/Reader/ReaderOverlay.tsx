@@ -27,7 +27,7 @@ const REASON_COPY: Record<ReaderUnavailableReason, string> = {
   unsupported: "This link can't be previewed here.",
   'too-short': "Couldn't pull a readable version of this story.",
   failed: 'This story is not available to read on Catch Up. Visit the site instead.',
-  busy: 'The reader is busy right now — try again in a moment.',
+  busy: 'The reader is busy right now. Try again in a moment.',
 };
 
 /** What NewsCard.tsx already knows about the story before the fetch even starts — passed through
@@ -226,7 +226,7 @@ function ReaderOverlayInner() {
               </div>
               {state.data.partial && (
                 <p className="reader-overlay__notice">
-                  This looks like a preview — the full story may be behind a subscription.
+                  This looks like a preview. The full story may be behind a subscription.
                 </p>
               )}
               <div className="reader-overlay__body">
@@ -244,7 +244,7 @@ function ReaderOverlayInner() {
 
           {state.phase === 'rate-limited' && (
             <Fallback
-              message={`You've opened a lot of stories today — resets in ${formatTimeUntil(state.resetsAt ?? '')}.`}
+              message={`You've opened a lot of stories today. Resets in ${formatTimeUntil(state.resetsAt ?? '')}.`}
               snippet={hint.snippet}
               url={originalUrl}
               source={sourceLabel}

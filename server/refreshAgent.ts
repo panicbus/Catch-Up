@@ -128,7 +128,7 @@ export async function runAll(userId: string, gate?: ProviderGate): Promise<RunRe
         channelId: channel.id,
         added: 0,
         providersRun: [],
-        errors: [`Daily refresh limit reached — resets ${e.resetsAt.toISOString()}.`],
+        errors: [`Daily refresh limit reached. Resets ${e.resetsAt.toISOString()}.`],
         rateLimitedProviders: [],
       });
       break;

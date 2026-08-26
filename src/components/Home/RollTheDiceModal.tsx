@@ -49,7 +49,7 @@ export function RollTheDiceModal({ onClose }: RollTheDiceModalProps) {
       {article === undefined ? (
         <div className="roll-the-dice-modal__loading">Shuffling…</div>
       ) : article === null ? (
-        <div className="roll-the-dice-modal__empty">No unread stories anywhere right now — check back later.</div>
+        <div className="roll-the-dice-modal__empty">No unread stories anywhere right now. Check back later.</div>
       ) : (
         // Keyed to force a fresh mount per shuffle, resetting NewsCard's local expand/exit state.
         <div className="roll-the-dice-modal__card" key={renderKey}>

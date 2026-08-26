@@ -110,7 +110,7 @@ export function PauseChannelControl({ channelId, pausedUntil, variant = 'button'
         type="button"
         className={`pause-control pause-control--${variant} pause-control--paused`}
         onClick={resume}
-        title="Paused — click to resume"
+        title="Paused, click to resume"
         aria-label="Resume channel"
       >
         <PlayIcon />

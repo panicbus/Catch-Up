@@ -153,7 +153,7 @@ function DigestSettingInner() {
                 channels={channels}
                 isChecked={(id) => settings.digestChannelIds.includes(id)}
                 onToggle={toggleChannel}
-                emptyLabel="Add a channel first — there's nothing to include yet."
+                emptyLabel="Add a channel first. There's nothing to include yet."
               />
             </div>
 

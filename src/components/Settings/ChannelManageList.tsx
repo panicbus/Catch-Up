@@ -74,7 +74,7 @@ export function ChannelManageList() {
         // channelsStore.mutate already rolled the optimistic row back and re-synced on failure —
         // this is just the user-visible half of that, which was previously silent (a cap error, in
         // particular, would otherwise look like the button just didn't work).
-        setAddError(e instanceof Error ? e.message : 'Could not create that channel — try again.');
+        setAddError(e instanceof Error ? e.message : 'Could not create that channel. Try again.');
       });
     setDraft('');
   };

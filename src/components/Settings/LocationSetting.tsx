@@ -111,7 +111,7 @@ export function LocationSetting() {
           </div>
           {status === 'not-found' && (
             <p className="location-setting__error">
-              City not found — try “City, State” or “City, Country”.
+              City not found. Try “City, State” or “City, Country”.
             </p>
           )}
         </>

@@ -27,7 +27,7 @@ function escapeHtml(s: string): string {
 
 export function digestSubject(content: DigestContent): string {
   const totalStories = content.channels.reduce((n, c) => n + c.stories.length, 0);
-  return `Your Catch Up digest — ${totalStories} ${totalStories === 1 ? 'story' : 'stories'}`;
+  return `Your Catch Up digest: ${totalStories} ${totalStories === 1 ? 'story' : 'stories'}`;
 }
 
 export function renderDigestEmail(content: DigestContent): string {
@@ -65,7 +65,7 @@ export function renderDigestEmail(content: DigestContent): string {
   ${summaryHtml}
   ${channelsHtml}
   <p style="margin:32px 0 0;padding-top:16px;border-top:1px solid #e5e5e5;font-size:12px;color:#999;">
-    <a href="${APP_URL}/#/settings" style="color:#999;">Open Catch Up settings</a> — change your digest settings or turn it off anytime.
+    <a href="${APP_URL}/#/settings" style="color:#999;">Open Catch Up settings</a> to change your digest settings or turn it off anytime.
   </p>
 </div>`;
 }

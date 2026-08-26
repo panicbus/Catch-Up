@@ -361,8 +361,8 @@ export function ChannelPage() {
         setRefreshing(false);
         setRefreshNote(
           e instanceof RateLimitError
-            ? `Daily refresh limit reached — resets in ${formatTimeUntil(e.resetsAt ?? '')}.`
-            : 'Refresh failed — try again.'
+            ? `Daily refresh limit reached. Resets in ${formatTimeUntil(e.resetsAt ?? '')}.`
+            : 'Refresh failed. Try again.'
         );
         noteTimerRef.current = setTimeout(() => {
           if (channelIdRef.current === requestedChannelId) setRefreshNote(null);

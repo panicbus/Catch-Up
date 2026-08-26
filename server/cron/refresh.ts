@@ -18,6 +18,7 @@ import { runAll, type RunResult } from '../refreshAgent';
 import { remainingSearchBudget } from '../stores/providerBudget';
 import { buildPacedGate } from '../stores/providerUsage';
 import type { ProviderGate } from '../../main/providers/registry';
+import { shouldSkipOffHoursRun } from './refreshSchedule';
 
 interface UserSummary {
   email: string;
@@ -30,6 +31,15 @@ interface UserSummary {
 
 (async () => {
   const startedAt = Date.now();
+
+  // Only the scheduler's own runs get throttled. A manual workflow_dispatch (or running this
+  // script directly while testing) always goes through, so off-hours never silently swallows a
+  // deliberate on-demand refresh.
+  if (process.env.GITHUB_EVENT_NAME === 'schedule' && shouldSkipOffHoursRun()) {
+    console.log('[cron] off-hours (3am-6am ET): skipping this half-hour to halve the fetch rate');
+    return;
+  }
+
   const users = await prisma.user.findMany({
     orderBy: { isOwner: 'desc' },
     select: { id: true, email: true, isOwner: true },

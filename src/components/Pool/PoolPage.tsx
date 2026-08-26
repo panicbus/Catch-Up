@@ -186,7 +186,7 @@ export function PoolPage() {
           removeOnRead
           removeCardOnUnbookmark={false}
           swipeToastText={(channelName) =>
-            channelName ? `Marked read — filed to ${channelName}.` : 'Marked read.'
+            channelName ? `Marked read, filed to ${channelName}.` : 'Marked read.'
           }
           trustedSourceDomains={trustedSourceDomains}
           onToggleTrust={onToggleTrust}

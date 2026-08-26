@@ -30,7 +30,7 @@ export function TrustToggle({ domain, trusted, onToggle }: TrustToggleProps) {
       onPointerDown={onPointerDown}
       aria-label={trusted ? `Untrust ${domain}` : `Trust ${domain}`}
       aria-pressed={trusted}
-      title={trusted ? 'Trusted source — its stories rank higher' : 'Mark this source as trusted'}
+      title={trusted ? 'Trusted source: its stories rank higher' : 'Mark this source as trusted'}
     >
       <svg
         viewBox="0 0 20 20"

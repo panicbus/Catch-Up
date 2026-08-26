@@ -19,7 +19,7 @@ interface OnboardingWizardProps {
 // other web-only settings section uses (DigestSetting.tsx, CustomSourcesSetting.tsx).
 const isWeb = typeof window !== 'undefined' && !window.api;
 
-type Step = 'topics' | 'location' | 'email' | 'readStatus';
+type Step = 'topics' | 'location' | 'email';
 type LocationStatus = 'idle' | 'checking' | 'not-found';
 type ResolvedHomeLocation = { query: string; label: string; lat: number; lon: number; countryCode: string };
 
@@ -44,11 +44,10 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   const currentUser = useCurrentUser();
   const [emailText, setEmailText] = useState(() => currentUser?.email ?? '');
   const [emailError, setEmailError] = useState<string | null>(null);
-  // Carries the location/email steps' results forward to finish(), called only from the final
-  // readStatus step now — real refs (not component-body state) since each setStep() below re-renders
-  // this component well before finish() is ever actually called with them.
+  // Carries the location step's result forward to the email step, which is the one that actually
+  // calls finish(). A real ref (not component-body state) since setStep('email') below re-renders
+  // this component well before finish() is ever actually called with it.
   const pendingLocationRef = useRef<ResolvedHomeLocation | undefined>(undefined);
-  const pendingEmailRef = useRef<string | undefined>(undefined);
   // Same "turn on AI filtering automatically if it isn't already" behavior DigestSetting.tsx's own
   // enable() has — the recap needs AI configured to write anything, and this is the other place the
   // digest gets turned on, so it needs the same behavior or an onboarding-opted-in digest silently
@@ -90,7 +89,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       onComplete();
     } catch (e) {
       setSubmitting(false);
-      setError('Something went wrong finishing setup — try again.');
+      setError('Something went wrong finishing setup. Try again.');
       console.error('[OnboardingWizard] finish failed', e);
     }
   };
@@ -110,29 +109,29 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
     advanceFromLocation({ query, ...resolved });
   };
 
-  // Shared by both the location step's Skip and Continue paths: either way, go to the email step on
-  // web (which then itself lands on readStatus), or straight to readStatus on desktop (which has no
-  // digest to offer).
+  // Shared by both the location step's Skip and Continue paths. On web, carries the location
+  // forward to the email step, which is the one that actually calls finish(). Desktop has no
+  // digest to offer, so this is the final step there: call finish() directly.
   const advanceFromLocation = (homeLocation?: ResolvedHomeLocation) => {
-    pendingLocationRef.current = homeLocation;
-    setStep(isWeb ? 'email' : 'readStatus');
+    if (isWeb) {
+      pendingLocationRef.current = homeLocation;
+      setStep('email');
+    } else {
+      void finish(homeLocation);
+    }
   };
 
   const onLocationKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') void handleLocationContinue();
   };
 
-  // readStatus, not finish() directly — see that step's own comment for why every path (desktop's
-  // location step, web's email step, either one's Skip) now funnels through one final screen before
-  // anything is actually submitted.
   const handleEmailContinue = () => {
     const trimmed = emailText.trim();
     if (trimmed && !EMAIL_PATTERN.test(trimmed)) {
       setEmailError("That doesn't look like a valid email address.");
       return;
     }
-    pendingEmailRef.current = trimmed || undefined;
-    setStep('readStatus');
+    void finish(pendingLocationRef.current, trimmed || undefined);
   };
 
   const onEmailKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -166,11 +165,11 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
           <>
             <p className="onboarding__prompt">Add your city (state) and country.</p>
             <p className="onboarding__hint">
-              This is used to filter out local stories from places you don’t follow — you can change
+              This is used to filter out local stories from places you don’t follow. You can change
               or clear it anytime in Settings.
             </p>
             <input
-              className="onboarding__text-input onboarding__text-input--location"
+              className="onboarding__text-input onboarding__text-input--spaced"
               type="text"
               placeholder="e.g. Alameda, CA"
               value={locationText}
@@ -183,18 +182,18 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
               autoFocus
             />
             {locationStatus === 'not-found' && (
-              <p className="onboarding__error">City not found — try “City, State” or “City, Country”.</p>
+              <p className="onboarding__error">City not found. Try “City, State” or “City, Country”.</p>
             )}
             <div className="onboarding__footer">
-              <Button variant="ghost" onClick={() => advanceFromLocation()}>
+              <Button variant="ghost" disabled={submitting} onClick={() => advanceFromLocation()}>
                 Skip for now
               </Button>
               <Button
                 variant="success"
-                disabled={locationStatus === 'checking'}
+                disabled={submitting || locationStatus === 'checking'}
                 onClick={() => void handleLocationContinue()}
               >
-                {locationStatus === 'checking' ? 'Checking…' : 'Continue'}
+                {locationStatus === 'checking' ? 'Checking…' : submitting ? 'Setting up…' : 'Continue'}
               </Button>
             </div>
           </>
@@ -204,11 +203,11 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
           <>
             <p className="onboarding__prompt">Get a daily digest email?</p>
             <p className="onboarding__hint">
-              A short written recap plus your top stories, once a day. Leave this blank to skip it —
-              you can turn it on anytime in Settings.
+              A short written recap plus your top stories, once a day. Leave this blank to skip it.
+              You can turn it on anytime in Settings.
             </p>
             <input
-              className="onboarding__text-input"
+              className="onboarding__text-input onboarding__text-input--spaced"
               type="email"
               placeholder="you@example.com"
               value={emailText}
@@ -222,34 +221,11 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
             />
             {emailError && <p className="onboarding__error">{emailError}</p>}
             <div className="onboarding__footer">
-              <Button variant="ghost" onClick={() => setStep('readStatus')}>
+              <Button variant="ghost" disabled={submitting} onClick={() => void finish(pendingLocationRef.current)}>
                 Skip for now
               </Button>
-              <Button variant="success" onClick={handleEmailContinue}>
-                Continue
-              </Button>
-            </div>
-          </>
-        )}
-
-        {/* Purely informational, one screen, no Skip — every prior path (desktop's location step,
-            web's email step, either one's own Skip) funnels through here before finish() is ever
-            called. The gray/archived treatment reads as "done, don't touch" at a glance; this is
-            the one thing in the whole wizard that heads that off before it's ever seen for real. */}
-        {step === 'readStatus' && (
-          <>
-            <p className="onboarding__prompt">One more thing about reading stories</p>
-            <p className="onboarding__hint">
-              Once you read a story it fades and moves down into an archive — it's still fully
-              tappable there, reading it just clears it out of your way, it doesn't lock it.
-            </p>
-            <div className="onboarding__footer">
-              <Button
-                variant="success"
-                disabled={submitting}
-                onClick={() => void finish(pendingLocationRef.current, pendingEmailRef.current)}
-              >
-                {submitting ? 'Setting up…' : 'Finish'}
+              <Button variant="success" disabled={submitting} onClick={handleEmailContinue}>
+                {submitting ? 'Setting up…' : 'Continue'}
               </Button>
             </div>
           </>

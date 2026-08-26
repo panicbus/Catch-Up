@@ -26,9 +26,9 @@ const ERROR_COPY: Record<Exclude<AddCustomSourceResult, { ok: true }>['reason'],
   'not-found':
     "Couldn't find a news feed at that address. If you know the site's direct feed link (often something like example.com/feed or example.com/rss), try pasting that instead.",
   unreachable: "Couldn't reach that address right now. Double-check the URL and try again.",
-  empty: 'Found a feed there, but it’s empty right now — nothing to add yet.',
+  empty: 'Found a feed there, but it’s empty right now; nothing to add yet.',
   duplicate: 'You’ve already added this source.',
-  'limit-reached': 'You can add up to 10 sources — remove one to add another.',
+  'limit-reached': 'You can add up to 10 sources; remove one to add another.',
 };
 
 function CustomSourcesSettingInner() {
@@ -75,7 +75,7 @@ function CustomSourcesSettingInner() {
         setAddError(ERROR_COPY[result.reason]);
       }
     } catch {
-      setAddError('Something went wrong adding that source — try again.');
+      setAddError('Something went wrong adding that source. Try again.');
     } finally {
       setAdding(false);
     }
@@ -142,9 +142,8 @@ function CustomSourcesSettingInner() {
     <div className="custom-sources">
       <p className="custom-sources__hint">
         Add a news site's own feed and its stories will be sorted into whichever of your channels
-        they actually fit, the same way every other source already works. Start typing a
-        well-known publisher's name to pick it from the list, or paste any site's address directly
-        — you don't need to include "https://" or "www.".
+        they fit. Start typing a well-known publisher's name to pick it from the list, or paste
+        any site's address directly. <strong>Note: not all sources will be viable for Catch Up</strong>.
       </p>
 
       <div className="custom-sources__add-row-wrap">

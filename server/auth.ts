@@ -37,7 +37,7 @@ export async function resolveUser(req: Request): Promise<string> {
   });
   if (!session) throw new UnauthorizedError();
   if (session.expiresAt.getTime() <= Date.now()) {
-    throw new UnauthorizedError('Your session has expired — please sign in again.');
+    throw new UnauthorizedError('Your session has expired. Please sign in again.');
   }
   return session.userId;
 }

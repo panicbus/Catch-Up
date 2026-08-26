@@ -26,7 +26,7 @@ export function ProviderStatusPanel() {
           <span>{p.label}</span>
           <span style={{ color: 'var(--text-faint)' }}>
             {p.rateLimited
-              ? 'Rate limited — pausing for a bit'
+              ? 'Rate limited, pausing for a bit'
               : p.configured
                 ? 'Configured'
                 : 'Not configured'}

@@ -357,7 +357,7 @@ function ReadArchive({
       {/* The fade/gray treatment reads as "done, don't touch" to a first-time user — it isn't;
           every card below still opens, expands, and un-reads exactly like an unread one. */}
       <p className="news-feed__archive-subtitle">
-        Still fully tappable — reading a story just moves it here, it doesn't lock it.
+        Still fully tappable. Reading a story just moves it here, it doesn't lock it.
       </p>
       {[...byDay.entries()].map(([dateKey, dayArticles]) => {
         const isOpen = openDate === dateKey;

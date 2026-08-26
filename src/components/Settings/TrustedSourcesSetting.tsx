@@ -36,7 +36,7 @@ export function TrustedSourcesSetting() {
   const addDomain = () => {
     const domain = normalizeDomain(draft);
     if (!domain) {
-      setError("That doesn't look like a domain — try something like reuters.com.");
+      setError("That doesn't look like a domain. Try something like reuters.com.");
       return;
     }
     setError(null);

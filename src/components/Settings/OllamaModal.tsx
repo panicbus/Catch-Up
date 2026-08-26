@@ -40,7 +40,7 @@ export function OllamaModal({ currentModel, onTest, onSave, onClose }: OllamaMod
     <Modal title="Use Ollama for AI filtering" onClose={onClose} contentClassName="api-key-modal">
       <div className="modal__body">
         <p className="api-key-modal__lead">
-          Ollama runs a model locally on this Mac — free, and nothing ever leaves your machine. It
+          Ollama runs a model locally on this Mac, free, and nothing ever leaves your machine. It
           only works here in the desktop app (the hosted website can’t reach it), and it needs{' '}
           <a href="https://ollama.com" target="_blank" rel="noreferrer">
             Ollama
@@ -65,7 +65,7 @@ export function OllamaModal({ currentModel, onTest, onSave, onClose }: OllamaMod
         </p>
         {result && (
           <p className={result.ok ? 'api-key-modal__note' : 'api-key-modal__error'}>
-            {result.ok ? 'Connected — that model is ready.' : result.error}
+            {result.ok ? 'Connected. That model is ready.' : result.error}
           </p>
         )}
       </div>

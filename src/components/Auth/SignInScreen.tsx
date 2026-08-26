@@ -31,7 +31,7 @@ export function SignInScreen() {
           callback: (response) => {
             setError(null);
             void loginWithGoogle(response.credential).catch((e: unknown) => {
-              setError(e instanceof Error ? e.message : 'Could not sign in — please try again.');
+              setError(e instanceof Error ? e.message : 'Could not sign in. Please try again.');
             });
           },
         });

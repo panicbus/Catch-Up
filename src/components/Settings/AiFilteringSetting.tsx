@@ -21,7 +21,7 @@ const PROVIDER_LABELS: Record<AiProvider, string> = {
 const PROVIDER_NOTES: Record<AiProvider, string> = {
   gemini: 'Most accurate filtering, less snappy.',
   groq: 'Quick filtering, slightly less precise.',
-  ollama: 'Ollama — runs locally on this Mac, no key and no cost, but only filters while Catch Up and Ollama are both running here.',
+  ollama: 'Ollama: runs locally on this Mac, no key and no cost, but only filters while Catch Up and Ollama are both running here.',
 };
 
 /** The AI relevance-filtering provider picker: off, or one of Gemini / Groq / Ollama (desktop-only).

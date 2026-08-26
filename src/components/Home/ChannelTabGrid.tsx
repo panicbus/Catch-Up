@@ -850,7 +850,7 @@ export function ChannelTabGrid({ channels, counts }: ChannelTabGridProps) {
                 <button
                   type="button"
                   className="channel-tile__ctrl channel-tile__ctrl--clear"
-                  title="Clear — mark all read"
+                  title="Clear: mark all read"
                   aria-label={`Clear ${channel.name}`}
                   onClick={(e) => clear(e, channel.id)}
                 >
