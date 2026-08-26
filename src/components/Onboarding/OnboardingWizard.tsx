@@ -19,7 +19,7 @@ interface OnboardingWizardProps {
 // other web-only settings section uses (DigestSetting.tsx, CustomSourcesSetting.tsx).
 const isWeb = typeof window !== 'undefined' && !window.api;
 
-type Step = 'topics' | 'location' | 'email';
+type Step = 'topics' | 'location' | 'email' | 'readStatus';
 type LocationStatus = 'idle' | 'checking' | 'not-found';
 type ResolvedHomeLocation = { query: string; label: string; lat: number; lon: number; countryCode: string };
 
@@ -44,10 +44,11 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   const currentUser = useCurrentUser();
   const [emailText, setEmailText] = useState(() => currentUser?.email ?? '');
   const [emailError, setEmailError] = useState<string | null>(null);
-  // Carries the location step's result forward to finish() once the email step (which comes after
-  // it) is done — a real ref (not component-body state) since setStep('email') below re-renders this
-  // component before finish() ever gets called with it.
+  // Carries the location/email steps' results forward to finish(), called only from the final
+  // readStatus step now — real refs (not component-body state) since each setStep() below re-renders
+  // this component well before finish() is ever actually called with them.
   const pendingLocationRef = useRef<ResolvedHomeLocation | undefined>(undefined);
+  const pendingEmailRef = useRef<string | undefined>(undefined);
   // Same "turn on AI filtering automatically if it isn't already" behavior DigestSetting.tsx's own
   // enable() has — the recap needs AI configured to write anything, and this is the other place the
   // digest gets turned on, so it needs the same behavior or an onboarding-opted-in digest silently
@@ -110,27 +111,28 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   };
 
   // Shared by both the location step's Skip and Continue paths: either way, go to the email step on
-  // web, or finish outright on desktop (which has no digest to offer).
+  // web (which then itself lands on readStatus), or straight to readStatus on desktop (which has no
+  // digest to offer).
   const advanceFromLocation = (homeLocation?: ResolvedHomeLocation) => {
-    if (!isWeb) {
-      void finish(homeLocation);
-      return;
-    }
     pendingLocationRef.current = homeLocation;
-    setStep('email');
+    setStep(isWeb ? 'email' : 'readStatus');
   };
 
   const onLocationKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') void handleLocationContinue();
   };
 
+  // readStatus, not finish() directly — see that step's own comment for why every path (desktop's
+  // location step, web's email step, either one's Skip) now funnels through one final screen before
+  // anything is actually submitted.
   const handleEmailContinue = () => {
     const trimmed = emailText.trim();
     if (trimmed && !EMAIL_PATTERN.test(trimmed)) {
       setEmailError("That doesn't look like a valid email address.");
       return;
     }
-    void finish(pendingLocationRef.current, trimmed || undefined);
+    pendingEmailRef.current = trimmed || undefined;
+    setStep('readStatus');
   };
 
   const onEmailKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -168,7 +170,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
               or clear it anytime in Settings.
             </p>
             <input
-              className="onboarding__text-input"
+              className="onboarding__text-input onboarding__text-input--location"
               type="text"
               placeholder="e.g. Alameda, CA"
               value={locationText}
@@ -177,7 +179,6 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                 if (locationStatus === 'not-found') setLocationStatus('idle');
               }}
               onKeyDown={onLocationKeyDown}
-              disabled={submitting}
               spellCheck={false}
               autoFocus
             />
@@ -185,15 +186,15 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
               <p className="onboarding__error">City not found — try “City, State” or “City, Country”.</p>
             )}
             <div className="onboarding__footer">
-              <Button variant="ghost" disabled={submitting} onClick={() => advanceFromLocation()}>
+              <Button variant="ghost" onClick={() => advanceFromLocation()}>
                 Skip for now
               </Button>
               <Button
                 variant="success"
-                disabled={submitting || locationStatus === 'checking'}
+                disabled={locationStatus === 'checking'}
                 onClick={() => void handleLocationContinue()}
               >
-                {submitting ? 'Setting up…' : locationStatus === 'checking' ? 'Checking…' : 'Continue'}
+                {locationStatus === 'checking' ? 'Checking…' : 'Continue'}
               </Button>
             </div>
           </>
@@ -216,20 +217,38 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                 if (emailError) setEmailError(null);
               }}
               onKeyDown={onEmailKeyDown}
-              disabled={submitting}
               spellCheck={false}
               autoFocus
             />
             {emailError && <p className="onboarding__error">{emailError}</p>}
             <div className="onboarding__footer">
-              <Button
-                variant="ghost"
-                disabled={submitting}
-                onClick={() => void finish(pendingLocationRef.current)}
-              >
+              <Button variant="ghost" onClick={() => setStep('readStatus')}>
                 Skip for now
               </Button>
-              <Button variant="success" disabled={submitting} onClick={handleEmailContinue}>
+              <Button variant="success" onClick={handleEmailContinue}>
+                Continue
+              </Button>
+            </div>
+          </>
+        )}
+
+        {/* Purely informational, one screen, no Skip — every prior path (desktop's location step,
+            web's email step, either one's own Skip) funnels through here before finish() is ever
+            called. The gray/archived treatment reads as "done, don't touch" at a glance; this is
+            the one thing in the whole wizard that heads that off before it's ever seen for real. */}
+        {step === 'readStatus' && (
+          <>
+            <p className="onboarding__prompt">One more thing about reading stories</p>
+            <p className="onboarding__hint">
+              Once you read a story it fades and moves down into an archive — it's still fully
+              tappable there, reading it just clears it out of your way, it doesn't lock it.
+            </p>
+            <div className="onboarding__footer">
+              <Button
+                variant="success"
+                disabled={submitting}
+                onClick={() => void finish(pendingLocationRef.current, pendingEmailRef.current)}
+              >
                 {submitting ? 'Setting up…' : 'Finish'}
               </Button>
             </div>

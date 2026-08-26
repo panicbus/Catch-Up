@@ -1,10 +1,16 @@
-import { useEffect, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { getCustomSources, addCustomSource, deleteCustomSource, retryCustomSource } from '../../services/api';
 import { relativeTime } from '../../services/formatters';
 import { Button } from '../common/Button';
 import { SettingsAccordion } from './SettingsAccordion';
+import { CURATED_SOURCES, type CuratedSource } from '../../data/curatedSources';
 import type { AddCustomSourceResult, CustomSource } from '../../../ipc-contract';
 import './CustomSourcesSetting.css';
+
+// Below this, matching is more likely to surface noise than anything the user meant (e.g. a single
+// "n" would match dozens of names) than to actually help.
+const MIN_QUERY_LENGTH = 2;
+const MAX_SUGGESTIONS = 8;
 
 // Same guard as every other web-only settings section (AccountSection.tsx) — custom sources are
 // stored server-side against a signed-in account, with no desktop equivalent (see
@@ -31,6 +37,10 @@ function CustomSourcesSettingInner() {
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  // Separate from `draft` itself: closing the list (blur, Escape, after picking one) shouldn't
+  // depend on clearing what's typed, and re-focusing a still-matching draft should reopen it.
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(-1);
 
   useEffect(() => {
     getCustomSources()
@@ -38,9 +48,22 @@ function CustomSourcesSettingInner() {
       .catch(() => setSources([])); // a failed initial load reads as "no sources yet" rather than stuck loading forever
   }, []);
 
-  const addSource = async () => {
-    const url = draft.trim();
+  // Substring, not prefix-only — "Times" should surface both "The New York Times" and "The Los
+  // Angeles Times", which a typical user is just as likely to type as the leading word.
+  const suggestions = useMemo(() => {
+    const q = draft.trim().toLowerCase();
+    if (q.length < MIN_QUERY_LENGTH) return [];
+    return CURATED_SOURCES.filter((s) => s.name.toLowerCase().includes(q)).slice(0, MAX_SUGGESTIONS);
+  }, [draft]);
+
+  // Takes an explicit URL rather than always reading `draft` — selectSuggestion below calls this
+  // right after setDraft(source.url), and setDraft doesn't take effect in time for this same
+  // function call to read it back via the `draft` closure (state updates are queued, not
+  // synchronous), so it would submit whatever was typed a moment ago instead of the picked source.
+  const addSource = async (explicitUrl?: string) => {
+    const url = (explicitUrl ?? draft).trim();
     if (!url || adding) return;
+    setSuggestionsOpen(false);
     setAdding(true);
     setAddError(null);
     try {
@@ -58,7 +81,37 @@ function CustomSourcesSettingInner() {
     }
   };
 
+  // One tap is the whole point — a curated pick is a known-good homepage (see curatedSources.ts),
+  // so there's nothing to double-check before submitting it the same way a manually-typed URL is.
+  const selectSuggestion = (source: CuratedSource) => {
+    setHighlightIndex(-1);
+    setDraft(source.url);
+    void addSource(source.url);
+  };
+
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (suggestionsOpen && suggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHighlightIndex((i) => (i + 1) % suggestions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlightIndex((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
+        return;
+      }
+      if (e.key === 'Escape') {
+        setSuggestionsOpen(false);
+        setHighlightIndex(-1);
+        return;
+      }
+      if (e.key === 'Enter' && highlightIndex >= 0) {
+        e.preventDefault();
+        selectSuggestion(suggestions[highlightIndex]);
+        return;
+      }
+    }
     if (e.key === 'Enter') {
       e.preventDefault();
       void addSource();
@@ -89,24 +142,64 @@ function CustomSourcesSettingInner() {
     <div className="custom-sources">
       <p className="custom-sources__hint">
         Add a news site's own feed and its stories will be sorted into whichever of your channels
-        they actually fit, the same way every other source already works.
+        they actually fit, the same way every other source already works. Start typing a
+        well-known publisher's name to pick it from the list, or paste any site's address directly
+        — you don't need to include "https://" or "www.".
       </p>
 
-      <div className="custom-sources__add-row">
-        <input
-          className="custom-sources__input"
-          type="text"
-          inputMode="url"
-          placeholder="Paste a site's web address…"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onKeyDown}
-          disabled={adding}
-          aria-label="Add a news source"
-        />
-        <Button variant="primary" onClick={addSource} disabled={!draft.trim() || adding}>
-          {adding ? 'Checking…' : 'Add'}
-        </Button>
+      <div className="custom-sources__add-row-wrap">
+        <div className="custom-sources__add-row">
+          <input
+            className="custom-sources__input"
+            type="text"
+            inputMode="url"
+            placeholder="Paste a web address, or start typing a name…"
+            value={draft}
+            onChange={(e) => {
+              const value = e.target.value;
+              setDraft(value);
+              setHighlightIndex(-1);
+              setSuggestionsOpen(value.trim().length >= MIN_QUERY_LENGTH);
+            }}
+            onFocus={() => {
+              if (draft.trim().length >= MIN_QUERY_LENGTH) setSuggestionsOpen(true);
+            }}
+            // No delay needed: every suggestion button below stops mousedown from moving focus at
+            // all (see its own onMouseDown), so by the time a real blur fires here, it's a genuine
+            // "left the field" and closing immediately is correct, not a race with the click.
+            onBlur={() => setSuggestionsOpen(false)}
+            onKeyDown={onKeyDown}
+            disabled={adding}
+            aria-label="Add a news source"
+            role="combobox"
+            aria-expanded={suggestionsOpen && suggestions.length > 0}
+            aria-autocomplete="list"
+          />
+          <Button variant="primary" onClick={() => void addSource()} disabled={!draft.trim() || adding}>
+            {adding ? 'Checking…' : 'Add'}
+          </Button>
+        </div>
+        {suggestionsOpen && suggestions.length > 0 && (
+          <ul className="custom-sources__suggestions" role="listbox">
+            {suggestions.map((source, i) => (
+              <li key={source.url}>
+                <button
+                  type="button"
+                  className={`custom-sources__suggestion ${i === highlightIndex ? 'custom-sources__suggestion--highlighted' : ''}`}
+                  role="option"
+                  aria-selected={i === highlightIndex}
+                  // Keeps focus in the input instead of moving it to this button — the standard
+                  // combobox trick that makes onBlur above safe to fire with no delay at all.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => selectSuggestion(source)}
+                  onMouseEnter={() => setHighlightIndex(i)}
+                >
+                  {source.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       {addError && <p className="custom-sources__add-error">{addError}</p>}
 

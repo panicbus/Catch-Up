@@ -15,13 +15,6 @@
   box-shadow: var(--shadow-card);
 }
 
-/* No snippet, no image — the card body has nothing to expand into (see NewsCard.tsx's canExpand),
-   so it isn't clickable there at all; only the always-visible read-link and the action buttons
-   are. A pointer cursor over the rest of the card would falsely promise an interaction. */
-.news-card--static {
-  cursor: default;
-}
-
 /* Cleared in place by a passive trigger (scrolled past / opened) — stays put but reads as done.
    Dimmed so unread cards visibly stand out from it, without hiding it. Kept separate from the
    "Recent" time badge, which stays at full strength. See NewsCard.tsx's readInPlace. */
@@ -156,8 +149,19 @@
   overflow: visible;
 }
 
+/* The two non-content states of the expand fallback (see NewsCard.tsx's fallbackPreview) — a
+   fetch in flight, or nothing usable came back. Deliberately plainer than .news-card__snippet (no
+   line-clamp, no full-size treatment): neither is real article text, so neither should look like
+   it might be. */
+.news-card__fallback-status {
+  font-size: 13px;
+  color: var(--text-faint);
+  font-style: italic;
+  margin: 0;
+}
+
 .news-card__footer {
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 500;
   color: var(--text-faint);
   margin-top: 2px;
@@ -244,11 +248,10 @@
   margin-top: 8px;
 }
 
-/* Only on cards that expand in place (canExpand, collapsed) — the one visual tell that this card
-   behaves differently from a static card's always-visible "Read full story ↗" link right below
-   it. Without this, a run of static cards trains you to stop trying the card body at all, and you
-   miss that some cards DO expand. The chevron intentionally echoes the read-archive toggle's
-   expand/collapse affordance rather than the read-link's ↗, since this opens in place, not offsite. */
+/* Shown on every collapsed card now — every card expands the same way (see hasOwnPreview's own
+   comment), so this invites the tap consistently instead of only on cards that happened to have a
+   snippet or image. The chevron intentionally echoes the read-archive toggle's expand/collapse
+   affordance rather than the read-link's ↗, since this opens in place, not offsite. */
 .news-card__preview-hint {
   display: inline-flex;
   align-items: center;

@@ -1,21 +1,27 @@
 .trust-toggle {
   background: none;
   border: none;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  vertical-align: -4px;
+  vertical-align: -5px;
   flex-shrink: 0;
-  color: var(--text-faint);
-  margin-left: 2px;
+  /* Was --text-faint, the same color as the footer text it sits in, which made an untrusted star
+     read as decoration rather than a control. One step up in contrast so it's visibly tappable
+     without competing with the headline above it. */
+  color: var(--text-muted);
+  margin-left: 4px;
 }
 .trust-toggle:hover {
   color: var(--accent);
 }
 
+/* Was 13px, which was hard to make out at all next to 11px footer text — an untrusted (outline)
+   star at that size reads as a speck. Sized up to sit clearly above the footer copy so it's
+   legible as a star and obvious as something you can tap. */
 .trust-toggle__icon {
-  width: 13px;
-  height: 13px;
+  width: 17px;
+  height: 17px;
 }

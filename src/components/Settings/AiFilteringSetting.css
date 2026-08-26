@@ -78,6 +78,14 @@
   font-size: 13px;
 }
 
+/* The "no key yet" state (provider picked, e.g. via onboarding's auto-enable, but nothing entered
+   here) — same base style as the confirmed state, plus a left accent bar so it doesn't read as an
+   equally-settled status line at a glance the way plain matching text would. */
+.ai-filtering__key-status--empty {
+  padding-left: 8px;
+  border-left: 2px solid var(--accent-strong);
+}
+
 .ai-filtering__replace {
   padding: 0;
   border: none;

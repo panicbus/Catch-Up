@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { findFeedLinkInHtml, discoverFeed } from './discover';
+import { findFeedLinkInHtml, discoverFeed, normalizeSourceUrl } from './discover';
 
 // Both of discoverFeed's own network calls are mocked at the module boundary so these tests can
 // assert exactly how many real requests each tier makes, without hitting the network.
@@ -52,6 +52,32 @@ describe('findFeedLinkInHtml', () => {
   });
 });
 
+describe('normalizeSourceUrl — the "don\'t make me type https://www." fix', () => {
+  it('prepends https:// to a bare domain', () => {
+    expect(normalizeSourceUrl('propublica.org')).toBe('https://propublica.org');
+  });
+
+  it('prepends https:// to a www.-prefixed domain with no scheme', () => {
+    expect(normalizeSourceUrl('www.propublica.org/feed')).toBe('https://www.propublica.org/feed');
+  });
+
+  it('leaves an already-schemed https:// URL untouched', () => {
+    expect(normalizeSourceUrl('https://propublica.org')).toBe('https://propublica.org');
+  });
+
+  it('leaves a deliberately-typed http:// URL untouched — never overrides an explicit choice', () => {
+    expect(normalizeSourceUrl('http://propublica.org')).toBe('http://propublica.org');
+  });
+
+  it('is case-insensitive about an existing scheme', () => {
+    expect(normalizeSourceUrl('HTTPS://propublica.org')).toBe('HTTPS://propublica.org');
+  });
+
+  it('trims surrounding whitespace before checking for a scheme', () => {
+    expect(normalizeSourceUrl('  propublica.org  ')).toBe('https://propublica.org');
+  });
+});
+
 describe('discoverFeed Tier 2 reuse', () => {
   beforeEach(() => {
     mockedFetchFeed.mockReset();
@@ -85,6 +111,25 @@ describe('discoverFeed Tier 2 reuse', () => {
     expect(mockedFetchPage).not.toHaveBeenCalled();
     expect(mockedFetchFeed).toHaveBeenCalledTimes(2);
     expect(mockedFetchFeed.mock.calls[1][0]).toBe('https://example.com/feed/');
+  });
+
+  it('resolves a bare domain (no scheme) exactly like the same URL typed with https:// — the regression this whole fix is for', async () => {
+    mockedFetchFeed.mockResolvedValueOnce({
+      ok: true,
+      notModified: false,
+      title: 'Example Feed',
+      articles: [
+        { url: 'https://example.com/a', title: 'A', snippet: null, source: '', publishedAt: new Date().toISOString(), imageUrl: null },
+      ],
+      validators: { etag: null, lastModified: null },
+    });
+
+    const result = await discoverFeed('example.com');
+
+    // Before normalizeSourceUrl, this rejected with 'invalid-url' before fetchFeed was ever called
+    // at all — new URL('example.com') throws with no scheme.
+    expect(result.ok).toBe(true);
+    expect(mockedFetchFeed).toHaveBeenCalledWith('https://example.com/');
   });
 
   it('still falls back to fetchPage when Tier 1 fails for a reason other than not-a-feed (no body to reuse)', async () => {

@@ -103,22 +103,45 @@ export function AiFilteringSetting() {
         <p className="ai-filtering__note">{PROVIDER_NOTES[config.provider]}</p>
       )}
 
-      {config.provider === 'gemini' && (
-        <p className="ai-filtering__key-status">
-          API key is set.{' '}
-          <button type="button" className="ai-filtering__replace ai-filtering__replace--key" onClick={() => setOpenModal('gemini')}>
-            Replace it here.
-          </button>
-        </p>
-      )}
-      {config.provider === 'groq' && (
-        <p className="ai-filtering__key-status">
-          API key is set.{' '}
-          <button type="button" className="ai-filtering__replace ai-filtering__replace--key" onClick={() => setOpenModal('groq')}>
-            Replace it here.
-          </button>
-        </p>
-      )}
+      {/* Gated on the actual *KeyConfigured flag, not just config.provider === 'gemini' — provider
+          can be 'gemini' with no personal key ever collected at all (OnboardingWizard and
+          DigestSetting's enable() both call setProvider('gemini') directly, bypassing choose()'s
+          modal, whenever a user turns on the digest without AI already configured). Claiming "API
+          key is set" in that state was flatly false — confirmed live as exactly the bug reported:
+          a user finishes onboarding, opens this page, and it tells them a key exists that was
+          never entered. */}
+      {config.provider === 'gemini' &&
+        (config.geminiKeyConfigured ? (
+          <p className="ai-filtering__key-status">
+            API key is set.{' '}
+            <button type="button" className="ai-filtering__replace ai-filtering__replace--key" onClick={() => setOpenModal('gemini')}>
+              Replace it here.
+            </button>
+          </p>
+        ) : (
+          <p className="ai-filtering__key-status ai-filtering__key-status--empty">
+            No personal API key added yet.{' '}
+            <button type="button" className="ai-filtering__replace ai-filtering__replace--key" onClick={() => setOpenModal('gemini')}>
+              Add one here.
+            </button>
+          </p>
+        ))}
+      {config.provider === 'groq' &&
+        (config.groqKeyConfigured ? (
+          <p className="ai-filtering__key-status">
+            API key is set.{' '}
+            <button type="button" className="ai-filtering__replace ai-filtering__replace--key" onClick={() => setOpenModal('groq')}>
+              Replace it here.
+            </button>
+          </p>
+        ) : (
+          <p className="ai-filtering__key-status ai-filtering__key-status--empty">
+            No personal API key added yet.{' '}
+            <button type="button" className="ai-filtering__replace ai-filtering__replace--key" onClick={() => setOpenModal('groq')}>
+              Add one here.
+            </button>
+          </p>
+        ))}
       {config.provider === 'ollama' && isDesktop && (
         <button type="button" className="ai-filtering__replace ai-filtering__replace--standalone" onClick={() => setOpenModal('ollama')}>
           Change model

@@ -10,10 +10,50 @@
   line-height: 1.5;
 }
 
+/* Positioning context for the suggestions dropdown below, which needs to overlay whatever comes
+   after the add row (the error message, the accordion) rather than push it down as items appear. */
+.custom-sources__add-row-wrap {
+  position: relative;
+}
+
 .custom-sources__add-row {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+.custom-sources__suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  margin: -4px 0 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card-hover);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.custom-sources__suggestion {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.custom-sources__suggestion--highlighted,
+.custom-sources__suggestion:hover {
+  background: var(--surface-hover);
 }
 
 .custom-sources__add-error {

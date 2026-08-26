@@ -93,7 +93,7 @@ export function useSwipeToDismiss({ onCommit, onTap, enabled }: UseSwipeToDismis
   );
 
   const finish = useCallback(
-    (e: ReactPointerEvent<HTMLElement>) => {
+    (_e: ReactPointerEvent<HTMLElement>) => {
       const s = stateRef.current;
       if (s.pointerId === -1) return; // already released as a scroll
       if (s.rafId) {
@@ -108,7 +108,17 @@ export function useSwipeToDismiss({ onCommit, onTap, enabled }: UseSwipeToDismis
         return;
       }
 
-      const dx = e.clientX - s.startX;
+      // s.pendingDx — the last tracked POINTERMOVE position, i.e. what the card was actually
+      // rendered following — not a fresh reading of this pointerup/pointercancel event's own
+      // clientX. Confirmed as the fix for a real, reported bug: on a fast flick, the coordinate a
+      // touchscreen reports at the exact instant of lift-off can genuinely diverge from the
+      // trajectory the finger was just visibly tracking (a brief settle/rebound as contact ends),
+      // which showed up as exactly this symptom — a fast rightward swipe would occasionally commit
+      // (and fly off) LEFT instead, because the release event's own x happened to land back on the
+      // wrong side of the start point even though the whole visible drag went right. Judging
+      // direction against what the user actually watched the card follow, instead of one final
+      // sample the card was never even rendered at, removes that discrepancy entirely.
+      const dx = s.pendingDx;
       const dt = Math.max(1, performance.now() - s.startTime);
       const velocity = dx / dt;
       const shouldCommit =

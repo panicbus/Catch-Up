@@ -56,7 +56,16 @@ export function DismissButton({ onDismiss, disabled, variant }: DismissButtonPro
       onClick={onClick}
       onPointerDown={onPointerDown}
       aria-label={variant === 'archived' ? 'Mark unread' : variant === 'readInPlace' ? 'Move to archive' : 'Mark read'}
-      title={variant === 'archived' ? 'Mark unread' : variant === 'readInPlace' ? 'Move to archive' : 'Mark read'}
+      // The archived variant's curly undo arrow doesn't read as "bring this back" on its own
+      // (confirmed — reported as unclear what it does) — its title is a full sentence saying so,
+      // rather than repeating the short aria-label the other two variants already explain fine.
+      title={
+        variant === 'archived'
+          ? 'Move this story back to your unread feed'
+          : variant === 'readInPlace'
+            ? 'Move to archive'
+            : 'Mark read'
+      }
       disabled={disabled}
     >
       {bursting && <BurstEffect angleCount={8} sizeScale={0.7} durationMs={460} onDone={() => setBursting(false)} />}

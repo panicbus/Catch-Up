@@ -29,6 +29,19 @@ export type DiscoverResult =
   | { ok: true; feedUrl: string; title: string | null; articles: ProviderArticle[]; validators: FeedValidators }
   | { ok: false; reason: 'invalid-url' | 'not-found' | 'unreachable' | 'empty' };
 
+/** A user pasting a bare domain ("propublica.org") or "www.propublica.org" with no scheme is the
+ * common case, not the exception — confirmed as the single biggest reason adding a source felt
+ * hard: `new URL()` throws on schemeless input, which checkUrl (below) then reports as
+ * 'invalid-url' before a fetch is even attempted, even though the only thing actually wrong with
+ * it is the missing "https://". Prepending it when no scheme is present puts that input on the
+ * exact same path a fully-typed "https://propublica.org" already takes. Left alone whenever a
+ * scheme IS present (including a deliberately-typed "http://") — this only fills in something
+ * genuinely missing, never overrides an explicit choice. Exported for direct unit testing. */
+export function normalizeSourceUrl(raw: string): string {
+  const trimmed = raw.trim();
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
 /** A successful, non-empty FeedFetchResult, narrowed for the tiers below — every tier's "did this
  * candidate URL actually work" check is the same shape. Carries the validators through (not just
  * the articles) so the caller can seed a newly-added source's etag/lastModified from THIS fetch —
@@ -57,7 +70,7 @@ export function findFeedLinkInHtml(html: string, baseUrl: string): string | null
 }
 
 export async function discoverFeed(rawUrl: string): Promise<DiscoverResult> {
-  const parsed = checkUrl(rawUrl);
+  const parsed = checkUrl(normalizeSourceUrl(rawUrl));
   if (!parsed) return { ok: false, reason: 'invalid-url' };
 
   // Tracks whether ANY attempt across any tier got a real answer from the host at all (even a 404,

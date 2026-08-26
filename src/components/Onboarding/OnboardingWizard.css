@@ -87,6 +87,14 @@
   font-size: 14px;
 }
 
+/* The location step's own hint (.onboarding__hint) has no bottom margin, so this field otherwise
+   sits flush against it with zero breathing room — the one input on this screen that got singled
+   out for it, so scoped here rather than added to .onboarding__text-input's shared base (which the
+   email step's identical input also uses, and wasn't part of the ask). */
+.onboarding__text-input--location {
+  margin-top: 14px;
+}
+
 /* iOS Safari auto-zooms the whole page on focusing any input styled under 16px — same fix already
    applied to LocationSetting/ChannelManageList/SubchannelManagePanel's own inputs. */
 @media (max-width: 767px) {

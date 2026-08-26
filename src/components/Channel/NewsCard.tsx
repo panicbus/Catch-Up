@@ -1,4 +1,4 @@
-import { memo, useCallback, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { NewBadge } from './NewBadge';
 import { PaywallBadge } from './PaywallBadge';
@@ -6,7 +6,7 @@ import { DismissButton, type DismissVariant } from './DismissButton';
 import { BookmarkButton } from '../common/BookmarkButton';
 import { TrustToggle } from '../common/TrustToggle';
 import { relativeTime } from '../../services/formatters';
-import { api, revalidateNow } from '../../services/api';
+import { api, fetchReaderContent, revalidateNow } from '../../services/api';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useSwipeToDismiss } from '../../hooks/useSwipeToDismiss';
 import { getStoryCardColor } from '../../utils/storyCardColor';
@@ -220,14 +220,84 @@ function NewsCardComponent({
     [article.id, article.channelId, article.channelName, onLocalExit, onSwipeDismissed]
   );
 
-  // Nothing to reveal by expanding a card with neither a snippet nor a thumbnail — the "Read full
-  // story" link renders directly on the card instead (below), so there's no click-to-find-out
-  // step. Whether a card CAN expand only depends on its own content, not on staysInPlace/hideDismiss.
-  const canExpand = !!(article.snippet || article.imageUrl);
+  // Whether the card already has its own preview content (a snippet and/or thumbnail) to show once
+  // expanded, as opposed to needing the fallback fetch below — NOT whether the card CAN expand at
+  // all, which is now unconditional (every card gets the same accordion; see fallbackPreview and
+  // the render below). Used to be the gate on expanding in the first place: a card with neither
+  // skipped the accordion entirely and showed its "Read full story" link inline instead, which
+  // meant a plain tap on most of a snippet-less card silently did nothing, and different cards
+  // behaved differently depending on what their provider happened to send back. Confirmed live as
+  // exactly that: reported as inconsistent, not as a broken feature with an obvious cause.
+  const hasOwnPreview = !!(article.snippet || article.imageUrl);
+
+  // Fetched lazily — only once a snippet-less card is actually expanded, never eagerly — for the
+  // exact same reason ReaderOverlay's own full fetch is on-demand rather than prefetched: this hits
+  // the same page-fetch-plus-Readability pipeline (server/reader/index.ts), which is deliberately
+  // serialized to one extraction at a time on Render's free tier. 'unavailable' covers every
+  // "nothing to show" outcome alike (not reader-eligible at all, the fetch failed, the pipeline was
+  // busy, or extraction genuinely found no paragraph text) — the UI treats all of them the same way,
+  // a short explanation plus the same read-link every other card already has.
+  const [fallbackPreview, setFallbackPreview] = useState<
+    { status: 'idle' } | { status: 'loading' } | { status: 'ready'; text: string } | { status: 'unavailable' }
+  >({ status: 'idle' });
+  // Gates the effect below — deliberately a REF, not the `fallbackPreview` state itself. Confirmed
+  // live as a real, severe bug on the first version of this fix: gating on
+  // `fallbackPreview.status !== 'idle'` meant the effect's OWN setFallbackPreview('loading') call
+  // was itself a dependency change, which re-ran the effect's cleanup, which (to allow a retry
+  // after a genuine collapse) reset the status back to 'idle', which re-ran the effect again — an
+  // infinite idle/loading ping-pong firing a brand new real fetch on every cycle, observed live at
+  // several dozen fetches per second. A ref never appears in a dependency array, so flipping it
+  // can't re-trigger this same effect; only `expanded` (etc.) changing does.
+  const fetchStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (!expanded || hasOwnPreview || fetchStartedRef.current) return;
+    fetchStartedRef.current = true;
+    if (!readerEligible) {
+      setFallbackPreview({ status: 'unavailable' });
+      return;
+    }
+    let cancelled = false;
+    let resolved = false;
+    setFallbackPreview({ status: 'loading' });
+    fetchReaderContent(article.id, article.channelId)
+      .then((res) => {
+        resolved = true;
+        if (cancelled) return;
+        if (!res.ok) {
+          setFallbackPreview({ status: 'unavailable' });
+          return;
+        }
+        // The first real paragraph, not the lead image some sources open with (see
+        // stripLeadingDuplicateImage in server/reader/index.ts — that only strips a DUPLICATE of
+        // the card's own thumbnail, not every leading image, so an 'img' block can still be first).
+        let text = '';
+        for (const block of res.blocks) {
+          if (block.type === 'p') {
+            text = block.runs.map((r) => r.text).join('');
+            break;
+          }
+        }
+        setFallbackPreview(text ? { status: 'ready', text } : { status: 'unavailable' });
+      })
+      .catch(() => {
+        resolved = true;
+        if (!cancelled) setFallbackPreview({ status: 'unavailable' });
+      });
+    return () => {
+      cancelled = true;
+      // Only re-arm for a retry if this attempt never actually got an answer — e.g. the card was
+      // collapsed before the fetch resolved. Once it settles (or !readerEligible short-circuited
+      // above, which never reaches this cleanup with `resolved` left false), fetchStartedRef stays
+      // true for the rest of this component instance's life, matching the pre-existing "don't
+      // refetch once resolved" behavior — collapsing after a real answer must not throw it away.
+      if (!resolved) fetchStartedRef.current = false;
+    };
+  }, [expanded, hasOwnPreview, readerEligible, article.id, article.channelId]);
 
   const { dragX, phase, swipeHandlers } = useSwipeToDismiss({
     enabled: isMobile && !hideDismiss && !staysInPlace,
-    onTap: canExpand ? onToggleExpand : () => {},
+    onTap: onToggleExpand,
     onCommit: () => commitDismiss(SWIPE_DISMISS_MS, true),
   });
 
@@ -317,7 +387,7 @@ function NewsCardComponent({
     [onToggleExpand]
   );
 
-  const surfaceProps = swipeHandlers ?? (canExpand ? { onClick: onToggleExpand } : {});
+  const surfaceProps = swipeHandlers ?? { onClick: onToggleExpand };
 
   // Same fix BookmarkButton.tsx and DismissButton.tsx already established for this exact card, PLUS
   // one more: the mobile swipe hook arms its drag/tap tracking at POINTERDOWN (see
@@ -344,15 +414,13 @@ function NewsCardComponent({
     onPointerCancel: stopPointerBubble,
   };
 
-  // Shared by both render sites below (the expandable card's reveal panel and the always-visible
-  // standalone link) so eligibility can't drift between them. `standalone` only matters for the
-  // ineligible branch, which must stay byte-identical to what rendered here before this feature —
-  // the new eligible row has no distinct standalone styling need yet.
-  function renderReadControls(standalone: boolean) {
+  // The one place eligibility is checked, so the accordion (now every card's only render path)
+  // can't drift from it.
+  function renderReadControls() {
     if (!readerEligible) {
       return (
         <a
-          className={`news-card__read-link ${standalone ? 'news-card__read-link--standalone' : ''}`}
+          className="news-card__read-link"
           href={article.url}
           target="_blank"
           rel="noopener noreferrer"
@@ -405,7 +473,7 @@ function NewsCardComponent({
 
   return (
     <div
-      className={`news-card ${paneMode ? 'news-card--pane' : ''} ${canExpand ? '' : 'news-card--static'} ${showAsRead ? 'news-card--read-in-place' : ''} ${exitClass}`}
+      className={`news-card ${paneMode ? 'news-card--pane' : ''} ${showAsRead ? 'news-card--read-in-place' : ''} ${exitClass}`}
       // Read by useScrollCatchUp's IntersectionObserver: data-article-id identifies which story
       // scrolled past, and data-unread marks which cards it should watch (only ones still unread).
       // readInPlace factors in here too (not just article.read) so this flips to "false" — and the
@@ -422,11 +490,8 @@ function NewsCardComponent({
       // the click-to-expand affordance without claiming to be an atomic button.
       role="article"
       aria-label={article.title}
-      // Not part of the tab order at all when it can't expand — there's nothing for Enter/Space
-      // on the card body to do (the read-link and action buttons are already independently
-      // reachable via Tab as their own real elements).
-      tabIndex={canExpand ? 0 : undefined}
-      onKeyDown={canExpand ? onKeyDown : undefined}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
       style={cardStyle}
       {...surfaceProps}
     >
@@ -492,17 +557,22 @@ function NewsCardComponent({
         </div>
       )}
 
-      {canExpand && !expanded && (
+      {!expanded && (
         <div className="news-card__preview-hint">
           <PreviewChevron />
           Preview
         </div>
       )}
 
-      {canExpand ? (
-        <div className={`news-card__expand ${expanded ? 'news-card__expand--open' : ''}`}>
-          <div className="news-card__expand-inner">
-            {article.imageUrl && !imageFailed && (
+      {/* Every card expands into the same shape now — image-or-fallback, then the read controls —
+          rather than a snippet/image card getting the accordion and a bare-link card getting a
+          permanently-visible link with no expand step at all. See hasOwnPreview/fallbackPreview's
+          own comments for why: consistency was the actual ask, not just "give empty cards a link". */}
+      <div className={`news-card__expand ${expanded ? 'news-card__expand--open' : ''}`}>
+        <div className="news-card__expand-inner">
+          {hasOwnPreview ? (
+            article.imageUrl &&
+            !imageFailed && (
               <img
                 className="news-card__image"
                 src={article.imageUrl}
@@ -510,16 +580,25 @@ function NewsCardComponent({
                 referrerPolicy="no-referrer"
                 onError={() => setImageFailed(true)}
               />
-            )}
-            {renderReadControls(false)}
-          </div>
+            )
+          ) : (
+            <>
+              {fallbackPreview.status === 'loading' && (
+                <p className="news-card__fallback-status">Loading a preview…</p>
+              )}
+              {fallbackPreview.status === 'ready' && (
+                <div className="news-card__snippet news-card__snippet--full">
+                  {truncateSnippet(fallbackPreview.text)}
+                </div>
+              )}
+              {fallbackPreview.status === 'unavailable' && (
+                <p className="news-card__fallback-status">No preview available for this story.</p>
+              )}
+            </>
+          )}
+          {renderReadControls()}
         </div>
-      ) : (
-        // No snippet, no image — nothing an expand step would reveal, so the link that would
-        // otherwise be hidden behind one is just always visible instead. This is the entire point:
-        // a card that can't preview its story shouldn't cost a click to find that out.
-        renderReadControls(true)
-      )}
+      </div>
 
       <div className="news-card__footer">
         <PaywallBadge paywalled={article.paywalled} />

@@ -48,7 +48,13 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--text-faint);
-  margin-bottom: 8px;
+  margin-bottom: 2px;
+}
+
+.news-feed__archive-subtitle {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin: 0 0 8px;
 }
 
 .news-feed__archive-date {
