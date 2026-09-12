@@ -1,20 +1,48 @@
 name: Keep backend warm
 
 # Render's free tier fully suspends the backend after ~15 minutes with no incoming requests, and
-# the next real request then pays a 20-30+ second cold-start penalty (see OnboardingGate.tsx's
-# notice for the user-facing side of this). Pinging /health often enough — a plain 200 with no
-# database call, see server/index.ts — keeps it from ever going idle that long. Uses GitHub's own
-# free scheduler, same reasoning as refresh.yml: no billing, no new infrastructure.
+# Render's own docs say the first request to a spun-down service can take 50+ seconds to respond
+# while it spins back up (see OnboardingGate.tsx's notice for the user-facing side of this).
+# Pinging /health often enough — a plain 200 with no database call, see server/index.ts — is meant
+# to keep it from ever going idle that long.
 #
-# 10 minutes, not 15 — leaves margin for GitHub's scheduled-workflow delivery not being exact
-# (documented as best-effort, can run a few minutes late under load).
+# This used to be a single `curl --max-time 30` per scheduled trigger, on the assumption that
+# GitHub fires `schedule` roughly every 10 minutes with a few minutes of best-effort jitter. It
+# doesn't: this workflow's own run history showed 8 of 10 runs failing right at the 30s mark, and
+# checking the actual gaps between runs (not just their outcome) told the real story — GitHub was
+# firing the trigger only every ~2-5 hours, not every 10 minutes. refresh.yml (*/30) and digest.yml
+# (hourly) show the identical pattern at their own cadences, so this is GitHub under-delivering the
+# `schedule` event for this repo, not a bug in this file's cron expression — retuning the minutes
+# here wouldn't fix it. With gaps that wide, the backend was fully spun down on nearly every ping,
+# and the 30s timeout (sized for an assumed 20-30s cold start) was also too tight against Render's
+# own documented 50+ second figure. Together that produced the near-universal failures.
+#
+# Fix: don't depend on GitHub firing every 10 minutes. Whenever the trigger does fire (however
+# sparsely), the job loops on its own, pinging every 5 minutes for up to ~5.5 hours — comfortably
+# past the worst gap seen in two-plus weeks of history — so one trigger bridges the gap until the
+# next. Each ping also gets a generous 120s timeout so a genuinely cold ping has room to finish
+# instead of being cut off mid-boot. `concurrency` cancels an older loop if a new trigger lands
+# while one is still running, so only one is ever active.
 on:
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:
 
+concurrency:
+  group: keep-alive
+  cancel-in-progress: true
+
 jobs:
   ping:
     runs-on: ubuntu-latest
+    timeout-minutes: 360 # hard safety net; the loop below self-stops well before this
     steps:
-      - run: curl -fsS --max-time 30 https://catch-up-dcti.onrender.com/health
+      - name: Ping /health every 5 minutes for ~5.5 hours
+        run: |
+          end=$((SECONDS + 330 * 60))
+          while [ "$SECONDS" -lt "$end" ]; do
+            curl -fsS --max-time 120 https://catch-up-dcti.onrender.com/health \
+              && echo "$(date -u +%FT%TZ) ok" \
+              || echo "$(date -u +%FT%TZ) ping failed (server may still be cold-starting)"
+            sleep 300
+          done
