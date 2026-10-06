@@ -23,6 +23,13 @@ name: Keep backend warm
 # next. Each ping also gets a generous 120s timeout so a genuinely cold ping has room to finish
 # instead of being cut off mid-boot. `concurrency` cancels an older loop if a new trigger lands
 # while one is still running, so only one is ever active.
+#
+# Quiet window: no pings 2am-6am Eastern (DST-aware via TZ, same zone as refreshSchedule.ts's
+# off-hours window), so Render can spin the backend down overnight. Render's free tier is 750
+# instance-hours a month, and always-on burns ~744 in a 31-day month — 4 quiet hours a day (~3.75
+# actually asleep, after Render's ~15-minute idle timeout) frees roughly 100+ hours a month. The
+# loop keeps running through the window without pinging, so a trigger that lands before or during
+# it still resumes pings at 6am. The first request after 6am pays the cold start.
 on:
   schedule:
     - cron: '*/10 * * * *'
@@ -37,10 +44,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360 # hard safety net; the loop below self-stops well before this
     steps:
-      - name: Ping /health every 5 minutes for ~5.5 hours
+      - name: Ping /health every 5 minutes for ~5.5 hours (skipping 2am-6am Eastern)
         run: |
           end=$((SECONDS + 330 * 60))
           while [ "$SECONDS" -lt "$end" ]; do
+            hour=$((10#$(TZ=America/New_York date +%H)))
+            if [ "$hour" -ge 2 ] && [ "$hour" -lt 6 ]; then
+              echo "$(date -u +%FT%TZ) quiet hours (${hour}h Eastern), skipping ping"
+              sleep 300
+              continue
+            fi
             curl -fsS --max-time 120 https://catch-up-dcti.onrender.com/health \
               && echo "$(date -u +%FT%TZ) ok" \
               || echo "$(date -u +%FT%TZ) ping failed (server may still be cold-starting)"
