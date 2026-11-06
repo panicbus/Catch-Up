@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/pbr/static/:path(.*)", "destination": "https://us-assets.i.posthog.com/static/:path" },
+    { "source": "/pbr/array/:path(.*)", "destination": "https://us-assets.i.posthog.com/array/:path" },
+    { "source": "/pbr/:path(.*)", "destination": "https://us.i.posthog.com/:path" }
+  ]
+}

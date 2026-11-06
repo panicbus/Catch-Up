@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 import App from './App';
+import { startAnalytics } from './services/analytics';
 import './styles/global.css';
 
 // The desktop build talks to its own local bridge (window.api); the web build talks to the hosted
@@ -13,6 +14,9 @@ const isWeb = typeof window !== 'undefined' && !window.api;
 // Screen) and fast repeat asset loads, not offline data — see vite.config.ts's workbox comment.
 // autoUpdate + immediate registration means a new deploy replaces the cached shell on next load
 // rather than pinning a stale one indefinitely.
+// Anonymous visit count, web build on usecatchup.app only (see services/analytics.ts).
+if (isWeb) void startAnalytics();
+
 if (isWeb) {
   registerSW({
     immediate: true,
